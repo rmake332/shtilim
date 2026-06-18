@@ -20,7 +20,8 @@ export default async function EditPositionPage({
   if (!/^rec[A-Za-z0-9]{6,}$/.test(positionId)) notFound();
 
   // Fetch position data server-side (uses the same token for auth).
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? (process.env.NODE_ENV === 'development' ? 'http://localhost:3010' : '');
+  const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined;
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? vercelUrl ?? 'http://localhost:3010';
   let employee: EmployeeData | undefined;
   let role: RoleData | undefined;
   let schedule: ScheduleData | undefined;
