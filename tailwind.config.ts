@@ -1,0 +1,93 @@
+import type { Config } from 'tailwindcss';
+
+// Design tokens extracted from the approved Stitch mockups (Material 3).
+// Single source of truth — all screens consume these.
+const config: Config = {
+  darkMode: 'class',
+  content: ['./src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary: '#003466',
+        'primary-container': '#1a4b84',
+        'on-primary': '#ffffff',
+        'on-primary-container': '#93bcfc',
+        'primary-fixed': '#d5e3ff',
+        'primary-fixed-dim': '#a6c8ff',
+        'on-primary-fixed': '#001c3b',
+        'on-primary-fixed-variant': '#144780',
+        secondary: '#505f76',
+        'on-secondary': '#ffffff',
+        'secondary-container': '#d0e1fb',
+        'on-secondary-container': '#54647a',
+        'secondary-fixed': '#d3e4fe',
+        'secondary-fixed-dim': '#b7c8e1',
+        tertiary: '#003b35',
+        'tertiary-container': '#00544d',
+        'on-tertiary': '#ffffff',
+        'on-tertiary-container': '#5eccbe',
+        'tertiary-fixed': '#89f5e7',
+        'tertiary-fixed-dim': '#6bd8cb',
+        'on-tertiary-fixed': '#00201d',
+        error: '#ba1a1a',
+        'on-error': '#ffffff',
+        'error-container': '#ffdad6',
+        'on-error-container': '#93000a',
+        background: '#f7f9fb',
+        surface: '#f7f9fb',
+        'surface-bright': '#f7f9fb',
+        'surface-dim': '#d8dadc',
+        'surface-variant': '#e0e3e5',
+        'surface-container-lowest': '#ffffff',
+        'surface-container-low': '#f2f4f6',
+        'surface-container': '#eceef0',
+        'surface-container-high': '#e6e8ea',
+        'surface-container-highest': '#e0e3e5',
+        'on-surface': '#191c1e',
+        'on-surface-variant': '#424750',
+        'on-background': '#191c1e',
+        outline: '#737781',
+        'outline-variant': '#c3c6d1',
+        'inverse-surface': '#2d3133',
+        'inverse-on-surface': '#eff1f3',
+        'inverse-primary': '#a6c8ff',
+        'surface-tint': '#335f99',
+      },
+      borderRadius: {
+        DEFAULT: '0.25rem',
+        lg: '0.5rem',
+        xl: '0.75rem',
+        full: '9999px',
+      },
+      spacing: {
+        base: '8px',
+        gutter: '24px',
+        'margin-mobile': '16px',
+        'margin-desktop': '48px',
+        'container-max': '1280px',
+      },
+      maxWidth: {
+        'container-max': '1280px',
+      },
+      fontFamily: {
+        sans: ['Rubik', 'Assistant', 'sans-serif'],
+      },
+      fontSize: {
+        'display-lg': ['48px', { lineHeight: '1.2', letterSpacing: '-0.02em', fontWeight: '700' }],
+        'display-lg-mobile': ['36px', { lineHeight: '1.2', fontWeight: '700' }],
+        'headline-lg': ['32px', { lineHeight: '1.3', fontWeight: '600' }],
+        'headline-md': ['24px', { lineHeight: '1.4', fontWeight: '600' }],
+        'body-lg': ['18px', { lineHeight: '1.6', fontWeight: '400' }],
+        'body-md': ['16px', { lineHeight: '1.6', fontWeight: '400' }],
+        'label-lg': ['14px', { lineHeight: '1.2', fontWeight: '500' }],
+        'label-sm': ['12px', { lineHeight: '1.2', fontWeight: '500' }],
+      },
+      boxShadow: {
+        card: '0px 4px 20px rgba(26, 75, 132, 0.05)',
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;

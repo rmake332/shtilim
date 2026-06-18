@@ -1,0 +1,28 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# env files — NEVER commit secrets (Airtable PAT lives here)
+.env
+.env.local
+.env*.local
+
+# debug / logs
+*.log
+npm-debug.log*
+
+# misc
+.DS_Store
+*.pem
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# local scratch
+_schema_dump.txt
