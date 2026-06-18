@@ -27,9 +27,11 @@ export interface ExistingHoursSum {
  * Sum the hour breakdown of the employee's EXISTING active positions
  * in the same category + layer (7ו). Excludes none — these are prior roles
  * whose hours must be combined for the ofek re-check.
+ * Pass excludePositionId when editing an existing position so its old hours
+ * are not double-counted alongside the newly entered hours.
  */
 export async function sumExistingPositions(
-  params: { tz: string; category: string; layer: string },
+  params: { tz: string; category: string; layer: string; excludePositionId?: string },
   requestId?: string,
 ): Promise<ExistingHoursSum> {
   const tz = escapeFormulaValue(params.tz);
@@ -42,6 +44,7 @@ export async function sumExistingPositions(
   );
 
   const matched = records.filter((r) => {
+    if (params.excludePositionId && r.id === params.excludePositionId) return false;
     const cat = text(r.fields[POSITION_FIELDS.category]);
     const layer = text(r.fields[POSITION_FIELDS.layer]);
     return cat.includes(params.category) && (params.layer === '' || layer.includes(params.layer));

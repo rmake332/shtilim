@@ -77,6 +77,7 @@ export function ScheduleStep({
   employee,
   role,
   initial,
+  positionId,
   onNext,
   onBack,
   onEditEmployee,
@@ -85,6 +86,7 @@ export function ScheduleStep({
   employee: EmployeeData;
   role: RoleData;
   initial?: ScheduleData;
+  positionId?: string;
   onNext: (data: ScheduleData) => void;
   onBack?: () => void;
   onEditEmployee?: () => void;
@@ -166,6 +168,7 @@ export function ScheduleStep({
         role={role}
         data={data}
         setData={setData}
+        positionId={positionId}
         onBack={onBack}
         onEditEmployee={onEditEmployee}
         onNext={onNext}
@@ -184,6 +187,7 @@ export function ScheduleStep({
       maxShifts={maxShifts}
       data={data}
       setData={setData}
+      positionId={positionId}
       onBack={onBack}
       onEditEmployee={onEditEmployee}
       onNext={onNext}
@@ -199,6 +203,7 @@ function GridSchedule({
   maxShifts,
   data,
   setData,
+  positionId,
   onBack,
   onEditEmployee,
   onNext,
@@ -210,6 +215,7 @@ function GridSchedule({
   maxShifts: number;
   data: ScheduleData;
   setData: React.Dispatch<React.SetStateAction<ScheduleData>>;
+  positionId?: string;
   onBack?: () => void;
   onEditEmployee?: () => void;
   onNext: (d: ScheduleData) => void;
@@ -311,7 +317,7 @@ function GridSchedule({
     setOfek1(null); setExisting(null); setOfek(null);
     setComputing(true);
     try {
-      const j = await computeOfek(token, employee, role, hours, true);
+      const j = await computeOfek(token, employee, role, hours, true, positionId);
       setOfek1(j);
       if (!j.ok) { setErrors([j.message || 'לא נמצאה התאמה במחשבון אופק חדש']); return; }
     } finally { setComputing(false); }
@@ -324,6 +330,7 @@ function GridSchedule({
     setComputing(true);
     try {
       const params = new URLSearchParams({ token, tz: employee.tz, category: role.category, layer: role.layer });
+      if (positionId) params.set('excludePositionId', positionId);
       const res = await fetch(`/api/schedule/existing-positions?${params}`);
       const j = await res.json();
       if (!j.ok) { setErrors(['שגיאה בבדיקת תפקידים נוספים']); return; }
@@ -340,7 +347,7 @@ function GridSchedule({
     setOfek(null);
     setComputing(true);
     try {
-      const j = await computeOfek(token, employee, role, hours, false);
+      const j = await computeOfek(token, employee, role, hours, false, positionId);
       setOfek(j);
       if (!j.ok) { setErrors([j.message || 'לא נמצאה התאמה במחשבון אופק חדש']); return; }
       const warns: string[] = [];
@@ -655,6 +662,7 @@ async function computeOfek(
   role: RoleData,
   enteredHours: number,
   skipExisting = false,
+  editPositionId?: string,
 ): Promise<OfekResult> {
   const res = await fetch('/api/schedule/compute', {
     method: 'POST',
@@ -675,6 +683,7 @@ async function computeOfek(
       // tz is always sent for the prev-year check; skipExisting controls the combined-roles check
       tz: employee.tz,
       skipExisting,
+      editPositionId,
       institution: role.symbolLabel,
       budgetRemaining: role.remainingHours,
     }),
@@ -717,6 +726,7 @@ function BellScheduleGrid({
   role,
   data,
   setData,
+  positionId,
   onBack,
   onEditEmployee,
   onNext,
@@ -726,6 +736,7 @@ function BellScheduleGrid({
   role: RoleData;
   data: ScheduleData;
   setData: React.Dispatch<React.SetStateAction<ScheduleData>>;
+  positionId?: string;
   onBack?: () => void;
   onEditEmployee?: () => void;
   onNext: (d: ScheduleData) => void;
@@ -846,7 +857,7 @@ function BellScheduleGrid({
     setOfek1(null); setExisting(null); setOfek(null);
     setComputing(true);
     try {
-      const j = await computeOfek(token, employee, role, hours, true);
+      const j = await computeOfek(token, employee, role, hours, true, positionId);
       if (!j.ok) { setOfek1({ ...j, ok: false }); setErrors([j.message || 'לא נמצאה התאמה במחשבון אופק חדש']); return; }
       setOfek1(j);
     } finally { setComputing(false); }
@@ -858,6 +869,7 @@ function BellScheduleGrid({
     setComputing(true);
     try {
       const params = new URLSearchParams({ token, tz: employee.tz, category: role.category, layer: role.layer });
+      if (positionId) params.set('excludePositionId', positionId);
       const res = await fetch(`/api/schedule/existing-positions?${params}`);
       const j = await res.json();
       if (!j.ok) { setErrors(['שגיאה בבדיקת תפקידים נוספים']); return; }
@@ -874,7 +886,7 @@ function BellScheduleGrid({
     setOfek(null);
     setComputing(true);
     try {
-      const j = await computeOfek(token, employee, role, hours, false);
+      const j = await computeOfek(token, employee, role, hours, false, positionId);
       if (!j.ok) { setOfek({ ...j, ok: false }); setErrors([j.message || 'לא נמצאה התאמה במחשבון אופק חדש']); return; }
       setOfek(j);
       const warns: string[] = [];

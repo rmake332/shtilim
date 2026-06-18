@@ -17,11 +17,12 @@ export async function GET(req: NextRequest) {
   const tz = searchParams.get('tz') ?? '';
   const category = searchParams.get('category') ?? '';
   const layer = searchParams.get('layer') ?? '';
+  const excludePositionId = searchParams.get('excludePositionId') ?? undefined;
 
   if (!tz) return NextResponse.json({ error: 'missing_tz' }, { status: 400 });
 
   try {
-    const result = await sumExistingPositions({ tz, category, layer }, gate.requestId);
+    const result = await sumExistingPositions({ tz, category, layer, excludePositionId }, gate.requestId);
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json({ error: 'lookup_failed' }, { status: 500 });

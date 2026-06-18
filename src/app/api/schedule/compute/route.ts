@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     if (body.tz && !body.skipExisting) {
       const existing = await sumExistingPositions(
-        { tz: String(body.tz), category, layer },
+        { tz: String(body.tz), category, layer, excludePositionId: body.editPositionId ?? undefined },
         gate.requestId,
       );
       additionalRoles = existing.count;
