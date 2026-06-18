@@ -95,6 +95,11 @@ export async function loadPosition(
   const categoryRaw = pf[POSITION_FIELDS.category];
   const category = Array.isArray(categoryRaw) ? strField(categoryRaw[0]) : strField(categoryRaw);
 
+  // In edit mode the budget row's "remaining" is already depleted by this position.
+  // Add back the hours this position currently holds so the schedule step can validate
+  // against the correct effective budget (remaining + what this position will release).
+  const currentHours = Number(pf[POSITION_FIELDS.totalUtilizedHours]) || Number(pf[POSITION_FIELDS.weeklyHours]) || 0;
+
   const role: RoleData = {
     symbolId: symbolIds[0] ?? '',
     symbolLabel: strField(pf[POSITION_FIELDS.roleTitleText]),
@@ -102,7 +107,7 @@ export async function loadPosition(
     roleTitle: strField(pf[POSITION_FIELDS.roleTitleText]),
     category,
     scheduleType: null,
-    remainingHours: 0,
+    remainingHours: currentHours,
     layer: strField(pf[POSITION_FIELDS.layer]),
     subRole: strField(pf[POSITION_FIELDS.subRole]),
     selectedGemulIds: gemulIds,
