@@ -338,7 +338,7 @@ async function updatePosition(
 
   Object.keys(fields).forEach((k) => fields[k] === undefined && delete fields[k]);
 
-  logger.info({ requestId, positionId, fieldKeys: Object.keys(fields), weeklyHours: fields[POSITION_FIELDS.weeklyHours], roleLink: fields[POSITION_FIELDS.roleLink] }, 'updating position fields');
+  logger.info({ requestId, positionId, fieldKeys: Object.keys(fields), weeklyHours: fields[POSITION_FIELDS.weeklyHours], roleLink: fields[POSITION_FIELDS.roleLink], week: schedule.week }, 'updating position fields');
   await updateRecord(TABLES.activePositions, positionId, fields, requestId);
   logger.info({ requestId, positionId }, 'position updated');
 
