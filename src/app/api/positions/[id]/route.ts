@@ -295,19 +295,17 @@ async function updatePosition(
   // Update employee record if it exists.
   const employeeId = employee.recordId ?? '';
   if (employeeId) {
-    await updateRecord(
-      TABLES.employees,
-      employeeId,
-      {
-        [EMPLOYEE_FIELDS.name]: employee.name || undefined,
-        [EMPLOYEE_FIELDS.address]: employee.address || undefined,
-        [EMPLOYEE_FIELDS.email]: employee.email || undefined,
-        [EMPLOYEE_FIELDS.maritalStatus]: employee.maritalStatus || undefined,
-        [EMPLOYEE_FIELDS.gender]: employee.gender || undefined,
-        [EMPLOYEE_FIELDS.birthDate]: employee.birthDate || undefined,
-      },
-      requestId,
-    );
+    const empFields: Record<string, unknown> = {
+      [EMPLOYEE_FIELDS.name]:          employee.name          || undefined,
+      [EMPLOYEE_FIELDS.address]:       employee.address       || undefined,
+      [EMPLOYEE_FIELDS.email]:         employee.email         || undefined,
+      [EMPLOYEE_FIELDS.maritalStatus]: employee.maritalStatus || undefined,
+      [EMPLOYEE_FIELDS.gender]:        employee.gender        || undefined,
+      [EMPLOYEE_FIELDS.birthDate]:     employee.birthDate     || undefined,
+    };
+    Object.keys(empFields).forEach((k) => empFields[k] === undefined && delete empFields[k]);
+    logger.info({ requestId, employeeId, empFields }, 'updating employee fields');
+    await updateRecord(TABLES.employees, employeeId, empFields, requestId);
   }
 
   const fields: Record<string, unknown> = {

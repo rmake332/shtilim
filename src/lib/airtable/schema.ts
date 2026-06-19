@@ -212,6 +212,10 @@ export const PREV_YEAR_FIELDS = {
   mosad: 'fldlOx2cVBnd9ykn6',
   subRole: 'fldP90ItzxZgRB9ce',
   notes: 'fldxaIME5M14G33Ta',
+  hoursForBudget: 'fldDkiaemqG0uz9zW',  // סה"כ שעות לניצול להתקציב
+  frontalHours: 'fldc4mXKic2RctRYI',    // שעות פרונטלי
+  individualHours: 'fld78iBf1OyCL7zF9', // שעות פרטני
+  stayHours: 'fldyDjVoeYuDO75CS',       // שעות שהייה
   schedule: {
     sun: { in: ['fldpgqFyN1uyUoKGE', 'fldcPrMHJm8uSjDys', 'fldIZe6VLHteipbuk'], out: ['fld2FyJWnymMuoXNt', 'fld7jgxlhHHXGR1ai', 'fldBcafnyJtHEBPEO'] },
     mon: { in: ['fldB0uusSBJqdf5jB', 'fldd5S8QQYWTxKPSW', 'fldFYymHU8LxmN0i9'], out: ['fldldESPCaOvdjz20', 'fldmuoQohcgWoKr3x', 'fldV0WO3e5lRirvYA'] },

@@ -1,5 +1,5 @@
 import 'server-only';
-import { createRecord } from '@/lib/airtable/client';
+import { createRecord, updateRecord } from '@/lib/airtable/client';
 import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, SCHEDULE_FIELDS } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { findEmployeeByExactId } from '@/lib/employees';
@@ -61,7 +61,7 @@ export async function submitForm(
 ): Promise<{ positionId: string; employeeId: string }> {
   const { employee, role, schedule, institutionMosadId } = params;
 
-  // 1. Employee record (create if new).
+  // 1. Employee record (create if new, update if existing).
   let employeeId = employee.recordId ?? '';
   if (!employeeId) {
     // Defense-in-depth: never create a duplicate. If the ID already exists, reuse it.
@@ -87,6 +87,19 @@ export async function submitForm(
       requestId,
     );
     employeeId = created.id;
+  } else {
+    // Existing employee — update any fields that were edited.
+    const empUpdate: Record<string, unknown> = {};
+    if (employee.name)          empUpdate[EMPLOYEE_FIELDS.name]          = employee.name;
+    if (employee.address)       empUpdate[EMPLOYEE_FIELDS.address]       = employee.address;
+    if (employee.email)         empUpdate[EMPLOYEE_FIELDS.email]         = employee.email;
+    if (employee.maritalStatus) empUpdate[EMPLOYEE_FIELDS.maritalStatus] = employee.maritalStatus;
+    if (employee.gender)        empUpdate[EMPLOYEE_FIELDS.gender]        = employee.gender;
+    if (employee.birthDate)     empUpdate[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;
+    if (Object.keys(empUpdate).length > 0) {
+      logger.info({ requestId, employeeId }, 'updating existing employee on new-position submit');
+      await updateRecord(TABLES.employees, employeeId, empUpdate, requestId);
+    }
   }
 
   // 2. תקנים פעילים record.

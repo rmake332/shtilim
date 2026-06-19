@@ -110,6 +110,7 @@ export function Wizard({
           role={role}
           initial={schedule ?? (prevYear ? { ...emptySchedule(), week: prevYear.week } : undefined)}
           positionId={positionId}
+          prevYear={prevYear}
           onBack={isEdit ? undefined : () => setStep('role')}
           onEditEmployee={isEdit ? () => setStep('employee') : undefined}
           onNext={(data) => {

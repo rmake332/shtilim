@@ -629,6 +629,8 @@ function GridSchedule({
             ofek1={ofek1}
             existing={existing}
             ofek3={ofek}
+            category={role.category}
+            layer={role.layer}
             onStep1={runOfek1}
             onStep2={runCheck2}
             onStep3={runOfek3}
@@ -1120,6 +1122,8 @@ function BellScheduleGrid({
           ofek1={ofek1}
           existing={existing}
           ofek3={ofek}
+          category={role.category}
+          layer={role.layer}
           onStep1={runOfek1}
           onStep2={runCheck2}
           onStep3={runOfek3}
@@ -1180,18 +1184,25 @@ interface OfekChecksProps {
   ofek1: OfekResult | null;
   existing: ExistingResult | null;
   ofek3: OfekResult | null;
+  category: string;
+  layer: string;
   onStep1: () => void;
   onStep2: () => void;
   onStep3: () => void;
 }
 
-function OfekChecks({ computing, disabled, ofek1, existing, ofek3, onStep1, onStep2, onStep3 }: OfekChecksProps) {
+function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, layer, onStep1, onStep2, onStep3 }: OfekChecksProps) {
   const showStep2 = ofek1?.ok === true;
   const showStep3 = existing !== null && existing.count > 0;
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-card border border-outline-variant space-y-4">
-      <h3 className="text-label-lg font-bold text-primary">בדיקת מחשבון אופק חדש</h3>
+      <div className="flex items-center gap-3 pb-3 border-b border-outline-variant">
+        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shrink-0">
+          <Icon name="calculate" className="text-on-primary text-[22px]" />
+        </div>
+        <h3 className="text-headline-sm font-bold text-on-surface">מחשבון אופק חדש</h3>
+      </div>
 
       {/* Step 1 — always visible */}
       <div className="space-y-2">
@@ -1200,7 +1211,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, onStep1, onSt
           disabled={computing || disabled}
           className="w-full py-2.5 rounded-lg font-bold text-on-primary bg-primary disabled:opacity-40 hover:bg-primary/90 transition-colors"
         >
-          {computing && !ofek1 ? 'מחשב…' : 'בדיקה 1 — תפקיד נוכחי'}
+          {computing && !ofek1 ? 'מחשב…' : 'חישוב מבנה שבוע עבודה'}
         </button>
         {ofek1 && (
           <>
@@ -1237,7 +1248,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, onStep1, onSt
             disabled={computing}
             className="w-full py-2.5 rounded-lg font-bold bg-secondary-container text-on-secondary-container disabled:opacity-40 hover:bg-secondary-container/80 transition-colors"
           >
-            {computing && existing === null ? 'מחשב…' : 'בדיקה 2 — תפקידים נוספים'}
+            {computing && existing === null ? 'מחשב…' : `איתור תפקידים נוספים לעובד בקטגוריה ${category} בשכבת ${layer}`}
           </button>
           {existing !== null && (
             existing.count === 0
@@ -1272,7 +1283,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, onStep1, onSt
             disabled={computing}
             className="w-full py-2.5 rounded-lg font-bold bg-tertiary-container text-on-tertiary-container disabled:opacity-40 hover:bg-tertiary-container/80 transition-colors"
           >
-            {computing && !ofek3 ? 'מחשב…' : 'בדיקה 3 — בדיקה משולבת'}
+            {computing && !ofek3 ? 'מחשב…' : 'חישוב מבנה שבוע עבודה לכל התפקידים'}
           </button>
           {ofek3 && (
             <>

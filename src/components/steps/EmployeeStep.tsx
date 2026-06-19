@@ -137,8 +137,35 @@ export function EmployeeStep({
     return false;
   }
 
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
   function set<K extends keyof EmployeeData>(key: K, value: EmployeeData[K]) {
     setData((d) => ({ ...d, [key]: value }));
+  }
+
+  async function finishEditing() {
+    if (!data.recordId) { setEditing(false); return; }
+    setSaving(true);
+    setSaveError('');
+    try {
+      const res = await fetch(`/api/employees/${data.recordId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, employee: data }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        setSaveError(json.message || 'שגיאה בשמירת הפרטים');
+        return;
+      }
+    } catch {
+      setSaveError('שגיאת רשת — הפרטים לא נשמרו');
+      return;
+    } finally {
+      setSaving(false);
+    }
+    setEditing(false);
   }
 
   async function validateAndNext() {
@@ -205,12 +232,16 @@ export function EmployeeStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.birthDate, data.gender, institutionLayer, docs]);
 
-  // When the field isn't applicable, force the value to "לא" (default).
+  // Sync childrenUnder14 when visibility changes:
+  // hidden → force "לא" so it doesn't submit a stale value.
+  // shown → clear to '' so the user must actively choose.
   useEffect(() => {
-    if (!showChildrenField && data.childrenUnder14 !== 'לא') {
-      setData((d) => ({ ...d, childrenUnder14: 'לא' }));
+    if (!showChildrenField) {
+      setData((d) => (d.childrenUnder14 !== 'לא' ? { ...d, childrenUnder14: 'לא' } : d));
+    } else {
+      setData((d) => ({ ...d, childrenUnder14: '' }));
     }
-  }, [showChildrenField, data.childrenUnder14]);
+  }, [showChildrenField]);
 
   // Reset the youth-rules acknowledgement if the employee is no longer a minor.
   useEffect(() => {
@@ -395,13 +426,16 @@ export function EmployeeStep({
                   <Input value={data.birthDate} onChange={(v) => set('birthDate', v)} type="date" disabled={locked} />
                 </Field>
                 {selectedExisting && editing && (
-                  <div className="flex items-end">
+                  <div className="flex items-end flex-col gap-1">
                     <button
-                      className="text-primary font-bold hover:underline flex items-center gap-1"
-                      onClick={() => setEditing(false)}
+                      className="text-primary font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
+                      onClick={finishEditing}
+                      disabled={saving}
                     >
-                      <Icon name="check" className="text-[18px]" /> סיום עריכה
+                      <Icon name="check" className="text-[18px]" />
+                      {saving ? 'שומר…' : 'סיום עריכה'}
                     </button>
+                    {saveError && <span className="text-error text-label-sm">{saveError}</span>}
                   </div>
                 )}
               </div>

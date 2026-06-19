@@ -119,7 +119,7 @@ export function RoleStep({
       .then((r) => r.json())
       .then((j) => {
         if (j.found) {
-          setPrevYear({ week: j.week, subRole: j.subRole, notes: j.notes });
+          setPrevYear({ week: j.week, subRole: j.subRole, notes: j.notes, hoursForBudget: j.hoursForBudget ?? null, frontalHours: j.frontalHours ?? null, individualHours: j.individualHours ?? null, stayHours: j.stayHours ?? null });
         }
         setPrevYearChecked(true);
       })

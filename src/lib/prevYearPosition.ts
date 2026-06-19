@@ -8,6 +8,10 @@ export interface PrevYearPosition {
   week: Record<string, ShiftData[]>;
   subRole: string;
   notes: string;
+  hoursForBudget: number | null;
+  frontalHours: number | null;
+  individualHours: number | null;
+  stayHours: number | null;
 }
 
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
@@ -20,6 +24,10 @@ function allFields(): string[] {
     PREV_YEAR_FIELDS.mosad,
     PREV_YEAR_FIELDS.subRole,
     PREV_YEAR_FIELDS.notes,
+    PREV_YEAR_FIELDS.hoursForBudget,
+    PREV_YEAR_FIELDS.frontalHours,
+    PREV_YEAR_FIELDS.individualHours,
+    PREV_YEAR_FIELDS.stayHours,
   ];
   for (const day of DAYS) {
     ids.push(...PREV_YEAR_FIELDS.schedule[day].in);
@@ -60,7 +68,7 @@ function normalize(s: string): string {
 /** Fetch all prior-year rows once and cache for 30 minutes (table is read-only). */
 const fetchAllPrevYearRows = unstable_cache(
   async () => listRecords(TABLES.prevYearPositions, { fields: allFields() }),
-  ['prev-year-positions-all'],
+  ['prev-year-positions-all-v2'],
   { revalidate: 1800 },
 );
 
@@ -89,10 +97,18 @@ export async function getPrevYearPosition(
     if (normalize(str(f[PREV_YEAR_FIELDS.category])) !== normCategory) continue;
     if (normalize(str(f[PREV_YEAR_FIELDS.mosad])) !== normMosad) continue;
 
+    function numOrNull(v: unknown): number | null {
+      const n = Number(v);
+      return v != null && v !== '' && !isNaN(n) ? n : null;
+    }
     return {
       week: extractWeek(f),
       subRole: str(f[PREV_YEAR_FIELDS.subRole]),
       notes: str(f[PREV_YEAR_FIELDS.notes]),
+      hoursForBudget: numOrNull(f[PREV_YEAR_FIELDS.hoursForBudget]),
+      frontalHours: numOrNull(f[PREV_YEAR_FIELDS.frontalHours]),
+      individualHours: numOrNull(f[PREV_YEAR_FIELDS.individualHours]),
+      stayHours: numOrNull(f[PREV_YEAR_FIELDS.stayHours]),
     };
   }
 
