@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import { ScheduleData, emptySchedule, RoleData, EmployeeData } from '@/lib/formTypes';
+import type { PrevYearPosition } from '@/lib/prevYearPosition';
 import { BellSlotPicker, type BellSlot } from './BellSlotPicker';
 import {
   DAYS,
@@ -61,6 +62,35 @@ function AlertBanners({ errors, warnings }: { errors: string[]; warnings: string
   );
 }
 
+function PrevYearSummary({ prevYear }: { prevYear: PrevYearPosition }) {
+  const rows: { label: string; value: number | null }[] = [
+    { label: 'שעות לניצול (תשפ״ו)', value: prevYear.hoursForBudget },
+    { label: 'פרונטלי', value: prevYear.frontalHours },
+    { label: 'פרטני', value: prevYear.individualHours },
+    { label: 'שהייה', value: prevYear.stayHours },
+  ];
+  const hasData = rows.some((r) => r.value !== null);
+  if (!hasData) return null;
+  return (
+    <div className="mb-4 p-4 rounded-xl border border-outline-variant bg-surface-container-low">
+      <div className="flex items-center gap-2 mb-3">
+        <Icon name="history" className="text-on-surface-variant text-[18px]" />
+        <span className="text-label-md font-semibold text-on-surface-variant">נתוני שנה קודמת (תשפ״ו) — לעיון בלבד</span>
+      </div>
+      <div className="flex flex-wrap gap-x-6 gap-y-1">
+        {rows.map(({ label, value }) =>
+          value !== null ? (
+            <div key={label} className="flex items-baseline gap-1.5 text-body-sm">
+              <span className="text-on-surface-variant">{label}:</span>
+              <span className="font-bold text-on-surface">{value}</span>
+            </div>
+          ) : null,
+        )}
+      </div>
+    </div>
+  );
+}
+
 const SCHEDULE_TYPE = {
   regular: 'רגיל',
   teaching: 'הוראה',
@@ -78,6 +108,7 @@ export function ScheduleStep({
   role,
   initial,
   positionId,
+  prevYear,
   onNext,
   onBack,
   onEditEmployee,
@@ -87,6 +118,7 @@ export function ScheduleStep({
   role: RoleData;
   initial?: ScheduleData;
   positionId?: string;
+  prevYear?: PrevYearPosition;
   onNext: (data: ScheduleData) => void;
   onBack?: () => void;
   onEditEmployee?: () => void;
@@ -169,6 +201,7 @@ export function ScheduleStep({
         data={data}
         setData={setData}
         positionId={positionId}
+        prevYear={prevYear}
         onBack={onBack}
         onEditEmployee={onEditEmployee}
         onNext={onNext}
@@ -188,6 +221,7 @@ export function ScheduleStep({
       data={data}
       setData={setData}
       positionId={positionId}
+      prevYear={prevYear}
       onBack={onBack}
       onEditEmployee={onEditEmployee}
       onNext={onNext}
@@ -204,6 +238,7 @@ function GridSchedule({
   data,
   setData,
   positionId,
+  prevYear,
   onBack,
   onEditEmployee,
   onNext,
@@ -216,6 +251,7 @@ function GridSchedule({
   data: ScheduleData;
   setData: React.Dispatch<React.SetStateAction<ScheduleData>>;
   positionId?: string;
+  prevYear?: PrevYearPosition;
   onBack?: () => void;
   onEditEmployee?: () => void;
   onNext: (d: ScheduleData) => void;
@@ -302,7 +338,7 @@ function GridSchedule({
   function getEnteredHours(): number | null {
     if (isPara) {
       if (paraDayErrors.length > 0) return null;
-      return snapToHalf(paraHours, 0.01) ?? null;
+      return snapToHalf(paraHours, 0.012) ?? null;
     }
     return totalHours;
   }
@@ -367,7 +403,7 @@ function GridSchedule({
     if (overCap) errs.push('מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות');
     if (isPara) errs.push(...paraDayErrors);
     // פרא: block if hours can't snap to nearest whole/half within ±0.01.
-    if (isPara && paraDayErrors.length === 0 && snapToHalf(paraHours, 0.01) === null)
+    if (isPara && paraDayErrors.length === 0 && snapToHalf(paraHours, 0.012) === null)
       errs.push(NON_INTEGER_HOURS_ERROR);
 
     // Deputy-1: weekly hours come from the 37.5/40 selector.
@@ -444,6 +480,8 @@ function GridSchedule({
   }
 
   return (
+    <>
+    {prevYear && <PrevYearSummary prevYear={prevYear} />}
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
       {/* Summary panel */}
       <aside className="lg:col-span-4 lg:order-2 order-1">
@@ -452,7 +490,7 @@ function GridSchedule({
           <div className="flex justify-between items-baseline mb-2">
             <span className="text-on-surface-variant text-body-md">שעות לניצול</span>
             <span className={`text-display-lg-mobile font-bold ${overCap ? 'text-error' : 'text-primary'}`}>
-              {utilizedHours.toFixed(1)}
+              {utilizedHours.toFixed(2)}
             </span>
           </div>
           <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
@@ -467,9 +505,38 @@ function GridSchedule({
           {isDeputy1 && (
             <div className="mt-3 text-label-sm flex justify-between text-on-surface-variant">
               <span>סה״כ שעות שהוזנו במערכת:</span>
-              <span>{totalHours.toFixed(1)}</span>
+              <span>{totalHours.toFixed(2)}</span>
             </div>
           )}
+
+          {/* עיגול לאופק — פרא בלבד, טווח ±0.01 */}
+          {isPara && paraDayErrors.length === 0 && paraHours > 0 && (() => {
+            const snapped = snapToHalf(paraHours, 0.012);
+            const diff = snapped !== null ? snapped - paraHours : null;
+            return (
+              <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
+                <div className="flex justify-between text-on-surface-variant">
+                  <span>שעות בפועל:</span>
+                  <span className="font-bold">{paraHours.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-on-surface-variant">
+                  <span>שעות לבדיקה באופק:</span>
+                  <span className={`font-bold ${snapped === null ? 'text-error' : 'text-primary'}`}>
+                    {snapped !== null ? snapped.toFixed(2) : 'לא ניתן לעגל'}
+                  </span>
+                </div>
+                {diff !== null && Math.abs(diff) > 0.001 && (
+                  <div className="flex justify-between text-on-surface-variant">
+                    <span>הפרש:</span>
+                    <span className={`font-bold ${diff > 0 ? 'text-[#1a6b2f]' : 'text-error'}`}>
+                      {diff > 0 ? '+' : ''}{diff.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="mt-4 text-label-lg flex justify-between">
             <span className="text-on-surface-variant">יתרת תקציב:</span>
             <span className="font-bold text-primary">{role.remainingHours} שעות</span>
@@ -510,7 +577,7 @@ function GridSchedule({
           const paraDayResult = isParaCat ? paraDayHours(dayMin) : null;
           const dayLabel = isParaCat
             ? paraDayResult?.ok ? `${paraDayResult.hours.toFixed(2)} שע׳` : null
-            : dayMin > 0 ? `${(dayMin / 60).toFixed(1)} שעות` : null;
+            : dayMin > 0 ? `${(dayMin / 60).toFixed(2)} שעות` : null;
           return (
             <div
               key={day}
@@ -609,6 +676,7 @@ function GridSchedule({
         />
       </div>
     </div>
+    </>
   );
 }
 
@@ -727,6 +795,7 @@ function BellScheduleGrid({
   data,
   setData,
   positionId,
+  prevYear,
   onBack,
   onEditEmployee,
   onNext,
@@ -737,6 +806,7 @@ function BellScheduleGrid({
   data: ScheduleData;
   setData: React.Dispatch<React.SetStateAction<ScheduleData>>;
   positionId?: string;
+  prevYear?: PrevYearPosition;
   onBack?: () => void;
   onEditEmployee?: () => void;
   onNext: (d: ScheduleData) => void;
@@ -835,16 +905,20 @@ function BellScheduleGrid({
     });
   }
 
+  // snappedHours = weeklyHours מעוגל לשלם/חצי בטווח ±0.3 (מה שנשלח לאופק)
+  const snappedHours = weeklyHours > 0 ? (snapToHalf(weeklyHours, 0.3) ?? null) : null;
+  const snapDiff = snappedHours !== null ? snappedHours - weeklyHours : null;
+
   function getBellHours(): number | null {
     if (weeklyHours <= 0) return null;
-    return snapToHalf(weeklyHours, 0.3) ?? null;
+    return snappedHours;
   }
 
   function bellPreCheck(): string[] {
     const errs: string[] = [];
     if (weeklyHours <= 0) errs.push('יש לבחור לפחות רצועה אחת');
     if (weeklyHours > WEEKLY_CAP_HOURS) errs.push('מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות');
-    if (weeklyHours > 0 && snapToHalf(weeklyHours, 0.3) === null) errs.push(NON_INTEGER_HOURS_ERROR);
+    if (weeklyHours > 0 && snappedHours === null) errs.push(NON_INTEGER_HOURS_ERROR);
     return errs;
   }
 
@@ -936,6 +1010,8 @@ function BellScheduleGrid({
   const overCap = weeklyHours > WEEKLY_CAP_HOURS;
 
   return (
+    <>
+    {prevYear && <PrevYearSummary prevYear={prevYear} />}
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
       {/* Summary panel */}
       <aside className="lg:col-span-4 lg:order-2 order-1">
@@ -956,6 +1032,29 @@ function BellScheduleGrid({
           <p className="text-label-sm text-on-surface-variant flex items-center gap-1">
             <Icon name="info" className="text-[16px]" /> סכום שעות יומיות מהרצועות שנבחרו
           </p>
+
+          {/* עיגול לאופק — מוצג רק כשיש הפרש */}
+          {snappedHours !== null && (
+            <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
+              <div className="flex justify-between text-on-surface-variant">
+                <span>שעות בפועל:</span>
+                <span className="font-bold">{weeklyHours.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-on-surface-variant">
+                <span>שעות לבדיקה באופק:</span>
+                <span className="font-bold text-primary">{snappedHours.toFixed(2)}</span>
+              </div>
+              {snapDiff !== null && Math.abs(snapDiff) > 0.001 && (
+                <div className="flex justify-between text-on-surface-variant">
+                  <span>הפרש:</span>
+                  <span className={`font-bold ${snapDiff > 0 ? 'text-[#1a6b2f]' : 'text-error'}`}>
+                    {snapDiff > 0 ? '+' : ''}{snapDiff.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="mt-4 text-label-lg flex justify-between">
             <span className="text-on-surface-variant">יתרת תקציב:</span>
             <span className="font-bold text-primary">{role.remainingHours} שעות</span>
@@ -1067,6 +1166,7 @@ function BellScheduleGrid({
         />
       </div>
     </div>
+    </>
   );
 }
 
@@ -1265,10 +1365,11 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 function Line({ label, value }: { label: string; value: string | number }) {
+  const display = typeof value === 'number' ? value.toFixed(2) : value;
   return (
     <div className="flex justify-between text-on-surface-variant">
       <span>{label}:</span>
-      <span className="font-bold text-primary">{value}</span>
+      <span className="font-bold text-primary">{display}</span>
     </div>
   );
 }

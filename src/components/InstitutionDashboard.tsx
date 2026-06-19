@@ -378,7 +378,7 @@ function WeekGrid({ week }: { week: WeekData }) {
           const [oh, om] = sh.out.split(':').map(Number);
           return s + (oh * 60 + om) - (ih * 60 + im);
         }, 0);
-        const dayLabel = totalMin > 0 ? `${(totalMin / 60).toFixed(1)} שע׳` : null;
+        const dayLabel = totalMin > 0 ? `${(totalMin / 60).toFixed(2)} שע׳` : null;
         return (
           <div
             key={day}
