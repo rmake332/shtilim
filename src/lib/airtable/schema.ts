@@ -178,6 +178,10 @@ export const BUDGET_FIELDS = {
   scheduleType: 'fldGS2hMdyzpoJXyG', // סוג מערכת שעות (singleSelect)
   remainingGemulim: 'fldNkctOqCocC2nAs', // יתרת גמולים לניצול (formula)
   remainingRoles: 'fldAVzTMiDkiDpMKh',  // יתרת תפקידים לניצול (formula)
+  salaryType: 'fldwRQWa4elIIZ8zc',  // סוג שכר (singleSelect)
+  tariff: 'fldXCXha3m4ddSLlB',      // תעריף (text)
+  ranking: 'fldGa1xyA97oY2sMh',     // מס כיתות / דירוג (text)
+  seniority: 'fld2lspCubFLNIncX',   // שעות לתפקיד / ותק-אופק (text)
 } as const;
 
 /** קטגוריה / סוג מערכת שעות choice names (from live schema). */

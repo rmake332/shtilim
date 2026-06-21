@@ -118,6 +118,10 @@ export async function loadPosition(
     ofekChadash: false,
     severeDisability: false,
     bellScheduleNums: [],
+    salaryType: null,
+    tariff: null,
+    ranking: null,
+    seniority: null,
   };
 
   const week: Record<string, { in: string; out: string }[]> = {};

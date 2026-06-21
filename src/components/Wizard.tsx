@@ -131,6 +131,21 @@ export function Wizard({
           positionId={positionId}
           onBack={() => setStep('schedule')}
           onEdit={(s) => setStep(s)}
+          onNewPosition={!isEdit ? () => {
+            setRole(undefined);
+            setSchedule(undefined);
+            setPrevYear(undefined);
+            setDocs({});
+            setStep('role');
+          } : undefined}
+          onNewEmployee={!isEdit ? () => {
+            setEmployee(undefined);
+            setRole(undefined);
+            setSchedule(undefined);
+            setPrevYear(undefined);
+            setDocs({});
+            setStep('employee');
+          } : undefined}
         />
       )}
     </FormShell>

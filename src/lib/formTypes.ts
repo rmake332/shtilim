@@ -1,6 +1,7 @@
 /** Shared form state types for the multi-step wizard. */
 
 export type Gender = 'זכר' | 'נקבה';
+export type GenderUnset = Gender | '';
 export type MaritalStatus = 'רווק/ה' | 'נשוי/ה' | 'גרוש/ה' | 'אלמן/ה';
 export type YesNo = 'כן' | 'לא';
 /** ילדים מתחת 14: starts unset ('') to force an explicit choice; never submitted empty. */
@@ -44,7 +45,7 @@ export function ageFromBirthDate(birthDate: string, ref: Date = new Date()): num
  */
 export function isDocVisible(
   condition: 'youth' | 'male' | 'kindergartenLayer',
-  ctx: { birthDate?: string; gender?: Gender; layer?: string },
+  ctx: { birthDate?: string; gender?: GenderUnset; layer?: string },
 ): boolean {
   switch (condition) {
     case 'youth': {
@@ -79,7 +80,7 @@ export interface EmployeeData {
   tz: string;
   address: string;
   email: string;
-  gender: Gender;
+  gender: GenderUnset;
   maritalStatus: MaritalStatus | '';
   childrenUnder14: YesNoUnset;
   birthDate: string; // YYYY-MM-DD
@@ -116,6 +117,11 @@ export interface RoleData {
   ofekChadash: boolean;
   severeDisability: boolean;
   bellScheduleNums: string[];
+  /** Salary / ranking info from תקציב התחלתי — display only. */
+  salaryType: string | null;
+  tariff: string | null;
+  ranking: string | null;
+  seniority: string | null;
 }
 
 export function emptyRole(): RoleData {
@@ -137,6 +143,10 @@ export function emptyRole(): RoleData {
     ofekChadash: false,
     severeDisability: false,
     bellScheduleNums: [],
+    salaryType: null,
+    tariff: null,
+    ranking: null,
+    seniority: null,
   };
 }
 
@@ -189,7 +199,7 @@ export function emptyEmployee(): EmployeeData {
     tz: '',
     address: '',
     email: '',
-    gender: 'זכר',
+    gender: '',
     maritalStatus: '',
     childrenUnder14: '',
     birthDate: '',

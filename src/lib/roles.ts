@@ -15,13 +15,18 @@ export interface RoleOption {
   ofekChadash: boolean;
   paraBoard: boolean;
   severeDisability: boolean;
+  salaryType: string | null;
+  tariff: string | null;
+  ranking: string | null;
+  seniority: string | null;
 }
 
 /** A selectable gemul / extra-role line (category = גמול / תפקידים, remaining > 0). */
 export interface ExtraBudgetLine {
   id: string;
   title: string;
-  remainingHours: number;
+  /** For gemul lines: number of remaining gemulim (not hours). For roles lines: remaining count. */
+  remainingCount: number;
 }
 
 function single(v: unknown): string | null {
@@ -69,6 +74,10 @@ function mapRole(r: AirtableRecord): MappedBudget {
     ofekChadash: Boolean(f[BUDGET_FIELDS.ofekChadash]),
     paraBoard: Boolean(f[BUDGET_FIELDS.paraBoard]),
     severeDisability: Boolean(single(f[BUDGET_FIELDS.severeDisabilityBonus]) === 'true' || f[BUDGET_FIELDS.severeDisabilityBonus] === true),
+    salaryType: single(f[BUDGET_FIELDS.salaryType]),
+    tariff: single(f[BUDGET_FIELDS.tariff]),
+    ranking: single(f[BUDGET_FIELDS.ranking]),
+    seniority: single(f[BUDGET_FIELDS.seniority]),
   };
 }
 
@@ -92,6 +101,10 @@ const fetchBudgetForInstitution = unstable_cache(
         BUDGET_FIELDS.severeDisabilityBonus,
         BUDGET_FIELDS.symbolLink,
         BUDGET_FIELDS.institutionLink,
+        BUDGET_FIELDS.salaryType,
+        BUDGET_FIELDS.tariff,
+        BUDGET_FIELDS.ranking,
+        BUDGET_FIELDS.seniority,
       ],
     });
     return all.filter((r) => {
@@ -151,6 +164,6 @@ export async function getExtraLines(
     .map((r) => ({
       id: r.id,
       title: r.title,
-      remainingHours: category === 'gemul' ? r.remainingGemulim : r.remainingRoles,
+      remainingCount: category === 'gemul' ? r.remainingGemulim : r.remainingRoles,
     }));
 }

@@ -12,6 +12,7 @@ import {
   MaritalStatus,
   YesNo,
   YouthDocs,
+  type Gender,
 } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 import { DOC_FIELDS } from '@/lib/airtable/schema';
@@ -89,6 +90,7 @@ export function EmployeeStep({
       const json = await res.json();
       if (json.employee) {
         const e = json.employee;
+        const gender = (e.gender as Gender) || '';
         setData((d) => ({
           ...d,
           recordId,
@@ -96,11 +98,13 @@ export function EmployeeStep({
           tz: e.tz ?? '',
           address: e.address ?? '',
           email: e.email ?? '',
-          gender: (e.gender as EmployeeData['gender']) || 'זכר',
+          gender,
           maritalStatus: (e.maritalStatus as EmployeeData['maritalStatus']) || '',
           birthDate: e.birthDate ?? '',
           ageHours: Number(e.ageHours) || 0,
         }));
+        // Gender is a new field — open edit mode automatically if it's missing.
+        if (!gender) setEditing(true);
       }
     } catch {
       /* keep minimal data on failure */
@@ -146,6 +150,10 @@ export function EmployeeStep({
 
   async function finishEditing() {
     if (!data.recordId) { setEditing(false); return; }
+    if (!data.gender) {
+      setErrors((e) => ({ ...e, gender: 'שדה חובה' }));
+      return;
+    }
     setSaving(true);
     setSaveError('');
     try {
@@ -182,6 +190,7 @@ export function EmployeeStep({
       if (!isValidIsraeliId(data.tz)) e.tz = 'ת.ז. לא תקינה';
       if (!data.address.trim()) e.address = 'שדה חובה';
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) e.email = 'מייל לא תקין';
+      if (!data.gender) e.gender = 'שדה חובה';
       if (!data.maritalStatus) e.maritalStatus = 'שדה חובה';
       if (!data.birthDate) e.birthDate = 'שדה חובה';
     }
@@ -322,6 +331,17 @@ export function EmployeeStep({
         </button>
       )}
 
+      {/* Missing gender banner — shown when an existing employee has no gender on record. */}
+      {selectedExisting && !data.gender && (
+        <div className="mb-4 p-4 rounded-xl border border-tertiary/40 bg-tertiary-container/30 flex items-start gap-3">
+          <Icon name="warning" className="text-tertiary mt-0.5 shrink-0" />
+          <p className="text-body-md text-on-surface">
+            שדה <strong>מין</strong> לא מולא עבור עובד זה. יש לעדכן לפני המשך.
+            המידע יישמר אוטומטית לרשימת העובדים.
+          </p>
+        </div>
+      )}
+
       {/* Employee detail — read-only by default for existing; editable for new or on "edit". */}
       {(showNewForm || selectedExisting) && (
         <section className="bg-surface-container-lowest p-6 rounded-xl shadow-card border border-outline-variant mb-6">
@@ -394,11 +414,14 @@ export function EmployeeStep({
                 <Field label="כתובת" error={errors.address} locked={locked}>
                   <Input value={data.address} onChange={(v) => set('address', v)} placeholder="רחוב, עיר, מיקוד" disabled={locked} />
                 </Field>
-                <Field label="מין" locked={locked}>
+                <Field label="מין" error={errors.gender} locked={locked}>
                   <Toggle
                     options={['זכר', 'נקבה']}
                     value={data.gender}
-                    onChange={(v) => set('gender', v as EmployeeData['gender'])}
+                    onChange={(v) => {
+                      set('gender', v as Gender);
+                      if (errors.gender) setErrors((e) => { const n = { ...e }; delete n.gender; return n; });
+                    }}
                     disabled={locked}
                   />
                 </Field>

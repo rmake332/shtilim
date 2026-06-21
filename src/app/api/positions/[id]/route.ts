@@ -133,6 +133,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ofekChadash: false,
       severeDisability: false,
       bellScheduleNums: [],
+      salaryType: null,
+      tariff: null,
+      ranking: null,
+      seniority: null,
     };
 
     // ScheduleData — reconstruct week from duration fields (seconds → "HH:MM")

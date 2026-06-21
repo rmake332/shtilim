@@ -21,15 +21,20 @@ interface RoleOption {
   ofekChadash: boolean;
   severeDisability: boolean;
   bellScheduleNums: string[];
+  salaryType: string | null;
+  tariff: string | null;
+  ranking: string | null;
+  seniority: string | null;
 }
 interface ExtraLine {
   id: string;
   title: string;
-  remainingHours: number;
+  remainingCount: number;
 }
 
 const LAYER_OPTIONS = ['גנים', 'יסודי', 'חטיבה', 'שכר יסוד'];
 const PARA_CATEGORY = 'פרא רפואי';
+const GEMUL_ALLOWED_CATEGORIES = new Set(['הוראה', 'פרא רפואי']);
 
 export function RoleStep({
   token,
@@ -63,6 +68,7 @@ export function RoleStep({
   const [prevYearChecked, setPrevYearChecked] = useState(false);
   const [loadedPrevYear, setLoadedPrevYear] = useState<PrevYearPosition | undefined>(undefined);
   const prevYearAbort = useRef<AbortController | null>(null);
+  const [subRoleChoices, setSubRoleChoices] = useState<string[]>([]);
 
   // Load symbols once.
   useEffect(() => {
@@ -90,6 +96,16 @@ export function RoleStep({
     if ((initial?.selectedExtraRoleIds.length ?? 0) > 0) loadExtra('roles');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load subRole choices from Airtable when a para role is selected.
+  useEffect(() => {
+    if (data.category !== PARA_CATEGORY) { setSubRoleChoices([]); return; }
+    fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=fldNEsEr5LCQujJmN`)
+      .then((r) => r.json())
+      .then((j) => setSubRoleChoices(j.choices ?? []))
+      .catch(() => setSubRoleChoices([]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.roleId]);
 
   // Check for a prior-year position whenever a role is selected.
   useEffect(() => {
@@ -164,6 +180,10 @@ export function RoleStep({
       ofekChadash: role.ofekChadash,
       severeDisability: role.severeDisability,
       bellScheduleNums: role.bellScheduleNums,
+      salaryType: role.salaryType ?? null,
+      tariff: role.tariff ?? null,
+      ranking: role.ranking ?? null,
+      seniority: role.seniority ?? null,
     }));
   }
 
@@ -174,6 +194,7 @@ export function RoleStep({
     : roles;
   const needsLayer = Boolean(selectedRole && selectedRole.layer.length === 0 && !institutionLayer);
   const isPara = data.category === PARA_CATEGORY;
+  const canAddGemul = GEMUL_ALLOWED_CATEGORIES.has(data.category);
 
   function validateAndNext(withPrevYear?: PrevYearPosition) {
     if (!data.roleId) {
@@ -186,12 +207,6 @@ export function RoleStep({
     }
     if (needsLayer && !data.layer) {
       setError('יש לבחור שכבה');
-      return;
-    }
-    // When loading from prior year, subRole comes from there; otherwise require manual input.
-    const effectiveSubRole = withPrevYear?.subRole?.trim() || data.subRole.trim();
-    if (isPara && !effectiveSubRole) {
-      setError('יש להזין תת תפקיד');
       return;
     }
     const finalData = withPrevYear?.subRole?.trim()
@@ -256,9 +271,11 @@ export function RoleStep({
               <div className="col-span-5 font-medium text-on-surface">{selectedRole.title}</div>
               <div className="col-span-3 text-on-surface-variant text-body-md">{selectedRole.category}</div>
               <div className="col-span-3 flex items-center justify-end gap-3">
-                <span className="px-3 py-1 rounded-full text-label-sm font-bold bg-tertiary-fixed text-on-tertiary-fixed">
-                  {selectedRole.remainingHours} שעות
-                </span>
+                {selectedRole.remainingHours < 5 && (
+                  <span className="px-3 py-1 rounded-full text-label-sm font-bold bg-tertiary-fixed text-on-tertiary-fixed">
+                    {selectedRole.remainingHours} שעות
+                  </span>
+                )}
                 <button
                   type="button"
                   className="px-3 py-1 rounded-lg border border-primary text-primary text-label-sm font-semibold hover:bg-primary/10 transition-colors shrink-0"
@@ -291,15 +308,17 @@ export function RoleStep({
                     <div className="col-span-5 font-medium text-on-surface">{role.title}</div>
                     <div className="col-span-3 text-on-surface-variant text-body-md">{role.category}</div>
                     <div className="col-span-3 text-center">
-                      <span
-                        className={`px-3 py-1 rounded-full text-label-sm font-bold ${
-                          role.remainingHours > 0
-                            ? 'bg-tertiary-fixed text-on-tertiary-fixed'
-                            : 'bg-surface-container-high text-on-surface-variant'
-                        }`}
-                      >
-                        {role.remainingHours} שעות
-                      </span>
+                      {role.remainingHours < 5 && (
+                        <span
+                          className={`px-3 py-1 rounded-full text-label-sm font-bold ${
+                            role.remainingHours > 0
+                              ? 'bg-tertiary-fixed text-on-tertiary-fixed'
+                              : 'bg-surface-container-high text-on-surface-variant'
+                          }`}
+                        >
+                          {role.remainingHours} שעות
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -309,8 +328,8 @@ export function RoleStep({
         </div>
       )}
 
-      {/* Remaining-hours note */}
-      {selectedRole && data.remainingHours > 0 && (
+      {/* Remaining-hours note — shown only when below 5h */}
+      {selectedRole && data.remainingHours > 0 && data.remainingHours < 5 && (
         <p className="text-on-surface-variant text-label-lg mb-4">
           נותרו {data.remainingHours} שעות לניצול עבור התפקיד שנבחר.
         </p>
@@ -412,58 +431,48 @@ export function RoleStep({
             </div>
           )}
 
-          {isPara && (
-            <div className="max-w-md">
-              <label className="text-label-lg text-on-surface block mb-2">
-                תת תפקיד <span className="text-error">*</span>
+
+          {/* Gemulim — only for הוראה / פרא רפואי */}
+          {canAddGemul && (
+            <div>
+              <label className="flex items-center gap-2 text-body-md text-on-surface cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={addGemul}
+                  onChange={(e) => {
+                    setAddGemul(e.target.checked);
+                    if (e.target.checked) loadExtra('gemul');
+                    else setData((d) => ({ ...d, selectedGemulIds: [] }));
+                  }}
+                />
+                הוספת גמולים
               </label>
-              <input
-                className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
-                value={data.subRole}
-                onChange={(e) => setData((d) => ({ ...d, subRole: e.target.value }))}
-                placeholder="לדוגמה: ריפוי בעיסוק"
-              />
+              {addGemul && (
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {gemulLines.length === 0 && <p className="text-on-surface-variant text-label-sm">אין גמולים זמינים.</p>}
+                  {gemulLines.map((g) => (
+                    <CheckboxLine
+                      key={g.id}
+                      line={g}
+                      kind="gemul"
+                      checked={data.selectedGemulIds.includes(g.id)}
+                      onToggle={(checked) =>
+                        setData((d) => ({
+                          ...d,
+                          selectedGemulIds: checked
+                            ? [...d.selectedGemulIds, g.id]
+                            : d.selectedGemulIds.filter((x) => x !== g.id),
+                          selectedGemulTitles: checked
+                            ? [...d.selectedGemulTitles, g.title]
+                            : d.selectedGemulTitles.filter((x) => x !== g.title),
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
-
-          {/* Gemulim */}
-          <div>
-            <label className="flex items-center gap-2 text-body-md text-on-surface cursor-pointer">
-              <input
-                type="checkbox"
-                checked={addGemul}
-                onChange={(e) => {
-                  setAddGemul(e.target.checked);
-                  if (e.target.checked) loadExtra('gemul');
-                  else setData((d) => ({ ...d, selectedGemulIds: [] }));
-                }}
-              />
-              הוספת גמולים
-            </label>
-            {addGemul && (
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                {gemulLines.length === 0 && <p className="text-on-surface-variant text-label-sm">אין גמולים זמינים.</p>}
-                {gemulLines.map((g) => (
-                  <CheckboxLine
-                    key={g.id}
-                    line={g}
-                    checked={data.selectedGemulIds.includes(g.id)}
-                    onToggle={(checked) =>
-                      setData((d) => ({
-                        ...d,
-                        selectedGemulIds: checked
-                          ? [...d.selectedGemulIds, g.id]
-                          : d.selectedGemulIds.filter((x) => x !== g.id),
-                        selectedGemulTitles: checked
-                          ? [...d.selectedGemulTitles, g.title]
-                          : d.selectedGemulTitles.filter((x) => x !== g.title),
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Extra roles */}
           <div>
@@ -488,6 +497,7 @@ export function RoleStep({
                   <CheckboxLine
                     key={g.id}
                     line={g}
+                    kind="roles"
                     checked={data.selectedExtraRoleIds.includes(g.id)}
                     onToggle={(checked) =>
                       setData((d) => ({
@@ -526,13 +536,18 @@ export function RoleStep({
 
 function CheckboxLine({
   line,
+  kind,
   checked,
   onToggle,
 }: {
   line: ExtraLine;
+  kind: 'gemul' | 'roles';
   checked: boolean;
   onToggle: (checked: boolean) => void;
 }) {
+  const countLabel = kind === 'gemul'
+    ? `${line.remainingCount} גמולים`
+    : `${line.remainingCount} תפקידים`;
   return (
     <label className="flex items-center justify-between gap-2 p-3 rounded-lg border border-outline-variant cursor-pointer hover:bg-surface-container-low">
       <span className="flex items-center gap-2 text-body-md">
@@ -540,7 +555,7 @@ function CheckboxLine({
         {line.title}
       </span>
       <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-label-sm font-bold">
-        {line.remainingHours} ש'
+        {countLabel}
       </span>
     </label>
   );

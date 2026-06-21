@@ -45,7 +45,6 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   { key: 'employeeName',       label: 'שם עובד',        type: 'text' },
   { key: 'roleTitle',          label: 'תפקיד',          type: 'text' },
-  { key: 'subRole',            label: 'תת תפקיד',       type: 'text' },
   { key: 'category',           label: 'קטגוריה',        type: 'select',
     options: ['הוראה', 'פרא רפואי', 'סייע', 'מנהלה', 'אחר'] },
   { key: 'weeklyHours',        label: 'שעות שבועיות',   type: 'number' },

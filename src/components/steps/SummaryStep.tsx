@@ -18,6 +18,8 @@ export function SummaryStep({
   positionId,
   onBack,
   onEdit,
+  onNewPosition,
+  onNewEmployee,
 }: {
   token: string;
   employee: EmployeeData;
@@ -28,6 +30,8 @@ export function SummaryStep({
   positionId?: string;
   onBack: () => void;
   onEdit: (step: 'employee' | 'role' | 'schedule') => void;
+  onNewPosition?: () => void;
+  onNewEmployee?: () => void;
 }) {
   const isEdit = mode === 'edit';
   const [consent, setConsent] = useState(isEdit); // edit mode: pre-consent (already acknowledged)
@@ -120,9 +124,31 @@ export function SummaryStep({
 
   if (result?.ok) {
     return (
-      <div className="bg-white p-10 rounded-xl shadow-card border border-outline-variant text-center">
+      <div className="bg-white p-10 rounded-xl shadow-card border border-outline-variant text-center space-y-6">
         <Icon name="check_circle" className="text-tertiary text-6xl" fill />
-        <p className="text-headline-md text-primary mt-4">{result.message}</p>
+        <p className="text-headline-md text-primary">{result.message}</p>
+        {!isEdit && (
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+            {onNewPosition && (
+              <button
+                onClick={onNewPosition}
+                className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary text-on-primary font-bold text-label-lg hover:bg-primary/90 transition-colors"
+              >
+                <Icon name="add_circle" className="text-[20px]" />
+                תקן נוסף לאותו עובד
+              </button>
+            )}
+            {onNewEmployee && (
+              <button
+                onClick={onNewEmployee}
+                className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-secondary-container text-on-secondary-container font-bold text-label-lg hover:bg-secondary-container/80 transition-colors"
+              >
+                <Icon name="person_add" className="text-[20px]" />
+                הזנת עובד חדש
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -165,8 +191,11 @@ export function SummaryStep({
               <Item label="קטגוריה" value={role.category} />
               <Item label="סמל מוסד" value={role.symbolLabel} />
               <Item label="שכבה" value={role.layer} />
-              {role.subRole && <Item label="תת תפקיד" value={role.subRole} />}
               <Item label="יתרת שעות" value={`${role.remainingHours} שעות`} />
+              {role.salaryType && <Item label="סוג שכר" value={role.salaryType} />}
+              {role.tariff && <Item label="תעריף" value={role.tariff} />}
+              {role.ranking && <Item label="דירוג" value={role.ranking} />}
+              {role.seniority && <Item label="ותק / אופק" value={role.seniority} />}
             </Grid>
             {(role.selectedGemulIds.length > 0 || role.selectedExtraRoleIds.length > 0) && (
               <div className="mt-4 pt-4 border-t border-outline-variant space-y-3">
@@ -201,15 +230,27 @@ export function SummaryStep({
           </Card>
 
           <Card title="מערכת שעות שבועית" icon="calendar_month" onEdit={() => onEdit('schedule')}>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="divide-y divide-outline-variant/30">
               {DAYS.map((d) => {
                 const shifts = (week[d] ?? []).filter((s) => s.in && s.out);
                 return (
-                  <div key={d} className="p-3 bg-surface-container-low rounded-lg text-center">
-                    <span className="block text-label-sm text-on-surface-variant mb-1">{DAY_LABELS[d]}</span>
-                    <span className="block text-body-md font-bold">
-                      {shifts.length ? shifts.map((s) => `${s.in}-${s.out}`).join(', ') : '—'}
+                  <div key={d} className="flex items-start gap-4 py-3 first:pt-0 last:pb-0">
+                    <span className="w-16 shrink-0 text-label-md font-semibold text-on-surface-variant pt-0.5">
+                      {DAY_LABELS[d]}
                     </span>
+                    {shifts.length === 0 ? (
+                      <span className="text-body-md text-on-surface-variant">—</span>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {shifts.map((s, i) => (
+                          <div key={i} className="flex items-center gap-2 text-body-md">
+                            <span className="font-bold">{s.in}</span>
+                            <span className="text-on-surface-variant text-label-sm">—</span>
+                            <span className="font-bold">{s.out}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

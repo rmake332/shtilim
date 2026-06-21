@@ -169,9 +169,6 @@ export function ScheduleStep({
             value={value}
             onChange={(e) => setData((d) => ({ ...d, manualWeeklyHours: Number(e.target.value) }))}
           />
-          <p className="text-on-surface-variant text-label-sm mt-2">
-            ערך זה משמש כשעות שבועיות לניצול. ברירת מחדל = יתרת השעות לניצול ({role.remainingHours}).
-          </p>
         </section>
         <ActionBar
           title="המשך לסיכום"
@@ -256,11 +253,12 @@ function GridSchedule({
   onEditEmployee?: () => void;
   onNext: (d: ScheduleData) => void;
 }) {
-  const [deputyWeekly, setDeputyWeekly] = useState<number>(37.5);
+  const deputyWeekly = (employee.gender === 'נקבה' && employee.childrenUnder14 === 'כן') ? 37.5 : 40;
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [computing, setComputing] = useState(false);
   const [ofek1, setOfek1] = useState<OfekResult | null>(null);
+  const [hoursAtOfek1, setHoursAtOfek1] = useState<number | null>(null);
   const [existing, setExisting] = useState<ExistingResult | null>(null);
   const [ofek, setOfek] = useState<OfekResult | null>(null);
   const [reductionChoices, setReductionChoices] = useState<string[]>([]);
@@ -335,6 +333,22 @@ function GridSchedule({
   const isTeaching = role.category === 'הוראה' && type === SCHEDULE_TYPE.teaching;
   const needsOfek = isPara || isTeaching;
 
+  // When entered hours change, invalidate all ofek results so the user must re-run check 1.
+  const currentHoursForOfek = isPara
+    ? (paraDayErrors.length === 0 ? (snapToHalf(paraHours, 0.012) ?? null) : null)
+    : totalHours;
+  useEffect(() => {
+    if (hoursAtOfek1 === null) return;
+    if (currentHoursForOfek === null) return;
+    if (Math.abs(currentHoursForOfek - hoursAtOfek1) > 0.001) {
+      setOfek1(null);
+      setHoursAtOfek1(null);
+      setExisting(null);
+      setOfek(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentHoursForOfek]);
+
   function getEnteredHours(): number | null {
     if (isPara) {
       if (paraDayErrors.length > 0) return null;
@@ -350,12 +364,13 @@ function GridSchedule({
     if (isPara && paraDayErrors.length > 0) { setErrors(paraDayErrors); return; }
     const hours = getEnteredHours();
     if (hours === null) { setErrors([NON_INTEGER_HOURS_ERROR]); return; }
-    setOfek1(null); setExisting(null); setOfek(null);
+    setOfek1(null); setHoursAtOfek1(null); setExisting(null); setOfek(null);
     setComputing(true);
     try {
       const j = await computeOfek(token, employee, role, hours, true, positionId);
       setOfek1(j);
       if (!j.ok) { setErrors([j.message || 'לא נמצאה התאמה במחשבון אופק חדש']); return; }
+      setHoursAtOfek1(hours);
     } finally { setComputing(false); }
   }
 
@@ -553,18 +568,11 @@ function GridSchedule({
         {(type === 'סגן ראשון') && (
           <div className="bg-white p-4 rounded-lg border border-outline-variant max-w-xs">
             <label className="text-label-lg text-on-surface block mb-2">מס׳ שעות שבועיות</label>
-            <div className="flex gap-2">
-              {[37.5, 40].map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setDeputyWeekly(v)}
-                  className={`flex-1 py-2 rounded-lg font-bold ${
-                    deputyWeekly === v ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface-variant'
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
+            <div className="flex items-center gap-3">
+              <span className="text-display-lg-mobile font-bold text-primary">{deputyWeekly}</span>
+              <span className="text-label-sm text-on-surface-variant">
+                {deputyWeekly === 37.5 ? '(עובדת עם ילדים מתחת גיל 14)' : '(ברירת מחדל)'}
+              </span>
             </div>
           </div>
         )}
@@ -599,11 +607,9 @@ function GridSchedule({
                     <div key={idx} className="flex items-center gap-4">
                       <TimeBox label="כניסה" value={s.in} onChange={(v) => updateShift(day, idx, 'in', v)} />
                       <TimeBox label="יציאה" value={s.out} onChange={(v) => updateShift(day, idx, 'out', v)} />
-                      {shifts.length > 1 && (
-                        <button onClick={() => removeShift(day, idx)} aria-label="מחק משמרת">
-                          <Icon name="delete" className="text-outline hover:text-error" />
-                        </button>
-                      )}
+                      <button onClick={() => removeShift(day, idx)} aria-label="מחק משמרת">
+                        <Icon name="delete" className="text-outline hover:text-error" />
+                      </button>
                     </div>
                   ))}
                   {shifts.length < maxShifts && (
@@ -825,6 +831,7 @@ function BellScheduleGrid({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [computing, setComputing] = useState(false);
   const [ofek1, setOfek1] = useState<OfekResult | null>(null);
+  const [hoursAtOfek1, setHoursAtOfek1] = useState<number | null>(null);
   const [existing, setExisting] = useState<{ count: number; frontalHours: number; individualHours: number; stayHours: number } | null>(null);
   const [ofek, setOfek] = useState<OfekResult | null>(null);
   const [reductionChoices, setReductionChoices] = useState<string[]>([]);
@@ -911,6 +918,19 @@ function BellScheduleGrid({
   const snappedHours = weeklyHours > 0 ? (snapToHalf(weeklyHours, 0.3) ?? null) : null;
   const snapDiff = snappedHours !== null ? snappedHours - weeklyHours : null;
 
+  // When the bell-selected hours change, invalidate all ofek results.
+  useEffect(() => {
+    if (hoursAtOfek1 === null) return;
+    const checked = snappedHours ?? 0;
+    if (Math.abs(checked - hoursAtOfek1) > 0.001) {
+      setOfek1(null);
+      setHoursAtOfek1(null);
+      setExisting(null);
+      setOfek(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snappedHours]);
+
   function getBellHours(): number | null {
     if (weeklyHours <= 0) return null;
     return snappedHours;
@@ -930,12 +950,13 @@ function BellScheduleGrid({
     const preErrs = bellPreCheck();
     if (preErrs.length) { setErrors(preErrs); return; }
     const hours = getBellHours()!;
-    setOfek1(null); setExisting(null); setOfek(null);
+    setOfek1(null); setHoursAtOfek1(null); setExisting(null); setOfek(null);
     setComputing(true);
     try {
       const j = await computeOfek(token, employee, role, hours, true, positionId);
       if (!j.ok) { setOfek1({ ...j, ok: false }); setErrors([j.message || 'לא נמצאה התאמה במחשבון אופק חדש']); return; }
       setOfek1(j);
+      setHoursAtOfek1(hours);
     } finally { setComputing(false); }
   }
 
@@ -1094,13 +1115,19 @@ function BellScheduleGrid({
                 </div>
                 <div className="flex-1 flex flex-col gap-3">
                   {dayPicks.map((p, idx) => (
-                    <BellSlotPicker
-                      key={idx}
-                      slots={daySlots}
-                      value={p?.id ?? null}
-                      onPick={(slot) => pickSlot(day, idx, slot)}
-                      onClear={() => clearSlot(day, idx)}
-                    />
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <BellSlotPicker
+                          slots={daySlots}
+                          value={p?.id ?? null}
+                          onPick={(slot) => pickSlot(day, idx, slot)}
+                          onClear={() => clearSlot(day, idx)}
+                        />
+                      </div>
+                      <button onClick={() => clearSlot(day, idx)} aria-label="מחק רצועה">
+                        <Icon name="delete" className="text-outline hover:text-error" />
+                      </button>
+                    </div>
                   ))}
                   {dayPicks.length < MAX_BELL_SHIFTS && (
                     <button
@@ -1385,6 +1412,35 @@ function Line({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+/** Parse a free-text time entry into "HH:MM" or return null if unrecognisable.
+ *  Accepts: "8", "08", "8:00", "08:00", "800", "0800", "8.00", "8,00" */
+function parseTimeInput(raw: string): string | null {
+  const s = raw.trim().replace(/[.,]/g, ':');
+  if (!s) return null;
+
+  // Already "H:MM" or "HH:MM"
+  const colon = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (colon) {
+    const h = Number(colon[1]), m = Number(colon[2]);
+    if (h > 23 || m > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  // Bare digits: "8" → 08:00, "12" → 12:00, "800" → 08:00, "1230" → 12:30
+  const digits = /^(\d{1,4})$/.exec(s);
+  if (digits) {
+    const n = digits[1];
+    let h: number, m: number;
+    if (n.length <= 2) { h = Number(n); m = 0; }
+    else if (n.length === 3) { h = Number(n[0]); m = Number(n.slice(1)); }
+    else { h = Number(n.slice(0, 2)); m = Number(n.slice(2)); }
+    if (h > 23 || m > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
 function TimeBox({
   label,
   value,
@@ -1394,15 +1450,48 @@ function TimeBox({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const [raw, setRaw] = useState(value);
+  const [invalid, setInvalid] = useState(false);
+
+  // Keep local raw text in sync when parent resets the value (e.g. shift deleted)
+  useEffect(() => { setRaw(value); }, [value]);
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setRaw(e.target.value);
+    setInvalid(false);
+  }
+
+  function handleBlur() {
+    if (!raw.trim()) {
+      onChange('');
+      setInvalid(false);
+      return;
+    }
+    const parsed = parseTimeInput(raw);
+    if (parsed) {
+      setRaw(parsed);
+      setInvalid(false);
+      onChange(parsed);
+    } else {
+      setInvalid(true);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-1">
       <label className="text-[11px] font-bold text-on-surface-variant">{label}</label>
       <input
-        type="time"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="bg-surface-container-low rounded-lg py-2 px-3 text-body-md w-32"
+        type="text"
+        inputMode="numeric"
+        placeholder="HH:MM"
+        value={raw}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={`rounded-lg py-2 px-3 text-body-md w-28 text-center ${
+          invalid ? 'bg-error-container border border-error' : 'bg-surface-container-low'
+        }`}
       />
+      {invalid && <span className="text-[10px] text-error">פורמט שגוי</span>}
     </div>
   );
 }
