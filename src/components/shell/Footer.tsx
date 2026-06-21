@@ -47,8 +47,9 @@ function PrivacyModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function Footer() {
+export function Footer({ contactEmail }: { contactEmail?: string }) {
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const email = contactEmail || 'bs@irmb.co.il';
 
   return (
     <>
@@ -63,7 +64,7 @@ export function Footer() {
           </button>
           <a
             className="text-on-surface-variant text-label-sm hover:underline cursor-pointer"
-            href="mailto:bs@irmb.co.il"
+            href={`mailto:${email}`}
           >
             צור קשר
           </a>

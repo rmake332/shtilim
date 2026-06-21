@@ -18,6 +18,8 @@ export interface Institution {
   association?: string;
   /** שכבה מהמוסד — fallback when the selected budget row carries no layer. */
   layer?: string;
+  /** מייל חשבת שכר של המוסד — used as the contact email in the form footer. */
+  payrollEmail?: string;
 }
 
 const FORM_TOKEN_FIELD = 'form_token';
@@ -66,5 +68,6 @@ export async function resolveInstitutionByToken(
     responsible: f[MOSAD_FIELDS.responsible] ? String(f[MOSAD_FIELDS.responsible]) : undefined,
     association: f[MOSAD_FIELDS.association] ? String(f[MOSAD_FIELDS.association]) : undefined,
     layer,
+    payrollEmail: f[MOSAD_FIELDS.payrollEmail] ? String(f[MOSAD_FIELDS.payrollEmail]) : undefined,
   };
 }

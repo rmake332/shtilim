@@ -30,6 +30,9 @@ export interface BellSlot {
   dailyHours: number;
   /** Day group this slot belongs to. */
   weekday: WeekdayGroup;
+  /** מורת צהריים — slot starts before 12:00 and is restricted to afternoon teachers.
+   *  Allowed only on the one morning day the user designates. */
+  afternoonOnly: boolean;
 }
 
 function single(v: unknown): string | null {
@@ -61,6 +64,7 @@ function mapSlot(r: AirtableRecord): BellSlot {
     out: durationToHHMM(f[BELL_FIELDS.exit]),
     dailyHours: num(f[BELL_FIELDS.dailyHours]),
     weekday: weekdayGroup(f[BELL_FIELDS.weekday]),
+    afternoonOnly: f[BELL_FIELDS.afternoonTeacher] === true,
   };
 }
 
@@ -95,6 +99,7 @@ export async function getBellSlots(types: string[], requestId?: string): Promise
         BELL_FIELDS.exit,
         BELL_FIELDS.dailyHours,
         BELL_FIELDS.weekday,
+        BELL_FIELDS.afternoonTeacher,
       ],
     },
     requestId,

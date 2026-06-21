@@ -1,11 +1,26 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
-import { RoleData, EmployeeData, emptyRole, ageFromBirthDate } from '@/lib/formTypes';
-import { CATEGORY } from '@/lib/airtable/schema';
+import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate } from '@/lib/formTypes';
+import { CATEGORY, DOC_FIELDS, POSITION_FIELDS } from '@/lib/airtable/schema';
+import { DocUpload } from '@/components/steps/DocUpload';
 import type { PrevYearPosition } from '@/lib/prevYearPosition';
+
+const HIDDEN_CATEGORIES = new Set<string>([CATEGORY.invoice]);
+
+function LoadingRow({ label }: { label: string }) {
+  return (
+    <div className="px-6 py-6 flex items-center gap-3 text-on-surface-variant text-body-md">
+      <svg className="animate-spin h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+      </svg>
+      {label}
+    </div>
+  );
+}
 
 interface SymbolOption {
   id: string;
@@ -43,6 +58,9 @@ export function RoleStep({
   employee,
   mosadName,
   institutionLayer,
+  isNewEmployee,
+  docs,
+  onDocsChange,
   onNext,
   onBack,
 }: {
@@ -52,13 +70,21 @@ export function RoleStep({
   mosadName?: string;
   /** שכבת המוסד — fallback when the selected budget row carries no layer of its own. */
   institutionLayer?: string;
+  /** true כשהעובד נוצר חדש בטופס הנוכחי (לא נבחר מרשימה קיימת). */
+  isNewEmployee?: boolean;
+  docs: YouthDocs;
+  onDocsChange: (docs: YouthDocs) => void;
   onNext: (data: RoleData, prevYear?: PrevYearPosition) => void;
   onBack: () => void;
 }) {
   const [symbols, setSymbols] = useState<SymbolOption[]>([]);
+  const [symbolsLoading, setSymbolsLoading] = useState(true);
   const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
   const [gemulLines, setGemulLines] = useState<ExtraLine[]>([]);
+  const [gemulLoading, setGemulLoading] = useState(false);
   const [extraRoleLines, setExtraRoleLines] = useState<ExtraLine[]>([]);
+  const [extraRolesLoading, setExtraRolesLoading] = useState(false);
   const [data, setData] = useState<RoleData>(initial ?? emptyRole());
   const [addGemul, setAddGemul] = useState((initial?.selectedGemulIds.length ?? 0) > 0);
   const [addRoles, setAddRoles] = useState((initial?.selectedExtraRoleIds.length ?? 0) > 0);
@@ -71,24 +97,36 @@ export function RoleStep({
   const prevYearAbort = useRef<AbortController | null>(null);
   const [subRoleChoices, setSubRoleChoices] = useState<string[]>([]);
 
-  // Load symbols once.
+  // Load symbols once. Auto-select if only one exists.
   useEffect(() => {
+    setSymbolsLoading(true);
     fetch(`/api/symbols?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
-      .then((j) => setSymbols(j.symbols ?? []))
-      .catch(() => setSymbols([]));
+      .then((j) => {
+        const list: SymbolOption[] = j.symbols ?? [];
+        setSymbols(list);
+        if (list.length === 1 && !data.symbolId) {
+          setData((d) => ({ ...d, symbolId: list[0].id, symbolLabel: list[0].label }));
+        }
+      })
+      .catch(() => setSymbols([]))
+      .finally(() => setSymbolsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // Load roles when a symbol is picked.
   useEffect(() => {
     if (!data.symbolId) {
       setRoles([]);
+      setRolesLoading(false);
       return;
     }
+    setRolesLoading(true);
     fetch(`/api/roles?token=${encodeURIComponent(token)}&symbolId=${encodeURIComponent(data.symbolId)}`)
       .then((r) => r.json())
       .then((j) => setRoles(j.roles ?? []))
-      .catch(() => setRoles([]));
+      .catch(() => setRoles([]))
+      .finally(() => setRolesLoading(false));
   }, [token, data.symbolId]);
 
   // Restore gemul/extra-role lists when returning from a later step.
@@ -148,10 +186,13 @@ export function RoleStep({
   }, [data.roleId]);
 
   function loadExtra(kind: 'gemul' | 'roles') {
+    if (kind === 'gemul') setGemulLoading(true);
+    else setExtraRolesLoading(true);
     fetch(`/api/roles?token=${encodeURIComponent(token)}&extra=${kind}`)
       .then((r) => r.json())
       .then((j) => (kind === 'gemul' ? setGemulLines(j.lines ?? []) : setExtraRoleLines(j.lines ?? [])))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (kind === 'gemul') setGemulLoading(false); else setExtraRolesLoading(false); });
   }
 
   function pickSymbol(id: string) {
@@ -190,12 +231,26 @@ export function RoleStep({
 
   const selectedRole = roles.find((r) => r.id === data.roleId);
   const q = roleQuery.trim();
-  const filteredRoles = q
+  const filteredRoles = (q
     ? roles.filter((r) => r.title.includes(q) || r.category.includes(q))
-    : roles;
+    : roles
+  ).filter((r) => !HIDDEN_CATEGORIES.has(r.category));
+
+  // Group filtered roles by category, preserving insertion order
+  const rolesByCategory: { category: string; roles: RoleOption[] }[] = [];
+  for (const role of filteredRoles) {
+    const group = rolesByCategory.find((g) => g.category === role.category);
+    if (group) group.roles.push(role);
+    else rolesByCategory.push({ category: role.category, roles: [role] });
+  }
   const needsLayer = Boolean(selectedRole && selectedRole.layer.length === 0 && !institutionLayer);
   const isPara = data.category === PARA_CATEGORY;
   const canAddGemul = GEMUL_ALLOWED_CATEGORIES.has(data.category);
+
+  const employmentDocDef = DOC_FIELDS.find((d) => d.key === 'docEmployment')!;
+  const showEmploymentDoc = Boolean(
+    isNewEmployee && selectedRole && (data.category === 'פרא רפואי' || data.category === 'הוראה'),
+  );
 
   function validateAndNext(withPrevYear?: PrevYearPosition) {
     if (!data.roleId) {
@@ -217,6 +272,10 @@ export function RoleStep({
         return;
       }
     }
+    if (showEmploymentDoc && !docs['docEmployment']) {
+      setError('יש להעלות מסמך נתוני העסקה');
+      return;
+    }
     const finalData = withPrevYear?.subRole?.trim()
       ? { ...data, subRole: withPrevYear.subRole.trim() }
       : data;
@@ -226,22 +285,32 @@ export function RoleStep({
 
   return (
     <>
-      {/* Symbol dropdown */}
-      <div className="mb-6 max-w-md">
-        <label className="text-label-lg text-on-surface block mb-2">סמל מוסד</label>
-        <select
-          className="w-full bg-white border border-outline-variant rounded-xl py-3 px-3 focus:ring-2 focus:ring-primary text-body-md shadow-card"
-          value={data.symbolId}
-          onChange={(e) => pickSymbol(e.target.value)}
-        >
-          <option value="">בחר סמל מוסד</option>
-          {symbols.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Symbol dropdown — hidden when only one symbol exists */}
+      {symbolsLoading ? (
+        <div className="mb-6 flex items-center gap-3 py-3 text-on-surface-variant text-body-md">
+          <svg className="animate-spin h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+          </svg>
+          טוען סמלי מוסד…
+        </div>
+      ) : symbols.length > 1 ? (
+        <div className="mb-6 max-w-md">
+          <label className="text-label-lg text-on-surface block mb-2">סמל מוסד</label>
+          <select
+            className="w-full bg-white border border-outline-variant rounded-xl py-3 px-3 focus:ring-2 focus:ring-primary text-body-md shadow-card"
+            value={data.symbolId}
+            onChange={(e) => pickSymbol(e.target.value)}
+          >
+            <option value="">בחר סמל מוסד</option>
+            {symbols.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {/* Role search */}
       {data.symbolId && (
@@ -262,96 +331,133 @@ export function RoleStep({
       {/* Roles table — collapsed to selected row once a role is picked */}
       {data.symbolId && (
         <div className="bg-white rounded-xl shadow-card border border-outline-variant overflow-hidden mb-4">
-          <div className="grid grid-cols-12 bg-surface-container-low px-6 py-4 border-b border-outline-variant text-label-lg font-bold text-on-surface-variant">
-            <div className="col-span-1">בחירה</div>
-            <div className="col-span-5">שם התפקיד</div>
-            <div className="col-span-3">קטגוריה</div>
-            <div className="col-span-3 text-center">יתרת שעות</div>
-          </div>
-          {selectedRole ? (
-            // Collapsed: show only selected role + change button
-            <div className="grid grid-cols-12 px-6 py-3 items-center selected-row">
-              <div className="col-span-1">
-                <div className="w-6 h-6 rounded-full border-2 border-primary bg-primary flex items-center justify-center">
-                  <Icon name="check" className="text-white text-[16px]" fill />
-                </div>
-              </div>
-              <div className="col-span-5 font-medium text-on-surface">{selectedRole.title}</div>
-              <div className="col-span-3 text-on-surface-variant text-body-md">{selectedRole.category}</div>
-              <div className="col-span-3 flex items-center justify-end gap-3">
-                {selectedRole.remainingHours < 5 && (
-                  <span className="px-3 py-1 rounded-full text-label-sm font-bold bg-tertiary-fixed text-on-tertiary-fixed">
-                    {selectedRole.remainingHours} שעות
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="px-3 py-1 rounded-lg border border-primary text-primary text-label-sm font-semibold hover:bg-primary/10 transition-colors shrink-0"
-                  onClick={() => setData((d) => ({ ...emptyRole(), symbolId: d.symbolId, symbolLabel: d.symbolLabel }))}
-                >
-                  שנה
-                </button>
-              </div>
-            </div>
-          ) : (
-            // Expanded: full list
-            <div className="divide-y divide-outline-variant/30 max-h-[460px] overflow-y-auto">
-              {roles.length === 0 && (
-                <div className="px-6 py-6 text-on-surface-variant text-body-md">אין תפקידים זמינים לסמל זה.</div>
-              )}
-              {roles.length > 0 && filteredRoles.length === 0 && (
-                <div className="px-6 py-6 text-on-surface-variant text-body-md">לא נמצאו תפקידים התואמים לחיפוש.</div>
-              )}
-              {filteredRoles.map((role) => {
-                const noHours = role.remainingHours <= 0;
-                return (
-                  <div
-                    key={role.id}
-                    className={`grid grid-cols-12 px-6 py-3 items-center transition-colors cursor-pointer hover:bg-secondary-container/20 ${noHours ? 'opacity-50' : ''}`}
-                    onClick={() => pickRole(role)}
-                  >
-                    <div className="col-span-1">
-                      <div className="w-6 h-6 rounded-full border-2 border-outline-variant bg-white flex items-center justify-center" />
-                    </div>
-                    <div className="col-span-5 font-medium text-on-surface">{role.title}</div>
-                    <div className="col-span-3 text-on-surface-variant text-body-md">{role.category}</div>
-                    <div className="col-span-3 text-center">
-                      {role.remainingHours < 5 && (
-                        <span
-                          className={`px-3 py-1 rounded-full text-label-sm font-bold ${
-                            role.remainingHours > 0
-                              ? 'bg-tertiary-fixed text-on-tertiary-fixed'
-                              : 'bg-surface-container-high text-on-surface-variant'
-                          }`}
-                        >
-                          {role.remainingHours} שעות
-                        </span>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[750px] text-right">
+              <thead>
+                <tr className="bg-surface-container-low border-b border-outline-variant text-label-lg font-bold text-on-surface-variant">
+                  <th className="px-4 py-4 w-10"></th>
+                  <th className="px-4 py-4">שם התפקיד</th>
+                  <th className="px-4 py-4">שכבה</th>
+                  <th className="px-4 py-4">סוג שכר</th>
+                  <th className="px-4 py-4">תעריף</th>
+                  <th className="px-4 py-4">דרגה</th>
+                  <th className="px-4 py-4">ותק</th>
+                  <th className="px-4 py-4 text-center">לקות קשה</th>
+                  <th className="px-4 py-4 text-center">יתרת שעות</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/30">
+                {selectedRole ? (
+                  // Collapsed: show only selected role + change button
+                  <tr className="selected-row">
+                    <td className="px-4 py-3">
+                      <div className="w-6 h-6 rounded-full border-2 border-primary bg-primary flex items-center justify-center">
+                        <Icon name="check" className="text-white text-[16px]" fill />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-on-surface">{selectedRole.title}</td>
+                    <td className="px-4 py-3 text-on-surface-variant text-body-md">{selectedRole.layer.join(', ') || '—'}</td>
+                    <td className="px-4 py-3 text-on-surface-variant text-body-md">{selectedRole.salaryType ?? '—'}</td>
+                    <td className="px-4 py-3 text-on-surface-variant text-body-md">{selectedRole.tariff ?? '—'}</td>
+                    <td className="px-4 py-3 text-on-surface-variant text-body-md">{selectedRole.ranking ?? '—'}</td>
+                    <td className="px-4 py-3 text-on-surface-variant text-body-md">{selectedRole.seniority ?? '—'}</td>
+                    <td className="px-4 py-3 text-center">
+                      {selectedRole.severeDisability ? (
+                        <Icon name="check_box" className="text-error text-[20px]" fill />
+                      ) : (
+                        <Icon name="check_box_outline_blank" className="text-outline-variant text-[20px]" />
                       )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-3">
+                        <span className="px-3 py-1 rounded-full text-label-sm font-bold bg-tertiary-fixed text-on-tertiary-fixed">
+                          {selectedRole.remainingHours} שעות
+                        </span>
+                        <button
+                          type="button"
+                          className="px-3 py-1 rounded-lg border border-primary text-primary text-label-sm font-semibold hover:bg-primary/10 transition-colors shrink-0"
+                          onClick={() => setData((d) => ({ ...emptyRole(), symbolId: d.symbolId, symbolLabel: d.symbolLabel }))}
+                        >
+                          שנה
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <>
+                    {rolesLoading && (
+                      <tr><td colSpan={9}><LoadingRow label="טוען תפקידים…" /></td></tr>
+                    )}
+                    {!rolesLoading && roles.length === 0 && (
+                      <tr><td colSpan={9} className="px-6 py-6 text-on-surface-variant text-body-md">אין תפקידים זמינים לסמל זה.</td></tr>
+                    )}
+                    {!rolesLoading && roles.length > 0 && filteredRoles.length === 0 && (
+                      <tr><td colSpan={9} className="px-6 py-6 text-on-surface-variant text-body-md">לא נמצאו תפקידים התואמים לחיפוש.</td></tr>
+                    )}
+                    {rolesByCategory.map(({ category, roles: catRoles }) => (
+                      <React.Fragment key={`group-${category}`}>
+                        <tr key={`cat-${category}`}>
+                          <td colSpan={9} className="px-4 py-2 bg-surface-container text-label-md font-bold text-primary border-t border-outline-variant/50">
+                            {category}
+                          </td>
+                        </tr>
+                        {catRoles.map((role) => {
+                          const noHours = role.remainingHours <= 0;
+                          return (
+                            <tr
+                              key={role.id}
+                              className={`transition-colors cursor-pointer hover:bg-secondary-container/20 ${noHours ? 'opacity-50' : ''}`}
+                              onClick={() => pickRole(role)}
+                            >
+                              <td className="px-4 py-3">
+                                <div className="w-6 h-6 rounded-full border-2 border-outline-variant bg-white" />
+                              </td>
+                              <td className="px-4 py-3 font-medium text-on-surface">{role.title}</td>
+                              <td className="px-4 py-3 text-on-surface-variant text-body-md">{role.layer.join(', ') || '—'}</td>
+                              <td className="px-4 py-3 text-on-surface-variant text-body-md">{role.salaryType ?? '—'}</td>
+                              <td className="px-4 py-3 text-on-surface-variant text-body-md">{role.tariff ?? '—'}</td>
+                              <td className="px-4 py-3 text-on-surface-variant text-body-md">{role.ranking ?? '—'}</td>
+                              <td className="px-4 py-3 text-on-surface-variant text-body-md">{role.seniority ?? '—'}</td>
+                              <td className="px-4 py-3 text-center">
+                                {role.severeDisability ? (
+                                  <Icon name="check_box" className="text-error text-[20px]" fill />
+                                ) : (
+                                  <Icon name="check_box_outline_blank" className="text-outline-variant text-[20px]" />
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span
+                                  className={`px-3 py-1 rounded-full text-label-sm font-bold ${
+                                    role.remainingHours > 0
+                                      ? 'bg-tertiary-fixed text-on-tertiary-fixed'
+                                      : 'bg-surface-container-high text-on-surface-variant'
+                                  }`}
+                                >
+                                  {role.remainingHours} שעות
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    ))}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
-
-      {/* Remaining-hours note — shown only when below 5h */}
-      {selectedRole && data.remainingHours > 0 && data.remainingHours < 5 && (
-        <p className="text-on-surface-variant text-label-lg mb-4">
-          נותרו {data.remainingHours} שעות לניצול עבור התפקיד שנבחר.
-        </p>
       )}
 
       {/* No prior-year match notice */}
       {selectedRole && !prevYearLoading && prevYearChecked && !prevYear && !loadedPrevYear && (
-        <div className="mb-4 p-4 rounded-xl border border-primary/40 bg-primary-container/30 flex items-start gap-3">
-          <Icon name="info" className="text-primary mt-0.5 shrink-0" />
+        <div className="mb-4 p-4 rounded-xl border border-error/40 bg-error-container flex items-start gap-3">
+          <Icon name="info" className="text-on-error-container mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-label-lg font-semibold text-on-surface mb-1">
+            <p className="text-label-lg font-semibold text-on-error-container mb-1">
               לא נמצא תקן מהשנה הקודמת
             </p>
-            <p className="text-body-sm text-on-surface-variant">
+            <p className="text-body-sm text-on-error-container/80">
               לא קיים תפקיד זהה עבור עובד זה בשנה שעברה (תשפ&quot;ו). יש להזין את מערכת השעות ידנית.
             </p>
           </div>
@@ -360,10 +466,10 @@ export function RoleStep({
 
       {/* Prior-year position banner */}
       {selectedRole && !prevYearLoading && prevYear && !loadedPrevYear && (
-        <div className="mb-4 p-4 rounded-xl border border-primary/40 bg-primary-container/30 flex items-start gap-3">
-          <Icon name="history" className="text-primary mt-0.5 shrink-0" />
+        <div className="mb-4 p-4 rounded-xl border border-[#5eccbe]/40 bg-[#5eccbe]/20 flex items-start gap-3">
+          <Icon name="history" className="text-[#5eccbe] mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-label-lg font-semibold text-on-surface mb-1">
+            <p className="text-label-lg font-semibold text-[#5eccbe] mb-1">
               נמצא תקן מהשנה הקודמת (תשפ&quot;ו)
             </p>
             <p className="text-body-sm text-on-surface-variant mb-3">
@@ -457,7 +563,16 @@ export function RoleStep({
               </label>
               {addGemul && (
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {gemulLines.length === 0 && <p className="text-on-surface-variant text-label-sm">אין גמולים זמינים.</p>}
+                  {gemulLoading && (
+                    <p className="text-on-surface-variant text-label-sm flex items-center gap-2">
+                      <svg className="animate-spin h-4 w-4 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      טוען גמולים…
+                    </p>
+                  )}
+                  {!gemulLoading && gemulLines.length === 0 && <p className="text-on-surface-variant text-label-sm">אין גמולים זמינים.</p>}
                   {gemulLines.map((g) => (
                     <CheckboxLine
                       key={g.id}
@@ -498,7 +613,16 @@ export function RoleStep({
             </label>
             {addRoles && (
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                {extraRoleLines.length === 0 && (
+                {extraRolesLoading && (
+                  <p className="text-on-surface-variant text-label-sm flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    טוען תפקידים…
+                  </p>
+                )}
+                {!extraRolesLoading && extraRoleLines.length === 0 && (
                   <p className="text-on-surface-variant text-label-sm">אין תפקידים זמינים.</p>
                 )}
                 {extraRoleLines.map((g) => (
@@ -526,6 +650,23 @@ export function RoleStep({
         </section>
       )}
 
+      {/* Employment doc — required for new employees in פרא/הוראה categories */}
+      {showEmploymentDoc && (
+        <section className="bg-white p-6 rounded-xl shadow-card border border-outline-variant mb-4">
+          <p className="text-label-lg font-bold text-on-surface mb-4">מסמכים נדרשים</p>
+          <DocUpload
+            label={employmentDocDef.label}
+            required
+            value={docs['docEmployment']}
+            error={error === 'יש להעלות מסמך נתוני העסקה' ? error : undefined}
+            onChange={(doc) => {
+              onDocsChange({ ...docs, docEmployment: doc });
+              if (doc) setError('');
+            }}
+          />
+        </section>
+      )}
+
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-error-container text-on-error-container text-body-md flex items-center gap-2">
           <Icon name="error" /> {error}
@@ -537,6 +678,7 @@ export function RoleStep({
         subtitle="לאחר המעבר לשלב הבא, תגדירו את מערכת השעות עבור התפקיד הנבחר."
         onBack={onBack}
         onNext={() => validateAndNext(loadedPrevYear)}
+        nextDisabled={symbolsLoading || rolesLoading || prevYearLoading || gemulLoading || extraRolesLoading}
       />
     </>
   );

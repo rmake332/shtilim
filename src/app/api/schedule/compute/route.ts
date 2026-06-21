@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
     const category: string = body.category ?? '';
     const ofekCategory = category === 'פרא רפואי' ? 'פרא' : category === 'הוראה' ? 'הוראה' : category;
     const layer: string = body.layer ?? '';
-    const enteredHours = Number(body.enteredHours ?? 0);
+    const fatherPosition = Boolean(body.fatherPosition);
+    const enteredHours = Number(body.enteredHours ?? 0) + (fatherPosition ? 2 : 0);
 
     // Para: per-day ÷45 already done client-side; apply severe-disability bonus + half rounding.
     const bonus = severeDisabilityBonus({

@@ -85,6 +85,7 @@ export async function loadPosition(
     ageHours: Number(empFields[EMPLOYEE_FIELDS.ageHours]) || 0,
     contractStartDate: strField(pf[POSITION_FIELDS.contractStartDate]),
     youthRulesAcknowledged: true,
+    fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
   };
 
   const roleIds = linkIds(pf[POSITION_FIELDS.roleLink]);

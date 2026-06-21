@@ -49,6 +49,7 @@ export function EmployeeStep({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [loadingEmployee, setLoadingEmployee] = useState(false);
   const [showNewForm, setShowNewForm] = useState(() => Boolean(initial && !initial.recordId));
   const [data, setData] = useState<EmployeeData>(initial ?? emptyEmployee());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -58,7 +59,7 @@ export function EmployeeStep({
   const debounce = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
-    if (query.replace(/\D/g, '').length < 4) {
+    if (query.replace(/\D/g, '').length < 7) {
       setResults([]);
       return;
     }
@@ -85,6 +86,7 @@ export function EmployeeStep({
     setData((d) => ({ ...emptyEmployee(), contractStartDate: d.contractStartDate, recordId, name: fallbackName }));
     setErrors({});
     setEditing(false);
+    setLoadingEmployee(true);
     try {
       const res = await fetch(`/api/employees/${recordId}?token=${encodeURIComponent(token)}`);
       const json = await res.json();
@@ -102,12 +104,15 @@ export function EmployeeStep({
           maritalStatus: (e.maritalStatus as EmployeeData['maritalStatus']) || '',
           birthDate: e.birthDate ?? '',
           ageHours: Number(e.ageHours) || 0,
+          fatherPosition: Boolean(e.fatherPosition),
         }));
         // Gender is a new field — open edit mode automatically if it's missing.
         if (!gender) setEditing(true);
       }
     } catch {
       /* keep minimal data on failure */
+    } finally {
+      setLoadingEmployee(false);
     }
   }
 
@@ -332,7 +337,7 @@ export function EmployeeStep({
       )}
 
       {/* Missing gender banner — shown when an existing employee has no gender on record. */}
-      {selectedExisting && !data.gender && (
+      {selectedExisting && !data.gender && !loadingEmployee && (
         <div className="mb-4 p-4 rounded-xl border border-tertiary/40 bg-tertiary-container/30 flex items-start gap-3">
           <Icon name="warning" className="text-tertiary mt-0.5 shrink-0" />
           <p className="text-body-md text-on-surface">

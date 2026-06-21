@@ -16,6 +16,7 @@ export function FormShell({
   employeeName,
   roleName,
   mode = 'new',
+  contactEmail,
   children,
 }: {
   current: StepId;
@@ -25,13 +26,14 @@ export function FormShell({
   employeeName?: string;
   roleName?: string;
   mode?: 'new' | 'edit';
+  contactEmail?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav institution={institution} employeeName={employeeName} roleName={roleName} mode={mode} />
       <div className="flex flex-1">
-        <Sidebar current={current} />
+        <Sidebar current={current} contactEmail={contactEmail} />
         <main className="flex-1 mr-64 p-margin-desktop bg-surface-bright">
           <div className="max-w-container-max mx-auto">
             <div className="flex justify-between items-end mb-8">
@@ -43,7 +45,7 @@ export function FormShell({
             </div>
             {children}
           </div>
-          <Footer />
+          <Footer contactEmail={contactEmail} />
         </main>
       </div>
     </div>

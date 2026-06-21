@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'טופס קליטה — מערכת תקציבים',
+  title: 'מערכת תקציבים - מיוחדים בחינוך',
   description: 'טופס הוספת עובד חדש למוסדות שתילים',
 };
 

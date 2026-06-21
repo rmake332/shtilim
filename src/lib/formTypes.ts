@@ -1,5 +1,8 @@
 /** Shared form state types for the multi-step wizard. */
 
+import type { Day } from '@/lib/schedule/time';
+export type { Day };
+
 export type Gender = 'זכר' | 'נקבה';
 export type GenderUnset = Gender | '';
 export type MaritalStatus = 'רווק/ה' | 'נשוי/ה' | 'גרוש/ה' | 'אלמן/ה';
@@ -38,14 +41,16 @@ export function ageFromBirthDate(birthDate: string, ref: Date = new Date()): num
   return age;
 }
 
+const PARA_OR_TEACHING_CATEGORIES = new Set(['פרא רפואי', 'הוראה']);
+
 /**
  * Whether a document field should be shown, given its condition + current form data.
  * Pure so it can run on the employee step and server-side. `layer` here is the
  * INSTITUTION's layer (from the token), not the role's.
  */
 export function isDocVisible(
-  condition: 'youth' | 'male' | 'kindergartenLayer',
-  ctx: { birthDate?: string; gender?: GenderUnset; layer?: string },
+  condition: 'youth' | 'male' | 'kindergartenLayer' | 'newEmployeeParaOrTeaching',
+  ctx: { birthDate?: string; gender?: GenderUnset; layer?: string; isNewEmployee?: boolean; category?: string },
 ): boolean {
   switch (condition) {
     case 'youth': {
@@ -57,6 +62,8 @@ export function isDocVisible(
       return ctx.gender === 'זכר';
     case 'kindergartenLayer':
       return ctx.layer === 'גנים';
+    case 'newEmployeeParaOrTeaching':
+      return Boolean(ctx.isNewEmployee) && PARA_OR_TEACHING_CATEGORIES.has(ctx.category ?? '');
   }
 }
 
@@ -93,6 +100,8 @@ export interface EmployeeData {
    * (not written to Airtable); required to continue when the employee is a minor.
    */
   youthRulesAcknowledged: boolean;
+  /** משרת אב — adds 2 extra hours to entered hours in all schedule calculations. */
+  fatherPosition: boolean;
 }
 
 /** Step 2 — role selection. */
@@ -175,6 +184,11 @@ export interface ScheduleData {
   ofekAllRolesRecordId?: string;
   /** Reason for hours reduction vs. previous year (if applicable). */
   reductionReason?: string;
+  /**
+   * For צהריים roles: the one day per week when the employee works a morning shift
+   * (starts before 12:00). All other days must start at 12:00 or later.
+   */
+  morningDay?: Day;
 }
 
 export function emptySchedule(): ScheduleData {
@@ -206,5 +220,6 @@ export function emptyEmployee(): EmployeeData {
     ageHours: 0,
     contractStartDate: '',
     youthRulesAcknowledged: false,
+    fatherPosition: false,
   };
 }

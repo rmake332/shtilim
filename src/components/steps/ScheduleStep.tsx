@@ -12,6 +12,7 @@ import {
   validateDay,
   weeklyMinutes,
   shiftMinutes,
+  toMinutes,
   WEEKLY_CAP_HOURS,
   snapToHalf,
   paraDayHours,
@@ -275,6 +276,10 @@ function GridSchedule({
   const totalHours = totalMin / 60;
   const overCap = totalHours > WEEKLY_CAP_HOURS;
 
+  // תפקיד צהריים: כניסה לפני 12:00 אסורה פרט ליום עובדת בוקר שנבחר מראש.
+  const isAfternoonRole = role.roleTitle.includes('צהריים');
+  const morningDay = data.morningDay ?? null;
+
   // Hours that actually count against the budget.
   // For סגן ראשון this is the chosen 37.5/40 — NOT the sum of the entered grid.
   const isDeputy1 = type === 'סגן ראשון';
@@ -294,7 +299,18 @@ function GridSchedule({
   const dayErrors: Partial<Record<Day, string>> = {};
   for (const d of DAYS) {
     const v = validateDay(week[d] ?? []);
-    if (!v.ok) dayErrors[d] = v.error;
+    if (!v.ok) { dayErrors[d] = v.error; continue; }
+    // תפקיד צהריים: בכל יום שאינו יום עובדת הבוקר — כניסה חייבת להיות 12:00 ומעלה.
+    if (isAfternoonRole && d !== morningDay) {
+      const shifts = week[d] ?? [];
+      for (const s of shifts) {
+        const inMin = toMinutes(s.in);
+        if (inMin !== null && inMin < 12 * 60) {
+          dayErrors[d] = 'בתפקיד צהריים כניסה לפני 12:00 מותרת רק ביום עובדת הבוקר';
+          break;
+        }
+      }
+    }
   }
   const hasDayError = Object.keys(dayErrors).length > 0;
 
@@ -414,6 +430,7 @@ function GridSchedule({
     // Collect ALL applicable alerts so the user sees every problem at once.
     const errs: string[] = [];
     const warns: string[] = [];
+    if (isAfternoonRole && !morningDay) errs.push('בתפקיד צהריים יש לבחור יום עובדת בוקר לפני הגשת המערכת');
     if (hasDayError) errs.push('יש לתקן את שגיאות מערכת השעות');
     if (overCap) errs.push('מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות');
     if (isPara) errs.push(...paraDayErrors);
@@ -596,6 +613,53 @@ function GridSchedule({
           </div>
         )}
 
+        {/* תפקיד צהריים — בחירת יום עובדת בוקר לפני הזנת המערכת */}
+        {isAfternoonRole && (
+          <div className="bg-white p-5 rounded-xl border border-outline-variant shadow-card">
+            <div className="flex items-start gap-2 mb-3">
+              <Icon name="wb_sunny" className="text-[20px] text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-label-lg font-semibold text-on-surface">יום עובדת בוקר</p>
+                <p className="text-label-sm text-on-surface-variant mt-0.5">
+                  בתפקיד צהריים, כניסה לפני 12:00 מותרת רק ביום אחד בשבוע. יש לבחור אותו לפני הזנת המערכת.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {DAYS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() =>
+                    setData((prev) => ({ ...prev, morningDay: prev.morningDay === d ? undefined : d }))
+                  }
+                  className={`px-4 py-2 rounded-lg text-label-md font-semibold border transition-colors ${
+                    morningDay === d
+                      ? 'bg-primary text-on-primary border-primary'
+                      : 'bg-surface-container-low text-on-surface border-outline-variant hover:border-primary hover:text-primary'
+                  }`}
+                >
+                  {DAY_LABELS[d]}
+                </button>
+              ))}
+              {morningDay && (
+                <button
+                  type="button"
+                  onClick={() => setData((prev) => ({ ...prev, morningDay: undefined }))}
+                  className="px-3 py-2 rounded-lg text-label-sm text-on-surface-variant border border-outline-variant hover:border-error hover:text-error transition-colors"
+                >
+                  ביטול
+                </button>
+              )}
+            </div>
+            {!morningDay && (
+              <p className="text-label-sm text-amber-700 mt-3 flex items-center gap-1">
+                <Icon name="info" className="text-[16px]" /> טרם נבחר יום עובדת בוקר — לא ניתן להזין כניסה לפני 12:00
+              </p>
+            )}
+          </div>
+        )}
+
         {DAYS.map((day) => {
           const shifts = week[day] ?? [];
           const visible = shifts.length ? shifts : [{ in: '', out: '' }];
@@ -656,6 +720,7 @@ function GridSchedule({
             ofek3={ofek}
             category={role.category}
             layer={role.layer}
+            severeDisability={role.severeDisability}
             onStep1={runOfek1}
             onStep2={runCheck2}
             onStep3={runOfek3}
@@ -772,6 +837,7 @@ async function computeOfek(
       gender: employee.gender,
       maritalStatus: employee.maritalStatus,
       hasChildrenUnder14: employee.childrenUnder14 === 'כן',
+      fatherPosition: Boolean(employee.fatherPosition),
       paraBoard: role.paraBoard,
       severeDisabilityFlag: role.severeDisability,
       isBehaviorAnalyst: role.subRole.includes('מנתחת התנהגות'),
@@ -839,6 +905,7 @@ function BellScheduleGrid({
   onNext: (d: ScheduleData) => void;
 }) {
   const [slots, setSlots] = useState<BellSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(true);
   const [loadErr, setLoadErr] = useState('');
   // Picked slot id + its daily hours, per day/shift. Mirrors data.week (which holds in/out).
   const [picks, setPicks] = useState<Record<Day, (BellSlot | null)[]>>(() => {
@@ -862,11 +929,23 @@ function BellScheduleGrid({
       .catch(() => {});
   }, [token]);
 
+  // תפקיד צהריים: זיהוי לפי שם התפקיד.
+  const isAfternoonRole = role.roleTitle.includes('צהריים');
+
   // Friday ("ו") slots differ from Sun–Thu ("א-ה"); offer the right group per day.
+  // תפקיד צהריים: ביום הבוקר — כל הרצועות; בשאר הימים — רק 12:00 ומעלה.
+  const slotsForDay = (day: Day): BellSlot[] => {
+    const isFri = day === 'fri';
+    const pool = slots.filter((s) => (isFri ? s.weekday === 'friday' : s.weekday !== 'friday'));
+    if (!isAfternoonRole || day === morningDay) return pool;
+    return pool.filter((s) => (toMinutes(s.in) ?? 0) >= 12 * 60);
+  };
+  // kept for non-afternoon roles (same logic, no day dependency)
   const weekdaySlots = slots.filter((s) => s.weekday !== 'friday');
   const fridaySlots = slots.filter((s) => s.weekday === 'friday');
 
   useEffect(() => {
+    setSlotsLoading(true);
     const params = new URLSearchParams({ token, symbolId: role.symbolId, roleId: role.roleId });
     fetch(`/api/schedule/bell?${params.toString()}`)
       .then((r) => r.json())
@@ -874,7 +953,8 @@ function BellScheduleGrid({
         if (j.slots) setSlots(j.slots);
         else setLoadErr('לא נטענו רצועות לוח צלצולים');
       })
-      .catch(() => setLoadErr('שגיאה בטעינת לוח הצלצולים'));
+      .catch(() => setLoadErr('שגיאה בטעינת לוח הצלצולים'))
+      .finally(() => setSlotsLoading(false));
   }, [token, role.symbolId, role.roleId]);
 
   // When slots are loaded and data.week was pre-populated (e.g. from prior year),
@@ -955,17 +1035,28 @@ function BellScheduleGrid({
     return snappedHours;
   }
 
-  // Validate overlap/order for each day's picked slots.
+  const morningDay = data.morningDay ?? null;
+
+  // Validate overlap/order for each day's picked slots + חוק צהריים.
   const bellDayErrors: Partial<Record<Day, string>> = {};
   for (const d of DAYS) {
-    const shifts = picks[d].filter((p): p is BellSlot => p !== null).map((p) => ({ in: p.in, out: p.out }));
+    const dayPicked = picks[d].filter((p): p is BellSlot => p !== null);
+    const shifts = dayPicked.map((p) => ({ in: p.in, out: p.out }));
     const v = validateDay(shifts);
-    if (!v.ok) bellDayErrors[d] = v.error!;
+    if (!v.ok) { bellDayErrors[d] = v.error!; continue; }
+    // תפקיד צהריים: רצועה שמתחילה לפני 12:00 אסורה בכל יום פרט ליום הבוקר.
+    if (isAfternoonRole && d !== morningDay) {
+      const violating = dayPicked.find((p) => (toMinutes(p.in) ?? 0) < 12 * 60);
+      if (violating) {
+        bellDayErrors[d] = 'בתפקיד צהריים רצועה לפני 12:00 מותרת רק ביום עובדת הבוקר';
+      }
+    }
   }
   const hasBellDayError = Object.keys(bellDayErrors).length > 0;
 
   function bellPreCheck(): string[] {
     const errs: string[] = [];
+    if (isAfternoonRole && !morningDay) errs.push('בתפקיד צהריים יש לבחור יום עובדת בוקר לפני הגשת המערכת');
     if (weeklyHours <= 0) errs.push('יש לבחור לפחות רצועה אחת');
     if (weeklyHours > WEEKLY_CAP_HOURS) errs.push('מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות');
     if (weeklyHours > 0 && snappedHours === null) errs.push(NON_INTEGER_HOURS_ERROR);
@@ -1136,14 +1227,70 @@ function BellScheduleGrid({
 
       {/* Days grid */}
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
-        {loadErr && (
+        {slotsLoading && (
+          <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant flex items-center gap-3 text-on-surface-variant text-body-md">
+            <svg className="animate-spin h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+            טוען לוח צלצולים…
+          </div>
+        )}
+        {!slotsLoading && loadErr && (
           <div className="p-3 rounded-lg bg-error-container text-on-error-container text-body-md flex items-center gap-2">
             <Icon name="error" /> {loadErr}
           </div>
         )}
 
+        {/* תפקיד צהריים — בחירת יום עובדת בוקר */}
+        {isAfternoonRole && (
+          <div className="bg-white p-5 rounded-xl border border-outline-variant shadow-card">
+            <div className="flex items-start gap-2 mb-3">
+              <Icon name="wb_sunny" className="text-[20px] text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-label-lg font-semibold text-on-surface">יום עובדת בוקר</p>
+                <p className="text-label-sm text-on-surface-variant mt-0.5">
+                  בתפקיד צהריים, רצועות בוקר מותרות רק ביום אחד בשבוע. יש לבחור אותו לפני הזנת המערכת.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {DAYS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() =>
+                    setData((prev) => ({ ...prev, morningDay: prev.morningDay === d ? undefined : d }))
+                  }
+                  className={`px-4 py-2 rounded-lg text-label-md font-semibold border transition-colors ${
+                    morningDay === d
+                      ? 'bg-primary text-on-primary border-primary'
+                      : 'bg-surface-container-low text-on-surface border-outline-variant hover:border-primary hover:text-primary'
+                  }`}
+                >
+                  {DAY_LABELS[d]}
+                </button>
+              ))}
+              {morningDay && (
+                <button
+                  type="button"
+                  onClick={() => setData((prev) => ({ ...prev, morningDay: undefined }))}
+                  className="px-3 py-2 rounded-lg text-label-sm text-on-surface-variant border border-outline-variant hover:border-error hover:text-error transition-colors"
+                >
+                  ביטול
+                </button>
+              )}
+            </div>
+            {!morningDay && (
+              <p className="text-label-sm text-amber-700 mt-3 flex items-center gap-1">
+                <Icon name="info" className="text-[16px]" /> טרם נבחר יום עובדת בוקר — לא ניתן לבחור רצועות בוקר
+              </p>
+            )}
+          </div>
+        )}
+
         {DAYS.map((day) => {
-          const daySlots = day === 'fri' ? fridaySlots : weekdaySlots;
+          const daySlots = isAfternoonRole ? slotsForDay(day) : (day === 'fri' ? fridaySlots : weekdaySlots);
           const dayPicks = picks[day];
           const dayHours = dayPicks.reduce((s, p) => s + (p?.dailyHours ?? 0), 0);
           const bellDayErr = bellDayErrors[day];
@@ -1200,6 +1347,7 @@ function BellScheduleGrid({
           ofek3={ofek}
           category={role.category}
           layer={role.layer}
+          severeDisability={role.severeDisability}
           onStep1={runOfek1}
           onStep2={runCheck2}
           onStep3={runOfek3}
@@ -1242,7 +1390,7 @@ function BellScheduleGrid({
           showBack={!!onBack}
           onEditEmployee={onEditEmployee}
           onNext={validateAndNext}
-          nextDisabled={computing || !ofek1?.ok || existing === null || (existing.count > 0 && !ofek?.ok)}
+          nextDisabled={slotsLoading || computing || !ofek1?.ok || existing === null || (existing.count > 0 && !ofek?.ok)}
         />
       </div>
     </div>
@@ -1262,12 +1410,13 @@ interface OfekChecksProps {
   ofek3: OfekResult | null;
   category: string;
   layer: string;
+  severeDisability: boolean;
   onStep1: () => void;
   onStep2: () => void;
   onStep3: () => void;
 }
 
-function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, layer, onStep1, onStep2, onStep3 }: OfekChecksProps) {
+function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, layer, severeDisability, onStep1, onStep2, onStep3 }: OfekChecksProps) {
   const showStep2 = ofek1?.ok === true;
   const showStep3 = existing !== null && existing.count > 0;
 

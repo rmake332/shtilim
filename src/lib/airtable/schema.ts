@@ -25,6 +25,7 @@ export const MOSAD_FIELDS = {
   layer: 'fldzGg1JddI1bJwH3', // שכבה (singleSelect) — fallback when budget row has no layer
   formToken: 'fldn1VdIkJLl2GPWD', // form_token
   formActive: 'fldZUUcUCKPYAXiZK', // form_active
+  payrollEmail: 'fldSSieNcnGfsePGa', // מייל חשבת שכר
 } as const;
 
 /** רשימת עובדים fields */
@@ -38,6 +39,7 @@ export const EMPLOYEE_FIELDS = {
   gender: 'fldp7dNkDDKMMT1Ub',
   ageHours: 'fldaw1LMV6s18X91k', // formula
   institution: 'fld5nl16DpoM7Xn1h',
+  fatherPosition: 'fldmjgP5oDc49Gmz1', // משרת אב (checkbox) — adds 2h to entered hours
 } as const;
 
 /** תקנים פעילים fields */
@@ -78,6 +80,7 @@ export const POSITION_FIELDS = {
   docMedical: 'fldHVsFFxOfkDYO4H', // אישור רפואי- נוער
   docNoViolence: 'fld3LLyKU8wcbQXdk', // אישור-העדר עבירות אלימות
   docPoliceNoSexOffense: 'fldZBF1Fw0aCcuONK', // אישור משטרה-העדר עבירות מין
+  docEmployment: 'fldhzxp5c6BM6EREa', // נתוני העסקה — חובה לעובד חדש בפרא/הוראה
   // weekly schedule durations (3 shifts/day) — keyed [day][shift]
 } as const;
 
@@ -114,6 +117,12 @@ export const DOC_FIELDS = [
     label: 'אישור העדר עבירות אלימות',
     condition: 'kindergartenLayer', // institution layer = גנים
   },
+  {
+    key: 'docEmployment',
+    fieldId: POSITION_FIELDS.docEmployment,
+    label: 'נתוני העסקה',
+    condition: 'newEmployeeParaOrTeaching', // עובד חדש + קטגוריה פרא/הוראה
+  },
 ] as const;
 
 export type DocFieldDef = (typeof DOC_FIELDS)[number];
@@ -138,6 +147,7 @@ export const BELL_FIELDS = {
   weekday: 'fldNb6rcmG8gugWyw', // יום בשבוע (singleSelect: "א-ה" / "ו")
   category: 'fld9eKY0lDfNbpJ4v', // קטגוריה (singleSelect: "עובדי הוראה")
   range: 'fldbDAXiqolYhSaou', // כניסה ויציאה (formula text "HH:MM-HH:MM")
+  afternoonTeacher: 'fldmM6mMAHJYhqFBx', // מורת צהריים (checkbox) — רצועה שמתחילה לפני 12:00 אסורה פרט ליום בוקר
 } as const;
 
 /** מחשבון אופק חדש fields */

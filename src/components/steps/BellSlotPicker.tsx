@@ -11,6 +11,7 @@ export interface BellSlot {
   out: string;
   dailyHours: number;
   weekday: 'weekdays' | 'friday' | 'unknown';
+  afternoonOnly: boolean;
 }
 
 /**

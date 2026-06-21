@@ -69,6 +69,7 @@ export function Wizard({
       employeeName={employee?.name}
       roleName={role?.roleTitle}
       mode={isEdit ? 'edit' : 'new'}
+      contactEmail={institution.payrollEmail}
     >
       {step === 'employee' && (
         <EmployeeStep
@@ -93,6 +94,9 @@ export function Wizard({
           employee={employee}
           mosadName={institution.name}
           institutionLayer={institution.layer}
+          isNewEmployee={!isEdit && employee?.recordId === null}
+          docs={docs}
+          onDocsChange={setDocs}
           onBack={() => setStep('employee')}
           onNext={(data, loadedPrevYear) => {
             setRole(data);

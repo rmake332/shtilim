@@ -98,6 +98,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ageHours: Number(empFields[EMPLOYEE_FIELDS.ageHours]) || 0,
       contractStartDate: strField(pf[POSITION_FIELDS.contractStartDate]),
       youthRulesAcknowledged: true, // pre-acknowledged on original submission
+      fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
     };
 
     // RoleData — roleId and symbolId from the linked records

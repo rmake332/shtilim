@@ -55,6 +55,7 @@ export interface EmployeeDetails {
   maritalStatus: string;
   birthDate: string;
   ageHours: number;
+  fatherPosition: boolean;
 }
 
 function str(v: unknown): string {
@@ -88,6 +89,7 @@ export async function getEmployeeById(
     maritalStatus: str(f[EMPLOYEE_FIELDS.maritalStatus]),
     birthDate: str(f[EMPLOYEE_FIELDS.birthDate]),
     ageHours: Number(f[EMPLOYEE_FIELDS.ageHours]) || 0,
+    fatherPosition: Boolean(f[EMPLOYEE_FIELDS.fatherPosition]),
   };
 }
 
