@@ -95,7 +95,10 @@ export async function POST(req: NextRequest) {
       additionalRoles = existing.count;
       existingDebug = existing;
       if (existing.count > 0) {
-        const combinedHours = finalHours + existing.frontalHours + existing.individualHours + existing.stayHours;
+        // גנים: כולל שהייה בחישוב משולב. יסודי/חטיבה: שהייה לא נספרת בניצול.
+        const isGanim = layer === 'גנים';
+        const existingStayForCombined = isGanim ? existing.stayHours : 0;
+        const combinedHours = finalHours + existing.frontalHours + existing.individualHours + existingStayForCombined;
         const combinedPct = jobPercent(combinedHours);
         const combinedMother = isMotherPosition({
           gender: body.gender ?? '',
@@ -135,7 +138,10 @@ export async function POST(req: NextRequest) {
         // Back out the other roles → values for the CURRENT position only.
         frontal = Math.max(0, combined.frontalHours - existing.frontalHours);
         individual = Math.max(0, combined.individualHours - existing.individualHours);
-        stay = Math.max(0, combined.stayHours - existing.stayHours);
+        // גנים: חסר שהייה קיימת. יסודי/חטיבה: שהייה לא נכנסה ל-combined, אז combined.stayHours = שהייה של התפקיד הנוכחי בלבד.
+        stay = isGanim
+          ? Math.max(0, combined.stayHours - existing.stayHours)
+          : combined.stayHours;
       }
     }
 

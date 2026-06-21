@@ -280,10 +280,8 @@ function buildScheduleFields(schedule: ScheduleData): Record<string, number> {
 
 function computeUtilizedHours(role: RoleData, schedule: ScheduleData): number {
   const { frontalHours = 0, individualHours = 0, stayHoursInstitution = 0, stayHoursHome = 0 } = schedule;
-  const isTeaching = role.category === 'הוראה';
   const isGanim = role.layer === 'גנים';
-  const includeStay = !isTeaching || isGanim;
-  const stay = includeStay ? stayHoursInstitution + stayHoursHome : 0;
+  const stay = isGanim ? stayHoursInstitution + stayHoursHome : 0;
   const total = frontalHours + individualHours + stay;
   return total > 0 ? total : (schedule.weeklyHours ?? 0);
 }

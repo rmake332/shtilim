@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
-import { RoleData, EmployeeData, emptyRole } from '@/lib/formTypes';
+import { RoleData, EmployeeData, emptyRole, ageFromBirthDate } from '@/lib/formTypes';
+import { CATEGORY } from '@/lib/airtable/schema';
 import type { PrevYearPosition } from '@/lib/prevYearPosition';
 
 interface SymbolOption {
@@ -208,6 +209,13 @@ export function RoleStep({
     if (needsLayer && !data.layer) {
       setError('יש לבחור שכבה');
       return;
+    }
+    if (data.category === CATEGORY.assistance) {
+      const age = ageFromBirthDate(employee?.birthDate ?? '');
+      if (age !== null && age < 18) {
+        setError('לא ניתן להעסיק עובד מתחת לגיל 18 בתפקיד סיוע');
+        return;
+      }
     }
     const finalData = withPrevYear?.subRole?.trim()
       ? { ...data, subRole: withPrevYear.subRole.trim() }

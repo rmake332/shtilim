@@ -502,21 +502,40 @@ function GridSchedule({
       <aside className="lg:col-span-4 lg:order-2 order-1">
         <div className="bg-white p-6 rounded-xl shadow-card border border-outline-variant sticky top-24">
           <h3 className="text-headline-md text-primary font-bold mb-6">סיכום שבועי</h3>
-          <div className="flex justify-between items-baseline mb-2">
-            <span className="text-on-surface-variant text-body-md">שעות לניצול</span>
-            <span className={`text-display-lg-mobile font-bold ${overCap ? 'text-error' : 'text-primary'}`}>
-              {utilizedHours.toFixed(2)}
-            </span>
-          </div>
-          <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
-            <div
-              className={`h-full ${overCap ? 'bg-error' : 'bg-primary'}`}
-              style={{ width: `${Math.min(100, (utilizedHours / WEEKLY_CAP_HOURS) * 100)}%` }}
-            />
-          </div>
-          <p className="text-label-sm text-on-surface-variant flex items-center gap-1">
-            <Icon name="info" className="text-[16px]" /> מוגבל ל-42 שעות שבועיות לפי חוק
-          </p>
+          {/* Show utilized hours matching the Airtable "סה"כ שעות לניצול" logic:
+              frontal + individual (+ stay only if גנים layer). */}
+          {(() => {
+            const activeOfek = (existing?.count ?? 0) > 0 ? ofek : ofek1;
+            let displayHours: number;
+            if (needsOfek && activeOfek?.ok) {
+              const isGanim = role.layer === 'גנים';
+              const stay = isGanim ? activeOfek.stayHoursInstitution + activeOfek.stayHoursHome : 0;
+              const breakdown = activeOfek.frontalHours + activeOfek.individualHours + stay;
+              displayHours = breakdown > 0 ? breakdown : activeOfek.finalHours;
+            } else {
+              displayHours = utilizedHours;
+            }
+            const displayOverCap = displayHours > WEEKLY_CAP_HOURS;
+            return (
+              <>
+                <div className="flex justify-between items-baseline mb-1">
+                  <span className="text-on-surface-variant text-body-md">סה״כ שעות לניצול</span>
+                  <span className={`text-display-lg-mobile font-bold ${displayOverCap ? 'text-error' : 'text-primary'}`}>
+                    {displayHours.toFixed(2)}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
+                  <div
+                    className={`h-full ${displayOverCap ? 'bg-error' : 'bg-primary'}`}
+                    style={{ width: `${Math.min(100, (displayHours / WEEKLY_CAP_HOURS) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-label-sm text-on-surface-variant flex items-center gap-1">
+                  <Icon name="info" className="text-[16px]" /> מוגבל ל-42 שעות שבועיות לפי חוק
+                </p>
+              </>
+            );
+          })()}
           {isDeputy1 && (
             <div className="mt-3 text-label-sm flex justify-between text-on-surface-variant">
               <span>סה״כ שעות שהוזנו במערכת:</span>
@@ -936,11 +955,22 @@ function BellScheduleGrid({
     return snappedHours;
   }
 
+  // Validate overlap/order for each day's picked slots.
+  const bellDayErrors: Partial<Record<Day, string>> = {};
+  for (const d of DAYS) {
+    const shifts = picks[d].filter((p): p is BellSlot => p !== null).map((p) => ({ in: p.in, out: p.out }));
+    const v = validateDay(shifts);
+    if (!v.ok) bellDayErrors[d] = v.error!;
+  }
+  const hasBellDayError = Object.keys(bellDayErrors).length > 0;
+
   function bellPreCheck(): string[] {
     const errs: string[] = [];
     if (weeklyHours <= 0) errs.push('יש לבחור לפחות רצועה אחת');
     if (weeklyHours > WEEKLY_CAP_HOURS) errs.push('מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות');
     if (weeklyHours > 0 && snappedHours === null) errs.push(NON_INTEGER_HOURS_ERROR);
+    if (hasBellDayError)
+      errs.push(...Object.entries(bellDayErrors).map(([d, e]) => `יום ${DAY_LABELS[d as Day]}: ${e}`));
     return errs;
   }
 
@@ -1040,21 +1070,38 @@ function BellScheduleGrid({
       <aside className="lg:col-span-4 lg:order-2 order-1">
         <div className="bg-white p-6 rounded-xl shadow-card border border-outline-variant sticky top-24">
           <h3 className="text-headline-md text-primary font-bold mb-6">סיכום שבועי</h3>
-          <div className="flex justify-between items-baseline mb-2">
-            <span className="text-on-surface-variant text-body-md">שעות שבועיות</span>
-            <span className={`text-display-lg-mobile font-bold ${overCap ? 'text-error' : 'text-primary'}`}>
-              {weeklyHours.toFixed(2)}
-            </span>
-          </div>
-          <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
-            <div
-              className={`h-full ${overCap ? 'bg-error' : 'bg-primary'}`}
-              style={{ width: `${Math.min(100, (weeklyHours / WEEKLY_CAP_HOURS) * 100)}%` }}
-            />
-          </div>
-          <p className="text-label-sm text-on-surface-variant flex items-center gap-1">
-            <Icon name="info" className="text-[16px]" /> סכום שעות יומיות מהרצועות שנבחרו
-          </p>
+          {(() => {
+            const activeOfek = (existing?.count ?? 0) > 0 ? ofek : ofek1;
+            let displayHours: number;
+            if (activeOfek?.ok) {
+              const isGanim = role.layer === 'גנים';
+              const stay = isGanim ? activeOfek.stayHoursInstitution + activeOfek.stayHoursHome : 0;
+              const breakdown = activeOfek.frontalHours + activeOfek.individualHours + stay;
+              displayHours = breakdown > 0 ? breakdown : activeOfek.finalHours;
+            } else {
+              displayHours = weeklyHours;
+            }
+            const displayOverCap = displayHours > WEEKLY_CAP_HOURS;
+            return (
+              <>
+                <div className="flex justify-between items-baseline mb-1">
+                  <span className="text-on-surface-variant text-body-md">סה״כ שעות לניצול</span>
+                  <span className={`text-display-lg-mobile font-bold ${displayOverCap ? 'text-error' : 'text-primary'}`}>
+                    {displayHours.toFixed(2)}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
+                  <div
+                    className={`h-full ${displayOverCap ? 'bg-error' : 'bg-primary'}`}
+                    style={{ width: `${Math.min(100, (displayHours / WEEKLY_CAP_HOURS) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-label-sm text-on-surface-variant flex items-center gap-1 mb-2">
+                  <Icon name="info" className="text-[16px]" /> סכום שעות יומיות מהרצועות שנבחרו
+                </p>
+              </>
+            );
+          })()}
 
           {/* עיגול לאופק — מוצג רק כשיש הפרש */}
           {snappedHours !== null && (
@@ -1099,10 +1146,11 @@ function BellScheduleGrid({
           const daySlots = day === 'fri' ? fridaySlots : weekdaySlots;
           const dayPicks = picks[day];
           const dayHours = dayPicks.reduce((s, p) => s + (p?.dailyHours ?? 0), 0);
+          const bellDayErr = bellDayErrors[day];
           return (
             <div
               key={day}
-              className="bg-white p-6 rounded-lg shadow-card border border-transparent hover:border-outline-variant"
+              className={`bg-white p-6 rounded-lg shadow-card border ${bellDayErr ? 'border-error/60' : 'border-transparent hover:border-outline-variant'}`}
             >
               <div className="flex items-start gap-6 flex-wrap">
                 <div className="w-16 mt-2 flex flex-col items-start gap-1">
@@ -1139,13 +1187,14 @@ function BellScheduleGrid({
                   )}
                 </div>
               </div>
+              {bellDayErr && <p className="text-error text-label-sm mt-2">{bellDayErr}</p>}
             </div>
           );
         })}
 
         <OfekChecks
           computing={computing}
-          disabled={weeklyHours <= 0}
+          disabled={weeklyHours <= 0 || hasBellDayError}
           ofek1={ofek1}
           existing={existing}
           ofek3={ofek}
