@@ -44,30 +44,21 @@ export function buildOfekKey(params: {
 }
 
 export interface SevereDisabilityInput {
-  severeDisabilityFlag: boolean; // בונוס לקות קשה on budget
-  paraBoard: boolean; // לוח פרא
-  isBehaviorAnalyst: boolean; // תפקיד = מנתחת התנהגות
-  finalLayer: string; // שכבה סופית
+  severeDisabilityFlag: boolean; // לקות קשה checkbox on budget
   enteredHours: number; // sum of entered schedule hours
 }
 
 /**
- * Severe-disability hour bonus (פרא):
- *  - none if flag off, OR (behavior-analyst + paraBoard)
- *  - if flag on + !paraBoard + layer ∈ {יסודי, גנים} + !behavior-analyst:
- *      enteredHours < 15 → +1 ; >= 15 → +2
+ * Severe-disability hour bonus:
+ *  - 0 if flag off
+ *  - +1 if enteredHours < 15
+ *  - +2 if enteredHours >= 15
  */
 export function severeDisabilityBonus({
   severeDisabilityFlag,
-  paraBoard,
-  isBehaviorAnalyst,
-  finalLayer,
   enteredHours,
 }: SevereDisabilityInput): number {
   if (!severeDisabilityFlag) return 0;
-  if (isBehaviorAnalyst && paraBoard) return 0;
-  const layerOk = finalLayer === 'יסודי' || finalLayer === 'גנים';
-  if (paraBoard || !layerOk || isBehaviorAnalyst) return 0;
   return enteredHours < 15 ? 1 : 2;
 }
 

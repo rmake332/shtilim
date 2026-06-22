@@ -14,6 +14,7 @@ export interface BudgetRow {
   remainingRoles: number;
   ofekChadash: boolean;
   paraBoard: boolean;
+  severeDisability: boolean;
   symbolName: string;
 }
 
@@ -70,6 +71,7 @@ export async function GET(req: NextRequest) {
         BUDGET_FIELDS.bellScheduleNum,
         BUDGET_FIELDS.ofekChadash,
         BUDGET_FIELDS.paraBoard,
+        BUDGET_FIELDS.severeDisabilityBonus,
         BUDGET_FIELDS.symbolLink,
         BUDGET_FIELDS.institutionLink,
       ],
@@ -100,6 +102,7 @@ export async function GET(req: NextRequest) {
         remainingRoles: num(f[BUDGET_FIELDS.remainingRoles]),
         ofekChadash: Boolean(f[BUDGET_FIELDS.ofekChadash]),
         paraBoard: Boolean(f[BUDGET_FIELDS.paraBoard]),
+        severeDisability: Boolean(f[BUDGET_FIELDS.severeDisabilityBonus]),
         symbolName: symName,
       };
     });

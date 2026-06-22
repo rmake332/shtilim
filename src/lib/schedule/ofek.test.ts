@@ -46,30 +46,18 @@ describe('buildOfekKey', () => {
 });
 
 describe('severeDisabilityBonus', () => {
-  const base = {
-    severeDisabilityFlag: true,
-    paraBoard: false,
-    isBehaviorAnalyst: false,
-    finalLayer: 'יסודי',
-    enteredHours: 10,
-  };
+  const base = { severeDisabilityFlag: true, enteredHours: 10 };
   it('0 when flag off', () => {
     expect(severeDisabilityBonus({ ...base, severeDisabilityFlag: false })).toBe(0);
   });
-  it('+1 under 15h, eligible', () => {
+  it('+1 under 15h', () => {
     expect(severeDisabilityBonus({ ...base, enteredHours: 10 })).toBe(1);
   });
-  it('+2 at/over 15h, eligible', () => {
+  it('+2 at 15h', () => {
     expect(severeDisabilityBonus({ ...base, enteredHours: 15 })).toBe(2);
   });
-  it('0 when behaviorAnalyst + paraBoard', () => {
-    expect(severeDisabilityBonus({ ...base, isBehaviorAnalyst: true, paraBoard: true })).toBe(0);
-  });
-  it('0 when paraBoard on', () => {
-    expect(severeDisabilityBonus({ ...base, paraBoard: true })).toBe(0);
-  });
-  it('0 when layer not יסודי/גנים', () => {
-    expect(severeDisabilityBonus({ ...base, finalLayer: 'חטיבה' })).toBe(0);
+  it('+2 over 15h', () => {
+    expect(severeDisabilityBonus({ ...base, enteredHours: 20 })).toBe(2);
   });
 });
 

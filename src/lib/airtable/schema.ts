@@ -179,7 +179,7 @@ export const BUDGET_FIELDS = {
   institutionLink: 'fld91lKf1ba2ADEnL', // → מוסדות
   symbolLink: 'fldG29aOqYleLgfGt', // → סמלי מוסד
   bellScheduleNum: 'fldjzY10TI7bcDsBZ', // לוח צלצולים (multipleSelects)
-  severeDisabilityBonus: 'fldqVXsbPG7EjlF84', // בונוס לקות קשה (lookup checkbox)
+  severeDisabilityBonus: 'fldOgeNqOSkZZKbmC', // לקות קשה (checkbox)
   category: 'fld396nSlQajFyFir', // קטגוריה (singleSelect)
   ofekChadash: 'fld2Rydg2hk61j86a', // אופק חדש (checkbox)
   paraBoard: 'fldpsfFEtZcf1Ax2P', // לוח פרא (checkbox)

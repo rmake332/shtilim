@@ -840,7 +840,6 @@ async function computeOfek(
       fatherPosition: Boolean(employee.fatherPosition),
       paraBoard: role.paraBoard,
       severeDisabilityFlag: role.severeDisability,
-      isBehaviorAnalyst: role.subRole.includes('מנתחת התנהגות'),
       // tz is always sent for the prev-year check; skipExisting controls the combined-roles check
       tz: employee.tz,
       skipExisting,

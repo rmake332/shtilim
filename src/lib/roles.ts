@@ -73,7 +73,7 @@ function mapRole(r: AirtableRecord): MappedBudget {
     bellScheduleNums: multi(f[BUDGET_FIELDS.bellScheduleNum]),
     ofekChadash: Boolean(f[BUDGET_FIELDS.ofekChadash]),
     paraBoard: Boolean(f[BUDGET_FIELDS.paraBoard]),
-    severeDisability: Boolean(single(f[BUDGET_FIELDS.severeDisabilityBonus]) === 'true' || f[BUDGET_FIELDS.severeDisabilityBonus] === true),
+    severeDisability: Boolean(f[BUDGET_FIELDS.severeDisabilityBonus]),
     salaryType: single(f[BUDGET_FIELDS.salaryType]),
     tariff: single(f[BUDGET_FIELDS.tariff]),
     ranking: single(f[BUDGET_FIELDS.ranking]),

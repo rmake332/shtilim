@@ -38,9 +38,6 @@ export async function POST(req: NextRequest) {
     // Para: per-day ÷45 already done client-side; apply severe-disability bonus + half rounding.
     const bonus = severeDisabilityBonus({
       severeDisabilityFlag: Boolean(body.severeDisabilityFlag),
-      paraBoard: Boolean(body.paraBoard),
-      isBehaviorAnalyst: Boolean(body.isBehaviorAnalyst),
-      finalLayer: layer,
       enteredHours,
     });
     const finalHours = roundToHalf(enteredHours + bonus);
