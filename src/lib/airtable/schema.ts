@@ -71,10 +71,12 @@ export const POSITION_FIELDS = {
   worksElsewherePara: 'fldrNbCFqLAvKObNi',
   ofekCalcLink: 'fldCcPkWY39eiwSIW',
   ofekCalcAllRolesLink: 'fldh6fLOpOI2zqb7t',
+  prevYearStatus: 'fldUZsgL5PJqQFWfb', // תקן שנה קודמת (כן/לא) — "כן" = תפקיד שנה קודמת, לא נספר כתפקיד נוסף
   updateStatus: 'fld1iUv3ge1zGuSVB', // → "ממתין לעדכון"
   employeeStatus: 'fld6bWDfusUy8d7oY',
   submittedAt: 'fldLlJ96ZBwOWZACL',
   conditionsWorseningReason: 'fldSi9R0RCfrHNDuU', // סיבת הרעת תנאים
+  hasMinistryFile: 'fld4RpO0teYLfUQ8C', // קיים תיק במשרד החינוך (כן/לא)
   // Youth-employee document attachments (multipleAttachments) — uploaded post-create.
   docEducationalInstitution: 'fldKu5XvvJNEd1vDV', // אישור ממוסד לימודי - נוער
   docMedical: 'fldHVsFFxOfkDYO4H', // אישור רפואי- נוער
@@ -230,6 +232,7 @@ export const PREV_YEAR_FIELDS = {
   frontalHours: 'fldc4mXKic2RctRYI',    // שעות פרונטלי
   individualHours: 'fld78iBf1OyCL7zF9', // שעות פרטני
   stayHours: 'fldyDjVoeYuDO75CS',       // שעות שהייה
+  updateStatusTshapaz: 'fldhkHOZb8mnfZjxe', // סטטוס עדכון תשפז
   schedule: {
     sun: { in: ['fldpgqFyN1uyUoKGE', 'fldcPrMHJm8uSjDys', 'fldIZe6VLHteipbuk'], out: ['fld2FyJWnymMuoXNt', 'fld7jgxlhHHXGR1ai', 'fldBcafnyJtHEBPEO'] },
     mon: { in: ['fldB0uusSBJqdf5jB', 'fldd5S8QQYWTxKPSW', 'fldFYymHU8LxmN0i9'], out: ['fldldESPCaOvdjz20', 'fldmuoQohcgWoKr3x', 'fldV0WO3e5lRirvYA'] },

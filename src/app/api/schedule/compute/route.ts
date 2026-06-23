@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
     let ofekRowForDisplay = ofek;
     let effectiveMother = mother;
     let effectiveKey = key; // combined key when other roles exist, single-role key otherwise
+    let effectivePct = pct; // job% for the current position — overridden to combined% when other roles exist
     // Debug-only fields (surfaced in the UI while validating, hidden later).
     let existingDebug: ExistingHoursSum | null = null;
     let combinedKeyDebug: string | undefined;
@@ -133,6 +134,7 @@ export async function POST(req: NextRequest) {
         ofekRowForDisplay = combined;
         effectiveMother = combinedMother;
         effectiveKey = combinedKey;
+        effectivePct = combinedPct;
         // Back out the other roles → values for the CURRENT position only.
         frontal = Math.max(0, combined.frontalHours - existing.frontalHours);
         individual = Math.max(0, combined.individualHours - existing.individualHours);
@@ -181,7 +183,7 @@ export async function POST(req: NextRequest) {
       effectiveKey,
       finalHours,
       bonus,
-      jobPercent: pct,
+      jobPercent: effectivePct,
       motherPosition: effectiveMother,
       frontalHours: frontal,
       individualHours: individual,

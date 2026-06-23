@@ -138,6 +138,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       tariff: null,
       ranking: null,
       seniority: null,
+      hasMinistryFile: '',
     };
 
     // ScheduleData — reconstruct week from duration fields (seconds → "HH:MM")

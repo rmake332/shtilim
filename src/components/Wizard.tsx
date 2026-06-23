@@ -33,7 +33,7 @@ export function Wizard({
   initialRole,
   initialSchedule,
 }: WizardProps) {
-  const defaultStart: StepId = mode === 'edit' ? (startStep ?? 'schedule') : 'employee';
+  const defaultStart: StepId = mode === 'edit' ? (startStep ?? 'schedule') : (startStep ?? 'employee');
   const [step, setStep] = useState<StepId>(defaultStart);
   const [employee, setEmployee] = useState<EmployeeData | undefined>(initialEmployee);
   const [role, setRole] = useState<RoleData | undefined>(initialRole);
@@ -112,7 +112,7 @@ export function Wizard({
           token={token}
           employee={employee}
           role={role}
-          initial={schedule ?? (prevYear ? { ...emptySchedule(), week: prevYear.week } : undefined)}
+          initial={schedule ?? (prevYear ? { ...emptySchedule(), week: prevYear.week, prevYearRecordId: prevYear.recordId } : undefined)}
           positionId={positionId}
           prevYear={prevYear}
           onBack={isEdit ? undefined : () => setStep('role')}

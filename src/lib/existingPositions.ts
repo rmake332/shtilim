@@ -45,6 +45,8 @@ export async function sumExistingPositions(
 
   const matched = records.filter((r) => {
     if (params.excludePositionId && r.id === params.excludePositionId) return false;
+    // תפקיד שנה קודמת (prevYearStatus = "כן") לא נספר כתפקיד נוסף
+    if (text(r.fields[POSITION_FIELDS.prevYearStatus]) === 'כן') return false;
     const cat = text(r.fields[POSITION_FIELDS.category]);
     const layer = text(r.fields[POSITION_FIELDS.layer]);
     return cat.includes(params.category) && (params.layer === '' || layer.includes(params.layer));

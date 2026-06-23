@@ -131,6 +131,8 @@ export interface RoleData {
   tariff: string | null;
   ranking: string | null;
   seniority: string | null;
+  /** האם קיים תיק במשרד החינוך — רלוונטי לעובד חדש בפרא/הוראה. */
+  hasMinistryFile: YesNoUnset;
 }
 
 export function emptyRole(): RoleData {
@@ -156,6 +158,7 @@ export function emptyRole(): RoleData {
     tariff: null,
     ranking: null,
     seniority: null,
+    hasMinistryFile: '',
   };
 }
 
@@ -184,6 +187,8 @@ export interface ScheduleData {
   ofekAllRolesRecordId?: string;
   /** Reason for hours reduction vs. previous year (if applicable). */
   reductionReason?: string;
+  /** Record id of the תקנים תשפו row that was loaded — set when user chose "טען מהשנה הקודמת". */
+  prevYearRecordId?: string;
   /**
    * For צהריים roles: the one day per week when the employee works a morning shift
    * (starts before 12:00). All other days must start at 12:00 or later.

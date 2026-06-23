@@ -5,6 +5,7 @@ import { durationToHHMM } from '@/lib/schedule/time';
 import type { ShiftData } from '@/lib/formTypes';
 
 export interface PrevYearPosition {
+  recordId: string;
   week: Record<string, ShiftData[]>;
   subRole: string;
   notes: string;
@@ -102,6 +103,7 @@ export async function getPrevYearPosition(
       return v != null && v !== '' && !isNaN(n) ? n : null;
     }
     return {
+      recordId: row.id,
       week: extractWeek(f),
       subRole: str(f[PREV_YEAR_FIELDS.subRole]),
       notes: str(f[PREV_YEAR_FIELDS.notes]),

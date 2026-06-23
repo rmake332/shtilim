@@ -265,7 +265,7 @@ export function SummaryStep({
               <Icon name="timer" /> ריכוז שעות שבועי
             </h3>
             <div className="flex justify-between items-end mb-6">
-              <span className="opacity-80">סה״כ שבועי</span>
+              <span className="opacity-80">סה״כ שעות לניצול</span>
               <span className="text-display-lg-mobile font-bold text-on-tertiary-container">
                 {schedule.weeklyHours}
               </span>
@@ -276,6 +276,12 @@ export function SummaryStep({
                 <Row label="שעות פרטני" value={schedule.individualHours} />
                 <Row label="שהייה מהמוסד" value={schedule.stayHoursInstitution} />
                 <Row label="שהייה מהבית" value={schedule.stayHoursHome} />
+                <Row
+                  label="סה״כ שעות שבועיות"
+                  value={
+                    Number((schedule.frontalHours + schedule.individualHours + schedule.stayHoursInstitution + schedule.stayHoursHome).toFixed(2))
+                  }
+                />
                 {schedule.jobPercent > 0 && (
                   <Row label="אחוז משרה" value={`${Math.round(schedule.jobPercent)}%`} />
                 )}

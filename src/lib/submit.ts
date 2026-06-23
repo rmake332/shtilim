@@ -1,6 +1,6 @@
 import 'server-only';
 import { createRecord, updateRecord } from '@/lib/airtable/client';
-import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, SCHEDULE_FIELDS } from '@/lib/airtable/schema';
+import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, PREV_YEAR_FIELDS, SCHEDULE_FIELDS } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { findEmployeeByExactId } from '@/lib/employees';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
@@ -130,6 +130,7 @@ export async function submitForm(
       ? { [POSITION_FIELDS.ofekCalcAllRolesLink]: [schedule.ofekAllRolesRecordId] }
       : {}),
     ...(schedule.reductionReason ? { [POSITION_FIELDS.conditionsWorseningReason]: schedule.reductionReason } : {}),
+    ...(role.hasMinistryFile ? { [POSITION_FIELDS.hasMinistryFile]: role.hasMinistryFile } : {}),
     ...scheduleFields(schedule),
   };
 
@@ -138,6 +139,17 @@ export async function submitForm(
 
   const position = await createRecord(TABLES.activePositions, fields, requestId);
   logger.info({ requestId, positionId: position.id }, 'position created (ממתין לעדכון)');
+
+  // Mark the prior-year (תשפ"ו) source record as having been uploaded.
+  if (schedule.prevYearRecordId) {
+    await updateRecord(
+      TABLES.prevYearPositions,
+      schedule.prevYearRecordId,
+      { [PREV_YEAR_FIELDS.updateStatusTshapaz]: 'הועלה תקן משנה קודמת' },
+      requestId,
+    );
+    logger.info({ requestId, prevYearRecordId: schedule.prevYearRecordId }, 'prev-year record marked as uploaded');
+  }
 
   // Youth-document attachments are uploaded by the client after submit, one request
   // per file (/api/upload-doc), to stay under the host's request-body size limit.

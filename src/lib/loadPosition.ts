@@ -123,6 +123,7 @@ export async function loadPosition(
     tariff: null,
     ranking: null,
     seniority: null,
+    hasMinistryFile: '',
   };
 
   const week: Record<string, { in: string; out: string }[]> = {};

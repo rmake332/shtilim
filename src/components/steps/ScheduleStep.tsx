@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import { ScheduleData, emptySchedule, RoleData, EmployeeData } from '@/lib/formTypes';
@@ -19,6 +19,83 @@ import {
   type Shift,
   type Day,
 } from '@/lib/schedule/time';
+
+// ── Overlap-check types & helper ─────────────────────────────────────────────
+
+interface OverlapItem {
+  positionId: string;
+  positionName: string;
+  day: Day;
+  dayLabel: string;
+  newShift: { in: string; out: string };
+  existingShift: { in: string; out: string };
+}
+
+interface OverlapResult {
+  ok: boolean;
+  overlaps: OverlapItem[];
+}
+
+/**
+ * Build the query-string week param from a week record.
+ * Each day is encoded as comma-separated "HH:MM-HH:MM" pairs.
+ */
+function buildWeekParams(week: Record<Day, Shift[]>): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const day of DAYS) {
+    const shifts = (week[day] ?? []).filter((s) => s.in && s.out);
+    if (shifts.length > 0)
+      params.set(`week[${day}]`, shifts.map((s) => `${s.in}-${s.out}`).join(','));
+  }
+  return params;
+}
+
+async function checkOverlap(
+  token: string,
+  tz: string,
+  week: Record<Day, Shift[]>,
+  excludePositionId?: string,
+): Promise<OverlapResult> {
+  const params = buildWeekParams(week);
+  params.set('token', token);
+  params.set('tz', tz);
+  if (excludePositionId) params.set('excludePositionId', excludePositionId);
+  const res = await fetch(`/api/schedule/overlap-check?${params.toString()}`);
+  if (!res.ok) throw new Error('overlap_check_failed');
+  return res.json();
+}
+
+/** Banner shown when overlapping shifts are found. */
+function OverlapBanner({ overlaps }: { overlaps: OverlapItem[] }) {
+  if (overlaps.length === 0) return null;
+  // Group by position for a cleaner display.
+  const byPosition = new Map<string, { name: string; items: OverlapItem[] }>();
+  for (const o of overlaps) {
+    if (!byPosition.has(o.positionId))
+      byPosition.set(o.positionId, { name: o.positionName, items: [] });
+    byPosition.get(o.positionId)!.items.push(o);
+  }
+  return (
+    <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-md">
+      <div className="flex items-center gap-2 font-bold mb-2">
+        <Icon name="schedule" className="text-[20px]" />
+        חפיפת שעות עם תקנים פעילים — לא ניתן להמשיך
+      </div>
+      {Array.from(byPosition.values()).map(({ name, items }) => (
+        <div key={name} className="mb-2">
+          <p className="font-semibold mb-1">{name}</p>
+          <ul className="list-disc pr-6 space-y-0.5 text-label-sm">
+            {items.map((o, i) => (
+              <li key={i}>
+                יום {o.dayLabel}: המערכת החדשה {o.newShift.in}–{o.newShift.out} חופפת לתקן הקיים {o.existingShift.in}–{o.existingShift.out}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** Unified over-budget message, shared across all schedule types. */
 function overBudgetMessage(hours: number, remaining: number): string {
@@ -157,19 +234,31 @@ export function ScheduleStep({
   }
 
   if (type === SCHEDULE_TYPE.manager || type === SCHEDULE_TYPE.deputy2) {
-    const label = type === SCHEDULE_TYPE.manager ? 'מס׳ שעות שבועיות' : 'מס׳ תקנים';
+    const isManager = type === SCHEDULE_TYPE.manager;
+    const label = isManager ? 'מס׳ שעות שבועיות' : 'מס׳ תקנים';
     const value = data.manualWeeklyHours ?? role.remainingHours;
     return (
       <>
         <section className="bg-white p-8 rounded-xl shadow-card border border-outline-variant max-w-md">
           <label className="text-label-lg text-on-surface block mb-2">{label}</label>
-          <input
-            type="number"
-            step="0.5"
-            className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
-            value={value}
-            onChange={(e) => setData((d) => ({ ...d, manualWeeklyHours: Number(e.target.value) }))}
-          />
+          {isManager ? (
+            <div className="w-full bg-surface-container rounded-lg py-3 px-3 text-body-md font-bold text-primary">
+              {value}
+            </div>
+          ) : (
+            <input
+              type="number"
+              step="0.5"
+              className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+              value={value}
+              onChange={(e) => setData((d) => ({ ...d, manualWeeklyHours: Number(e.target.value) }))}
+            />
+          )}
+          {isManager && (
+            <p className="text-label-sm text-on-surface-variant mt-2 flex items-center gap-1">
+              <Icon name="lock" className="text-[15px]" /> השעות נקבעות לפי יתרת התקציב ואינן ניתנות לשינוי
+            </p>
+          )}
         </section>
         <ActionBar
           title="המשך לסיכום"
@@ -263,6 +352,10 @@ function GridSchedule({
   const [existing, setExisting] = useState<ExistingResult | null>(null);
   const [ofek, setOfek] = useState<OfekResult | null>(null);
   const [reductionChoices, setReductionChoices] = useState<string[]>([]);
+  const [overlapResult, setOverlapResult] = useState<OverlapResult | null>(null);
+  // Track the week snapshot at which the last successful overlap check was run,
+  // so we can detect changes and invalidate the result without re-running on every keystroke.
+  const checkedWeekRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=fldSi9R0RCfrHNDuU`)
@@ -314,8 +407,14 @@ function GridSchedule({
   }
   const hasDayError = Object.keys(dayErrors).length > 0;
 
+  function invalidateOverlap() {
+    setOverlapResult(null);
+    checkedWeekRef.current = null;
+  }
+
   function updateShift(day: Day, idx: number, field: 'in' | 'out', val: string) {
     setOfek(null);
+    invalidateOverlap();
     setData((prev) => {
       const w = { ...(prev.week as Record<Day, Shift[]>) };
       const shifts = [...(w[day] ?? [])];
@@ -326,6 +425,7 @@ function GridSchedule({
   }
   function addShift(day: Day) {
     setOfek(null);
+    invalidateOverlap();
     setData((prev) => {
       const w = { ...(prev.week as Record<Day, Shift[]>) };
       const shifts = [...(w[day] ?? [])];
@@ -336,6 +436,7 @@ function GridSchedule({
   }
   function removeShift(day: Day, idx: number) {
     setOfek(null);
+    invalidateOverlap();
     setData((prev) => {
       const w = { ...(prev.week as Record<Day, Shift[]>) };
       w[day] = (w[day] ?? []).filter((_, i) => i !== idx);
@@ -438,12 +539,14 @@ function GridSchedule({
     if (isPara && paraDayErrors.length === 0 && snapToHalf(paraHours, 0.012) === null)
       errs.push(NON_INTEGER_HOURS_ERROR);
 
-    // Deputy-1: weekly hours come from the 37.5/40 selector.
+    // Deputy-1: weekly hours come from the 37.5/40 selector, but at least one day must be filled.
     if (type === 'סגן ראשון') {
-      if (errs.length) {
-        setErrors(errs);
-        return;
-      }
+      const hasAnyShift = DAYS.some((d) => (week[d] ?? []).length > 0 && (week[d] ?? []).some((s) => s.in || s.out));
+      if (!hasAnyShift) errs.push('יש למלא לפחות יום אחד במערכת השעות לפני המשך');
+      if (errs.length) { setErrors(errs); return; }
+      // Overlap check for deputy-1 before proceeding.
+      const overlapOk = await runOverlapCheckIfNeeded(week);
+      if (!overlapOk) return;
       onNext({ ...data, weeklyHours: deputyWeekly });
       return;
     }
@@ -453,10 +556,10 @@ function GridSchedule({
     if (!needsOfek) {
       const hours = Math.round(totalHours * 100) / 100;
       if (hours > role.remainingHours) errs.push(overBudgetMessage(hours, role.remainingHours));
-      if (errs.length) {
-        setErrors(errs);
-        return;
-      }
+      if (errs.length) { setErrors(errs); return; }
+      // Overlap check for regular roles before proceeding.
+      const overlapOk = await runOverlapCheckIfNeeded(week);
+      if (!overlapOk) return;
       onNext({
         ...data,
         weeklyHours: hours,
@@ -495,6 +598,11 @@ function GridSchedule({
       setWarnings(warns);
       return;
     }
+
+    // Overlap check — runs last, after all other validations pass.
+    const overlapOk = await runOverlapCheckIfNeeded(week);
+    if (!overlapOk) return;
+
     setWarnings(warns);
     onNext({
       ...data,
@@ -509,6 +617,33 @@ function GridSchedule({
       ofekRecordId: j.ofekRecordId,
       ofekAllRolesRecordId: j.ofekAllRolesRecordId,
     });
+  }
+
+  /**
+   * Runs the overlap check if no valid result exists for the current week.
+   * Returns true if check passes (no overlaps), false if overlaps were found or an error occurred.
+   * Sets errors/overlapResult state as a side effect.
+   */
+  async function runOverlapCheckIfNeeded(currentWeek: Record<Day, Shift[]>): Promise<boolean> {
+    const weekKey = JSON.stringify(currentWeek);
+    // Already checked this exact week and it passed.
+    if (overlapResult?.ok && checkedWeekRef.current === weekKey) return true;
+    // Already checked and found overlaps — show them again.
+    if (overlapResult && !overlapResult.ok && checkedWeekRef.current === weekKey) return false;
+
+    setComputing(true);
+    try {
+      const result = await checkOverlap(token, employee.tz, currentWeek, positionId);
+      setOverlapResult(result);
+      checkedWeekRef.current = weekKey;
+      if (!result.ok) return false;
+      return true;
+    } catch {
+      setErrors((prev) => [...prev, 'שגיאה בבדיקת חפיפת שעות עם תקנים פעילים']);
+      return false;
+    } finally {
+      setComputing(false);
+    }
   }
 
   return (
@@ -756,6 +891,10 @@ function GridSchedule({
           );
         })()}
 
+        {overlapResult && !overlapResult.ok && (
+          <OverlapBanner overlaps={overlapResult.overlaps} />
+        )}
+
         <AlertBanners errors={errors} warnings={warnings} />
 
         <ActionBar
@@ -920,6 +1059,8 @@ function BellScheduleGrid({
   const [existing, setExisting] = useState<{ count: number; frontalHours: number; individualHours: number; stayHours: number } | null>(null);
   const [ofek, setOfek] = useState<OfekResult | null>(null);
   const [reductionChoices, setReductionChoices] = useState<string[]>([]);
+  const [overlapResult, setOverlapResult] = useState<OverlapResult | null>(null);
+  const checkedWeekRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=fldSi9R0RCfrHNDuU`)
@@ -983,8 +1124,14 @@ function BellScheduleGrid({
     0,
   );
 
+  function bellInvalidateOverlap() {
+    setOverlapResult(null);
+    checkedWeekRef.current = null;
+  }
+
   function pickSlot(day: Day, idx: number, slot: BellSlot) {
-    setOfek(null); // picks changed → previous check no longer valid
+    setOfek(null);
+    bellInvalidateOverlap();
     setPicks((prev) => {
       const arr = [...prev[day]];
       arr[idx] = slot;
@@ -1000,7 +1147,8 @@ function BellScheduleGrid({
   }
 
   function clearSlot(day: Day, idx: number) {
-    setOfek(null); // picks changed → previous check no longer valid
+    setOfek(null);
+    bellInvalidateOverlap();
     setPicks((prev) => {
       const arr = prev[day].filter((_, i) => i !== idx);
       return { ...prev, [day]: arr };
@@ -1113,6 +1261,25 @@ function BellScheduleGrid({
     } finally { setComputing(false); }
   }
 
+  async function runBellOverlapCheckIfNeeded(): Promise<boolean> {
+    const currentWeek = data.week as Record<Day, Shift[]>;
+    const weekKey = JSON.stringify(currentWeek);
+    if (overlapResult?.ok && checkedWeekRef.current === weekKey) return true;
+    if (overlapResult && !overlapResult.ok && checkedWeekRef.current === weekKey) return false;
+    setComputing(true);
+    try {
+      const result = await checkOverlap(token, employee.tz, currentWeek, positionId);
+      setOverlapResult(result);
+      checkedWeekRef.current = weekKey;
+      return result.ok;
+    } catch {
+      setErrors((prev) => [...prev, 'שגיאה בבדיקת חפיפת שעות עם תקנים פעילים']);
+      return false;
+    } finally {
+      setComputing(false);
+    }
+  }
+
   async function validateAndNext() {
     const preErrs = bellPreCheck();
     if (preErrs.length) { setErrors(preErrs); return; }
@@ -1135,6 +1302,9 @@ function BellScheduleGrid({
       setErrors(errs);
       return;
     }
+    // Overlap check — runs after all other validations.
+    const overlapOk = await runBellOverlapCheckIfNeeded();
+    if (!overlapOk) return;
     onNext({
       ...data,
       weeklyHours: j.finalHours,
@@ -1381,6 +1551,10 @@ function BellScheduleGrid({
           );
         })()}
 
+        {overlapResult && !overlapResult.ok && (
+          <OverlapBanner overlaps={overlapResult.overlaps} />
+        )}
+
         <AlertBanners errors={errors} warnings={warnings} />
 
         <ActionBar
@@ -1450,12 +1624,16 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                     🔍 {ofek1.key}
                   </p>
                 )}
-                <Line label="סך שעות סופי" value={ofek1.finalHours} />
+                <Line label="סה״כ שעות לניצול" value={ofek1.finalHours} />
                 {ofek1.bonus > 0 && <Line label="תוספת לקות קשה" value={ofek1.bonus} />}
                 <Line label="פרונטלי" value={ofek1.frontalHours} />
                 <Line label="פרטני" value={ofek1.individualHours} />
                 <Line label="שהייה מהמוסד" value={ofek1.stayHoursInstitution} />
                 <Line label="שהייה מהבית" value={ofek1.stayHoursHome} />
+                <Line
+                  label="סה״כ שעות שבועיות"
+                  value={Number((ofek1.frontalHours + ofek1.individualHours + ofek1.stayHoursInstitution + ofek1.stayHoursHome).toFixed(2))}
+                />
                 <Line label="אחוז משרה" value={`${Math.round(ofek1.jobPercent)}%`} />
                 <Line label="משרת אם" value={ofek1.motherPosition ? 'כן' : 'לא'} />
               </div>
@@ -1550,12 +1728,16 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                   </div>
                   <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 space-y-0.5">
                     <p className="font-bold text-primary mb-1">שעות לניצול — תפקיד נוכחי</p>
-                    <Line label="סה״כ שעות" value={ofek3.finalHours} />
+                    <Line label="סה״כ שעות לניצול" value={ofek3.finalHours} />
                     {ofek3.bonus > 0 && <Line label="תוספת לקות קשה" value={ofek3.bonus} />}
                     <Line label="פרונטלי" value={ofek3.frontalHours} />
                     <Line label="פרטני" value={ofek3.individualHours} />
                     <Line label="שהייה מהמוסד" value={ofek3.stayHoursInstitution} />
                     <Line label="שהייה מהבית" value={ofek3.stayHoursHome} />
+                    <Line
+                      label="סה״כ שעות שבועיות"
+                      value={Number((ofek3.frontalHours + ofek3.individualHours + ofek3.stayHoursInstitution + ofek3.stayHoursHome).toFixed(2))}
+                    />
                     <Line label="משרת אם" value={ofek3.motherPosition ? 'כן' : 'לא'} />
                   </div>
                 </div>
@@ -1585,12 +1767,16 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
       )}
       <div className="space-y-0.5">
         <p className="font-bold text-primary mb-1">שעות לניצול — תפקיד נוכחי</p>
-        <Line label="סה״כ שעות" value={ofek.finalHours} />
+        <Line label="סה״כ שעות לניצול" value={ofek.finalHours} />
         {ofek.bonus > 0 && <Line label="תוספת לקות קשה" value={ofek.bonus} />}
         <Line label="פרונטלי" value={ofek.frontalHours} />
         <Line label="פרטני" value={ofek.individualHours} />
         <Line label="שהייה מהמוסד" value={ofek.stayHoursInstitution} />
         <Line label="שהייה מהבית" value={ofek.stayHoursHome} />
+        <Line
+          label="סה״כ שעות שבועיות"
+          value={Number((ofek.frontalHours + ofek.individualHours + ofek.stayHoursInstitution + ofek.stayHoursHome).toFixed(2))}
+        />
         <Line label="משרת אם" value={ofek.motherPosition ? 'כן' : 'לא'} />
       </div>
     </div>

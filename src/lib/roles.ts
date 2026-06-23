@@ -114,7 +114,7 @@ const fetchBudgetForInstitution = unstable_cache(
       return arr.some((v) => (typeof v === 'string' ? v : (v as any)?.id) === mosadId);
     });
   },
-  ['budget-for-institution'],
+  ['budget-for-institution-v2'],
   { revalidate: 60 },
 );
 

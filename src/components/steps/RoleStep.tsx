@@ -174,7 +174,7 @@ export function RoleStep({
       .then((r) => r.json())
       .then((j) => {
         if (j.found) {
-          setPrevYear({ week: j.week, subRole: j.subRole, notes: j.notes, hoursForBudget: j.hoursForBudget ?? null, frontalHours: j.frontalHours ?? null, individualHours: j.individualHours ?? null, stayHours: j.stayHours ?? null });
+          setPrevYear({ recordId: j.recordId ?? '', week: j.week, subRole: j.subRole, notes: j.notes, hoursForBudget: j.hoursForBudget ?? null, frontalHours: j.frontalHours ?? null, individualHours: j.individualHours ?? null, stayHours: j.stayHours ?? null });
         }
         setPrevYearChecked(true);
       })
@@ -248,9 +248,10 @@ export function RoleStep({
   const canAddGemul = GEMUL_ALLOWED_CATEGORIES.has(data.category);
 
   const employmentDocDef = DOC_FIELDS.find((d) => d.key === 'docEmployment')!;
-  const showEmploymentDoc = Boolean(
+  const showMinistryFileQuestion = Boolean(
     isNewEmployee && selectedRole && (data.category === 'פרא רפואי' || data.category === 'הוראה'),
   );
+  const showEmploymentDoc = showMinistryFileQuestion && data.hasMinistryFile === 'כן';
 
   function validateAndNext(withPrevYear?: PrevYearPosition) {
     if (!data.roleId) {
@@ -271,6 +272,10 @@ export function RoleStep({
         setError('לא ניתן להעסיק עובד מתחת לגיל 18 בתפקיד סיוע');
         return;
       }
+    }
+    if (showMinistryFileQuestion && !data.hasMinistryFile) {
+      setError('יש לציין האם קיים תיק במשרד החינוך');
+      return;
     }
     if (showEmploymentDoc && !docs['docEmployment']) {
       setError('יש להעלות מסמך נתוני העסקה');
@@ -650,20 +655,64 @@ export function RoleStep({
         </section>
       )}
 
-      {/* Employment doc — required for new employees in פרא/הוראה categories */}
-      {showEmploymentDoc && (
-        <section className="bg-white p-6 rounded-xl shadow-card border border-outline-variant mb-4">
-          <p className="text-label-lg font-bold text-on-surface mb-4">מסמכים נדרשים</p>
-          <DocUpload
-            label={employmentDocDef.label}
-            required
-            value={docs['docEmployment']}
-            error={error === 'יש להעלות מסמך נתוני העסקה' ? error : undefined}
-            onChange={(doc) => {
-              onDocsChange({ ...docs, docEmployment: doc });
-              if (doc) setError('');
-            }}
-          />
+      {/* שאלת תיק משרד החינוך + העלאת נתוני העסקה — לעובד חדש בפרא/הוראה */}
+      {showMinistryFileQuestion && (
+        <section className="bg-white p-6 rounded-xl shadow-card border border-outline-variant mb-4 space-y-5">
+          <div>
+            <p className="text-label-lg font-bold text-on-surface mb-3">
+              האם קיים תיק במשרד החינוך?
+            </p>
+            <div className="flex gap-3">
+              {(['כן', 'לא'] as const).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    setData((d) => ({ ...d, hasMinistryFile: opt }));
+                    if (error === 'יש לציין האם קיים תיק במשרד החינוך') setError('');
+                    if (opt === 'לא') onDocsChange({ ...docs, docEmployment: undefined });
+                  }}
+                  className={`px-6 py-2 rounded-xl border-2 font-bold text-label-lg transition-colors ${
+                    data.hasMinistryFile === opt
+                      ? 'bg-primary text-on-primary border-primary'
+                      : 'bg-white text-on-surface border-outline hover:border-primary'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+            {error === 'יש לציין האם קיים תיק במשרד החינוך' && (
+              <p className="mt-2 text-body-sm text-error flex items-center gap-1">
+                <Icon name="error" className="text-[16px]" /> {error}
+              </p>
+            )}
+          </div>
+
+          {data.hasMinistryFile === 'כן' && (
+            <div className="space-y-4">
+              {/* הודעה בולטת */}
+              <div className="flex gap-3 p-4 rounded-xl bg-tertiary-container/30 border border-tertiary/40">
+                <Icon name="info" className="text-tertiary text-[22px] shrink-0 mt-0.5" fill />
+                <p className="text-body-md text-on-surface leading-relaxed">
+                  <span className="font-bold">שימי לב:</span> נתוני השכר של העובד יחושבו על פי נתוני ההעסקה המועלים כאן.
+                  מאחר שקיים תיק במשרד החינוך, <span className="font-bold">חשוב מאוד להעלות את נתוני ההעסקה</span> כדי
+                  להבטיח חישוב שכר מדויק.
+                </p>
+              </div>
+
+              <DocUpload
+                label={employmentDocDef.label}
+                required
+                value={docs['docEmployment']}
+                error={error === 'יש להעלות מסמך נתוני העסקה' ? error : undefined}
+                onChange={(doc) => {
+                  onDocsChange({ ...docs, docEmployment: doc });
+                  if (doc) setError('');
+                }}
+              />
+            </div>
+          )}
         </section>
       )}
 
