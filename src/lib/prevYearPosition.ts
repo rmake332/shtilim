@@ -37,7 +37,7 @@ function allFields(): string[] {
   return ids;
 }
 
-function extractWeek(fields: Record<string, unknown>): Record<string, ShiftData[]> {
+export function extractWeek(fields: Record<string, unknown>): Record<string, ShiftData[]> {
   const week: Record<string, ShiftData[]> = {};
   for (const day of DAYS) {
     const shifts: ShiftData[] = [];

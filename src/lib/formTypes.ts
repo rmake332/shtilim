@@ -193,6 +193,9 @@ export interface ScheduleData {
   updateReason?: string;
   /** Record id of the תקנים תשפו row that was loaded — set when user chose "טען מהשנה הקודמת". */
   prevYearRecordId?: string;
+  /** The roleId that the prior-year row resolved to (from-prev-year flow). Compared at submit
+   *  against the role actually saved: same → "הועלה תקן משנה קודמת", different/empty → "נוסף תקן חדש". */
+  prevYearRoleId?: string;
   /**
    * For צהריים roles: the one day per week when the employee works a morning shift
    * (starts before 12:00). All other days must start at 12:00 or later.

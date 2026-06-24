@@ -21,6 +21,9 @@ interface WizardProps {
   initialEmployee?: EmployeeData;
   initialRole?: RoleData;
   initialSchedule?: ScheduleData;
+  /** Prior-year position data (when the form was opened from a תשפ"ו row) — drives the
+   *  prev-year summary in the schedule step and highlights the still-missing employee fields. */
+  initialPrevYear?: PrevYearPosition;
 }
 
 export function Wizard({
@@ -32,14 +35,17 @@ export function Wizard({
   initialEmployee,
   initialRole,
   initialSchedule,
+  initialPrevYear,
 }: WizardProps) {
   const defaultStart: StepId = mode === 'edit' ? (startStep ?? 'schedule') : (startStep ?? 'employee');
   const [step, setStep] = useState<StepId>(defaultStart);
   const [employee, setEmployee] = useState<EmployeeData | undefined>(initialEmployee);
   const [role, setRole] = useState<RoleData | undefined>(initialRole);
   const [schedule, setSchedule] = useState<ScheduleData | undefined>(initialSchedule);
-  const [prevYear, setPrevYear] = useState<PrevYearPosition | undefined>();
+  const [prevYear, setPrevYear] = useState<PrevYearPosition | undefined>(initialPrevYear);
   const [docs, setDocs] = useState<YouthDocs>({});
+  /** True only on the from-prev-year flow: highlight the employee fields תשפ"ו can't supply. */
+  const fromPrevYear = Boolean(initialPrevYear) && mode === 'new';
 
   const isEdit = mode === 'edit';
 
@@ -79,6 +85,7 @@ export function Wizard({
           docs={docs}
           onDocsChange={setDocs}
           mode={isEdit ? 'edit' : 'new'}
+          highlightMissing={fromPrevYear}
           onNext={(data) => {
             setEmployee(data);
             setStep(isEdit ? 'schedule' : 'role');
@@ -95,13 +102,18 @@ export function Wizard({
           mosadName={institution.name}
           institutionLayer={institution.layer}
           isNewEmployee={!isEdit && employee?.recordId === null}
+          lockedRole={fromPrevYear}
           docs={docs}
           onDocsChange={setDocs}
           onBack={() => setStep('employee')}
           onNext={(data, loadedPrevYear) => {
             setRole(data);
-            setPrevYear(loadedPrevYear);
-            setSchedule(undefined);
+            // From-prev-year: keep the schedule + prev-year data already loaded from תשפ"ו.
+            // Otherwise a fresh role choice resets the schedule (and adopts the role's prev-year).
+            if (!fromPrevYear) {
+              setPrevYear(loadedPrevYear);
+              setSchedule(undefined);
+            }
             setStep('schedule');
           }}
         />
@@ -118,7 +130,13 @@ export function Wizard({
           onBack={isEdit ? undefined : () => setStep('role')}
           onEditEmployee={isEdit ? () => setStep('employee') : undefined}
           onNext={(data) => {
-            setSchedule(data);
+            // Preserve prior-year tracking across the schedule step's many onNext paths
+            // (some rebuild the schedule from scratch and would drop these fields).
+            setSchedule({
+              ...data,
+              prevYearRecordId: data.prevYearRecordId ?? schedule?.prevYearRecordId,
+              prevYearRoleId: data.prevYearRoleId ?? schedule?.prevYearRoleId,
+            });
             setStep('summary');
           }}
         />

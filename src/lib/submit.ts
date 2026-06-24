@@ -141,15 +141,19 @@ export async function submitForm(
   const position = await createRecord(TABLES.activePositions, fields, requestId);
   logger.info({ requestId, positionId: position.id }, 'position created (ממתין לעדכון)');
 
-  // Mark the prior-year (תשפ"ו) source record as having been uploaded.
+  // Mark the prior-year (תשפ"ו) source record.
+  // Same role as last year → "הועלה תקן משנה קודמת"; a different role (or none resolved
+  // from the budget, so the secretary picked another) → "נוסף תקן חדש".
   if (schedule.prevYearRecordId) {
+    const sameRole = Boolean(schedule.prevYearRoleId) && schedule.prevYearRoleId === role.roleId;
+    const status = sameRole ? 'הועלה תקן משנה קודמת' : 'נוסף תקן חדש';
     await updateRecord(
       TABLES.prevYearPositions,
       schedule.prevYearRecordId,
-      { [PREV_YEAR_FIELDS.updateStatusTshapaz]: 'הועלה תקן משנה קודמת' },
+      { [PREV_YEAR_FIELDS.updateStatusTshapaz]: status },
       requestId,
     );
-    logger.info({ requestId, prevYearRecordId: schedule.prevYearRecordId }, 'prev-year record marked as uploaded');
+    logger.info({ requestId, prevYearRecordId: schedule.prevYearRecordId, status }, 'prev-year record marked');
   }
 
   // Youth-document attachments are uploaded by the client after submit, one request

@@ -33,6 +33,7 @@ export function EmployeeStep({
   docs,
   onDocsChange,
   mode = 'new',
+  highlightMissing = false,
   onNext,
   onBack,
 }: {
@@ -43,6 +44,8 @@ export function EmployeeStep({
   docs: YouthDocs;
   onDocsChange: (docs: YouthDocs) => void;
   mode?: 'new' | 'edit';
+  /** from-prev-year flow: highlight the fields תשפ"ו couldn't supply (חוזה, ילדים). */
+  highlightMissing?: boolean;
   onNext: (data: EmployeeData) => void;
   onBack?: () => void;
 }) {
@@ -318,6 +321,18 @@ export function EmployeeStep({
         </div>
       )}
 
+      {/* From-prev-year: prompt to complete the fields that couldn't be loaded from תשפ"ו. */}
+      {highlightMissing && (
+        <div className="mb-6 p-4 rounded-xl border border-tertiary/40 bg-tertiary-container/30 flex items-start gap-3">
+          <Icon name="info" className="text-tertiary mt-0.5 shrink-0" fill />
+          <p className="text-body-md text-on-surface">
+            התקן נטען מהשנה הקודמת (תשפ&quot;ו). <strong>השלימי את השדות המסומנים</strong> —
+            תאריך תחילת חוזה{showChildrenField ? ', ילדים מתחת לגיל 14' : ''} ומסמכים נדרשים (אם יש) —
+            הם אינם נטענים מהשנה הקודמת.
+          </p>
+        </div>
+      )}
+
       {/* Duplicate auto-select notice */}
       {dupNotice && (
         <div className="mb-6 p-3 rounded-lg bg-secondary-container/40 text-on-secondary-container text-body-md flex items-center gap-2">
@@ -474,7 +489,16 @@ export function EmployeeStep({
 
       {/* Contract-level fields — belong to the תקן (re-asked each year), not the employee. */}
       {(selectedExisting || showNewForm) && (
-        <section className="bg-surface-container-lowest p-8 rounded-xl shadow-card border border-outline-variant mb-6">
+        <section
+          className={`bg-surface-container-lowest p-8 rounded-xl shadow-card mb-6 ${
+            highlightMissing ? 'border-2 border-tertiary ring-2 ring-tertiary/20' : 'border border-outline-variant'
+          }`}
+        >
+          {highlightMissing && (
+            <p className="text-label-lg font-bold text-tertiary mb-4 flex items-center gap-1">
+              <Icon name="edit_note" className="text-[20px]" /> שדות להשלמה
+            </p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-gutter gap-y-6">
             <Field label="תאריך תחילת חוזה" error={errors.contractStartDate}>
               <Input

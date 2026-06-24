@@ -59,6 +59,7 @@ export function RoleStep({
   mosadName,
   institutionLayer,
   isNewEmployee,
+  lockedRole = false,
   docs,
   onDocsChange,
   onNext,
@@ -72,6 +73,8 @@ export function RoleStep({
   institutionLayer?: string;
   /** true כשהעובד נוצר חדש בטופס הנוכחי (לא נבחר מרשימה קיימת). */
   isNewEmployee?: boolean;
+  /** from-prev-year flow: the role is preloaded and cannot be changed (no symbol/search/table). */
+  lockedRole?: boolean;
   docs: YouthDocs;
   onDocsChange: (docs: YouthDocs) => void;
   onNext: (data: RoleData, prevYear?: PrevYearPosition) => void;
@@ -147,7 +150,9 @@ export function RoleStep({
   }, [data.roleId]);
 
   // Check for a prior-year position whenever a role is selected.
+  // Skipped entirely when the role is locked (from-prev-year flow already loaded it).
   useEffect(() => {
+    if (lockedRole && data.roleId) return;
     if (prevYearAbort.current) prevYearAbort.current.abort();
     setPrevYear(null);
     setPrevYearChecked(false);
@@ -288,10 +293,31 @@ export function RoleStep({
     onNext(finalData, withPrevYear);
   }
 
+  // Lock the role only when one was actually resolved from the prior year. If the budget row
+  // is gone (role retired this year), fall back to the normal picker so the secretary can choose.
+  const effectiveLocked = lockedRole && Boolean(data.roleId);
+
   return (
     <>
+      {/* Locked role card (from-prev-year): the role is fixed; only gemulim/extra-roles below. */}
+      {effectiveLocked && (
+        <div className="mb-4 bg-white rounded-xl shadow-card border border-outline-variant p-5 flex items-center gap-4">
+          <div className="w-6 h-6 rounded-full border-2 border-primary bg-primary flex items-center justify-center shrink-0">
+            <Icon name="check" className="text-white text-[16px]" fill />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-label-md text-on-surface-variant mb-0.5">התפקיד נטען מהשנה הקודמת ואינו ניתן לשינוי</p>
+            <p className="text-headline-md text-primary truncate">{data.roleTitle || '—'}</p>
+            <p className="text-body-sm text-on-surface-variant">
+              {data.category}{data.layer ? ` · ${data.layer}` : ''}
+              {data.remainingHours > 0 ? ` · ${data.remainingHours} שעות פנויות` : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Symbol dropdown — hidden when only one symbol exists */}
-      {symbolsLoading ? (
+      {!effectiveLocked && (symbolsLoading ? (
         <div className="mb-6 flex items-center gap-3 py-3 text-on-surface-variant text-body-md">
           <svg className="animate-spin h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -315,10 +341,10 @@ export function RoleStep({
             ))}
           </select>
         </div>
-      ) : null}
+      ) : null)}
 
       {/* Role search */}
-      {data.symbolId && (
+      {!effectiveLocked && data.symbolId && (
         <div className="relative w-full md:w-1/2 lg:w-1/3 mb-4">
           <Icon
             name="search"
@@ -334,7 +360,7 @@ export function RoleStep({
       )}
 
       {/* Roles table — collapsed to selected row once a role is picked */}
-      {data.symbolId && (
+      {!effectiveLocked && data.symbolId && (
         <div className="bg-white rounded-xl shadow-card border border-outline-variant overflow-hidden mb-4">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[750px] text-right">
