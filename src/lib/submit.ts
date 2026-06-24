@@ -5,7 +5,8 @@ import { logger } from '@/lib/logger';
 import { findEmployeeByExactId } from '@/lib/employees';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
+// Includes מוצ"ש — only populated for regular-type schedules; other types never set week.motzash.
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'] as const;
 
 /** "HH:MM" → fractional hours for Airtable duration fields (stored as seconds). */
 function hhmmToSeconds(hhmm: string): number | null {

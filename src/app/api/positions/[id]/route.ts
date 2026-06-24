@@ -10,9 +10,11 @@ import {
 } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { submitForm } from '@/lib/submit';
+import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
+// מוצ"ש included — regular schedules round-trip; other types simply have no shifts there.
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'] as const;
 
 /** seconds-from-midnight → "HH:MM" */
 function secondsToHhmm(s: unknown): string {
@@ -166,6 +168,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ofekRecordId: linkIds(pf[POSITION_FIELDS.ofekCalcLink])[0],
       ofekAllRolesRecordId: linkIds(pf[POSITION_FIELDS.ofekCalcAllRolesLink])[0],
       reductionReason: strField(pf[POSITION_FIELDS.conditionsWorseningReason]),
+      systemUpdateDate: strField(pf[POSITION_FIELDS.systemUpdateDate]),
+      updateReason: strField(pf[POSITION_FIELDS.updateReason]),
     };
 
     return NextResponse.json({ employee, role, schedule, positionId });
@@ -204,9 +208,30 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       { employee, role, schedule },
       gate.requestId,
     );
+    await notifySubmitWebhook(
+      {
+        tz: employee.tz,
+        association: gate.institution.association,
+        name: employee.name,
+        role: role.roleTitle,
+        institution: gate.institution.name,
+      },
+      gate.requestId,
+    );
     return NextResponse.json({ ok: true, positionId: result.positionId, employeeId: result.employeeId });
   } catch (e) {
     logger.error({ requestId: gate.requestId, err: String(e) }, 'update position failed');
+    await notifyError(
+      {
+        stage: 'airtable_write',
+        name: employee.name,
+        tz: employee.tz,
+        role: role.roleTitle,
+        institution: gate.institution.name,
+        detail: String(e),
+      },
+      gate.requestId,
+    );
     return NextResponse.json({ ok: false, message: 'שגיאה בעדכון התקן.' }, { status: 500 });
   }
 }
@@ -252,7 +277,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 // Internal update logic (mirrors submitForm but updates in place)
 // ---------------------------------------------------------------------------
 
-const DAY_KEYS_SUBMIT = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
+const DAY_KEYS_SUBMIT = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'] as const;
 
 function hhmmToSeconds(hhmm: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
@@ -263,8 +288,9 @@ function hhmmToSeconds(hhmm: string): number | null {
 function buildScheduleFields(schedule: ScheduleData): Record<string, number> {
   const out: Record<string, number> = {};
   for (const day of DAY_KEYS_SUBMIT) {
-    const shifts = (schedule.week?.[day] ?? []).slice(0, 3);
     const def = SCHEDULE_FIELDS[day];
+    const slots = def.in.length; // מוצ"ש has 1 slot; weekdays have 3
+    const shifts = (schedule.week?.[day] ?? []).slice(0, slots);
     shifts.forEach((s, idx) => {
       const inSec = hhmmToSeconds(s.in);
       const outSec = hhmmToSeconds(s.out);
@@ -272,7 +298,7 @@ function buildScheduleFields(schedule: ScheduleData): Record<string, number> {
       if (outSec != null) out[def.out[idx]] = outSec;
     });
     // Clear any slots beyond what was submitted (nulls for remaining shifts)
-    for (let idx = shifts.length; idx < 3; idx++) {
+    for (let idx = shifts.length; idx < slots; idx++) {
       out[def.in[idx]] = 0;
       out[def.out[idx]] = 0;
     }
@@ -335,6 +361,8 @@ async function updatePosition(
     ...(schedule.ofekRecordId ? { [POSITION_FIELDS.ofekCalcLink]: [schedule.ofekRecordId] } : {}),
     ...(schedule.ofekAllRolesRecordId ? { [POSITION_FIELDS.ofekCalcAllRolesLink]: [schedule.ofekAllRolesRecordId] } : {}),
     ...(schedule.reductionReason ? { [POSITION_FIELDS.conditionsWorseningReason]: schedule.reductionReason } : { [POSITION_FIELDS.conditionsWorseningReason]: null }),
+    [POSITION_FIELDS.systemUpdateDate]: schedule.systemUpdateDate || undefined,
+    [POSITION_FIELDS.updateReason]: schedule.updateReason || undefined,
     ...buildScheduleFields(schedule),
   };
 

@@ -187,6 +187,10 @@ export interface ScheduleData {
   ofekAllRolesRecordId?: string;
   /** Reason for hours reduction vs. previous year (if applicable). */
   reductionReason?: string;
+  /** תאריך עדכון מערכת — edit mode only (YYYY-MM-DD). */
+  systemUpdateDate?: string;
+  /** סיבת עדכון — edit mode only (one of UPDATE_REASON_OPTIONS). */
+  updateReason?: string;
   /** Record id of the תקנים תשפו row that was loaded — set when user chose "טען מהשנה הקודמת". */
   prevYearRecordId?: string;
   /**

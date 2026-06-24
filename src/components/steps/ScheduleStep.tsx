@@ -8,6 +8,8 @@ import type { PrevYearPosition } from '@/lib/prevYearPosition';
 import { BellSlotPicker, type BellSlot } from './BellSlotPicker';
 import {
   DAYS,
+  MOTZASH,
+  REGULAR_DAYS,
   DAY_LABELS,
   validateDay,
   weeklyMinutes,
@@ -42,7 +44,8 @@ interface OverlapResult {
  */
 function buildWeekParams(week: Record<Day, Shift[]>): URLSearchParams {
   const params = new URLSearchParams();
-  for (const day of DAYS) {
+  // Include מוצ"ש: harmless for non-regular schedules (week.motzash is unset there).
+  for (const day of REGULAR_DAYS) {
     const shifts = (week[day] ?? []).filter((s) => s.in && s.out);
     if (shifts.length > 0)
       params.set(`week[${day}]`, shifts.map((s) => `${s.in}-${s.out}`).join(','));
@@ -365,7 +368,10 @@ function GridSchedule({
   }, [token]);
 
   const week = data.week as Record<Day, Shift[]>;
-  const totalMin = weeklyMinutes(week);
+  // מוצ"ש is shown (and counts) only for regular-type schedules; it's a single shift.
+  const isRegular = type === SCHEDULE_TYPE.regular;
+  const gridDays: readonly Day[] = isRegular ? REGULAR_DAYS : DAYS;
+  const totalMin = weeklyMinutes(week, gridDays);
   const totalHours = totalMin / 60;
   const overCap = totalHours > WEEKLY_CAP_HOURS;
 
@@ -390,7 +396,7 @@ function GridSchedule({
   const utilizedHours = isDeputy1 ? deputyWeekly : isParaCat ? paraHours : totalHours;
 
   const dayErrors: Partial<Record<Day, string>> = {};
-  for (const d of DAYS) {
+  for (const d of gridDays) {
     const v = validateDay(week[d] ?? []);
     if (!v.ok) { dayErrors[d] = v.error; continue; }
     // תפקיד צהריים: בכל יום שאינו יום עובדת הבוקר — כניסה חייבת להיות 12:00 ומעלה.
@@ -429,7 +435,8 @@ function GridSchedule({
     setData((prev) => {
       const w = { ...(prev.week as Record<Day, Shift[]>) };
       const shifts = [...(w[day] ?? [])];
-      if (shifts.length < maxShifts) shifts.push({ in: '', out: '' });
+      const cap = day === MOTZASH ? 1 : maxShifts;
+      if (shifts.length < cap) shifts.push({ in: '', out: '' });
       w[day] = shifts;
       return { ...prev, week: w };
     });
@@ -795,10 +802,12 @@ function GridSchedule({
           </div>
         )}
 
-        {DAYS.map((day) => {
+        {gridDays.map((day) => {
           const shifts = week[day] ?? [];
           const visible = shifts.length ? shifts : [{ in: '', out: '' }];
           const err = dayErrors[day];
+          // מוצ"ש is a single-shift day regardless of the role's maxShifts.
+          const dayMaxShifts = day === MOTZASH ? 1 : maxShifts;
           const dayMin = shifts.reduce((s, sh) => s + shiftMinutes(sh), 0);
           const paraDayResult = isParaCat ? paraDayHours(dayMin) : null;
           const dayLabel = isParaCat
@@ -830,7 +839,7 @@ function GridSchedule({
                       </button>
                     </div>
                   ))}
-                  {shifts.length < maxShifts && (
+                  {day !== MOTZASH && shifts.length < dayMaxShifts && (
                     <button
                       onClick={() => addShift(day)}
                       className="flex items-center gap-1 text-primary font-bold hover:underline w-fit"

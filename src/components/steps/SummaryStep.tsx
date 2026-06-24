@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import { EmployeeData, RoleData, ScheduleData, YouthDocs } from '@/lib/formTypes';
 import { maskTzClient } from '@/lib/maskClient';
-import { DAYS, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
-import { DOC_FIELDS } from '@/lib/airtable/schema';
+import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
+import { DOC_FIELDS, UPDATE_REASON_OPTIONS } from '@/lib/airtable/schema';
 
 export function SummaryStep({
   token,
@@ -16,6 +16,7 @@ export function SummaryStep({
   docs,
   mode = 'new',
   positionId,
+  onScheduleChange,
   onBack,
   onEdit,
   onNewPosition,
@@ -28,6 +29,7 @@ export function SummaryStep({
   docs: YouthDocs;
   mode?: 'new' | 'edit';
   positionId?: string;
+  onScheduleChange?: (schedule: ScheduleData) => void;
   onBack: () => void;
   onEdit: (step: 'employee' | 'role' | 'schedule') => void;
   onNewPosition?: () => void;
@@ -38,6 +40,15 @@ export function SummaryStep({
   const [submitting, setSubmitting] = useState(false);
   const [uploadNote, setUploadNote] = useState('');
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Edit mode: default "תאריך עדכון מערכת" to today if it wasn't already set.
+  useEffect(() => {
+    if (isEdit && !schedule.systemUpdateDate && onScheduleChange) {
+      const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+      onScheduleChange({ ...schedule, systemUpdateDate: today });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit]);
 
   /**
    * Upload youth documents after the position record exists. One request per file
@@ -72,6 +83,16 @@ export function SummaryStep({
     if (!isEdit && !consent) {
       setResult({ ok: false, message: 'יש לאשר את הצהרת הפרטיות לפני השליחה.' });
       return;
+    }
+    if (isEdit) {
+      if (!schedule.systemUpdateDate) {
+        setResult({ ok: false, message: 'יש להזין תאריך עדכון מערכת.' });
+        return;
+      }
+      if (!schedule.updateReason) {
+        setResult({ ok: false, message: 'יש לבחור סיבת עדכון.' });
+        return;
+      }
     }
     setSubmitting(true);
     setResult(null);
@@ -118,6 +139,9 @@ export function SummaryStep({
   }
 
   const week = schedule.week as Record<Day, Shift[]>;
+  // Show מוצ"ש only when it was entered (regular schedules); otherwise keep the sun..fri list.
+  const motzashHasShifts = (week[MOTZASH] ?? []).some((s) => s.in && s.out);
+  const summaryDays: readonly Day[] = motzashHasShifts ? [...DAYS, MOTZASH] : DAYS;
   // Frontal/individual/stay breakdown exists only when the ofek-חדש calculator ran:
   // category פרא רפואי, or scheduleType "הוראה". "רגיל" and the rest have no breakdown.
   const hasBreakdown = role.category === 'פרא רפואי' || role.scheduleType === 'הוראה';
@@ -231,7 +255,7 @@ export function SummaryStep({
 
           <Card title="מערכת שעות שבועית" icon="calendar_month" onEdit={() => onEdit('schedule')}>
             <div className="divide-y divide-outline-variant/30">
-              {DAYS.map((d) => {
+              {summaryDays.map((d) => {
                 const shifts = (week[d] ?? []).filter((s) => s.in && s.out);
                 return (
                   <div key={d} className="flex items-start gap-4 py-3 first:pt-0 last:pb-0">
@@ -295,6 +319,47 @@ export function SummaryStep({
           </div>
         </div>
       </div>
+
+      {/* Update details — edit mode only */}
+      {isEdit && (
+        <div className="mt-8 bg-white rounded-xl shadow-card border border-outline-variant/30 p-8">
+          <h3 className="text-headline-md text-primary flex items-center gap-2 mb-6">
+            <Icon name="edit_note" className="text-primary-container" /> פרטי עדכון
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <label className="space-y-1.5 block">
+              <span className="text-label-md text-on-surface-variant block">תאריך עדכון מערכת</span>
+              <input
+                type="date"
+                value={schedule.systemUpdateDate ?? ''}
+                onChange={(e) =>
+                  onScheduleChange?.({ ...schedule, systemUpdateDate: e.target.value })
+                }
+                className="w-full rounded-lg border border-outline-variant px-3 py-2.5 text-body-md focus:border-primary focus:outline-none"
+              />
+            </label>
+            <label className="space-y-1.5 block">
+              <span className="text-label-md text-on-surface-variant block">סיבת עדכון</span>
+              <select
+                value={schedule.updateReason ?? ''}
+                onChange={(e) =>
+                  onScheduleChange?.({ ...schedule, updateReason: e.target.value })
+                }
+                className="w-full rounded-lg border border-outline-variant px-3 py-2.5 text-body-md bg-white focus:border-primary focus:outline-none"
+              >
+                <option value="" disabled>
+                  בחר/י סיבה…
+                </option>
+                {UPDATE_REASON_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* Privacy consent — shown only for new submissions */}
       {!isEdit && (

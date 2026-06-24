@@ -8,7 +8,8 @@ import {
 } from '@/lib/airtable/schema';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
+// מוצ"ש included so regular-type schedules round-trip in edit mode.
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'] as const;
 
 function secondsToHhmm(s: unknown): string {
   const n = Number(s);
@@ -150,6 +151,8 @@ export async function loadPosition(
     ofekRecordId: linkIds(pf[POSITION_FIELDS.ofekCalcLink])[0],
     ofekAllRolesRecordId: linkIds(pf[POSITION_FIELDS.ofekCalcAllRolesLink])[0],
     reductionReason: strField(pf[POSITION_FIELDS.conditionsWorseningReason]),
+    systemUpdateDate: strField(pf[POSITION_FIELDS.systemUpdateDate]),
+    updateReason: strField(pf[POSITION_FIELDS.updateReason]),
   };
 
   return { employee, role, schedule };

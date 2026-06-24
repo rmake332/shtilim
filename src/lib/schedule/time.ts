@@ -1,7 +1,13 @@
 /** Time / duration helpers for weekly schedule entry. Pure, unit-tested. */
 
 export const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
-export type Day = (typeof DAYS)[number];
+export type Day = (typeof DAYS)[number] | 'motzash';
+
+/** מוצ"ש — only for regular-type schedules; a single shift, after שישי. */
+export const MOTZASH: Day = 'motzash';
+
+/** Days shown in a regular-type grid: sun..fri + מוצ"ש. */
+export const REGULAR_DAYS: Day[] = [...DAYS, MOTZASH];
 
 export const DAY_LABELS: Record<Day, string> = {
   sun: 'ראשון',
@@ -10,6 +16,7 @@ export const DAY_LABELS: Record<Day, string> = {
   wed: 'רביעי',
   thu: 'חמישי',
   fri: 'שישי',
+  motzash: 'מוצ״ש',
 };
 
 /** A single shift: "HH:MM" entry/exit strings (empty allowed = unfilled). */
@@ -61,10 +68,13 @@ export function validateDay(shifts: Shift[]): DayValidation {
   return { ok: true };
 }
 
-/** Total weekly minutes across all days/shifts. */
-export function weeklyMinutes(week: Record<Day, Shift[]>): number {
+/**
+ * Total weekly minutes across all days/shifts.
+ * Defaults to sun..fri; pass REGULAR_DAYS to include מוצ"ש for regular schedules.
+ */
+export function weeklyMinutes(week: Record<Day, Shift[]>, days: readonly Day[] = DAYS): number {
   let total = 0;
-  for (const day of DAYS) {
+  for (const day of days) {
     for (const s of week[day] ?? []) total += shiftMinutes(s);
   }
   return total;

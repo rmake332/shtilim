@@ -1,0 +1,103 @@
+<!--
+  תבנית מייל להתראת שגיאה (Make → Email).
+  להדביק את ה-HTML הזה בשדה "Content" של מודול ה-Email ב-Make,
+  ולוודא שה-Content type מוגדר ל-HTML.
+  ה-placeholders במבנה {{...}} — מפו אותם לשדות שמגיעים מה-Webhook:
+    {{1.`סוג תקלה`}} {{1.`שם`}} {{1.`ת.ז.`}} {{1.`תפקיד`}}
+    {{1.`מוסד`}} {{1.`תאריך תקלה`}} {{1.`פירוט`}} {{1.requestId}}
+  (המספר "1" הוא מודול ה-Webhook; התאם אם המודול אצלך ממוספר אחרת.)
+  נושא מומלץ למייל:  ⚠️ תקלה בטופס שתילים — {{1.`סוג תקלה`}}
+-->
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; background-color:#f4f5f7; font-family:Arial, 'Segoe UI', Helvetica, sans-serif; direction:rtl;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7; padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+
+          <!-- כותרת -->
+          <tr>
+            <td style="background-color:#c0392b; padding:20px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="color:#ffffff; font-size:20px; font-weight:bold; text-align:right;">
+                    ⚠️ התראת תקלה — טופס שתילים
+                  </td>
+                </tr>
+                <tr>
+                  <td style="color:#f8d7d2; font-size:14px; text-align:right; padding-top:6px;">
+                    {{1.`סוג תקלה`}}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- פתיח -->
+          <tr>
+            <td style="padding:24px 28px 8px 28px; color:#2c3e50; font-size:15px; line-height:1.6; text-align:right;">
+              אירעה תקלה בעת שליחת/עדכון תקן בטופס. להלן פרטי הרשומה שלא נשמרה או שההתראה עליה נכשלה:
+            </td>
+          </tr>
+
+          <!-- טבלת פרטים -->
+          <tr>
+            <td style="padding:8px 28px 24px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; font-size:14px; color:#2c3e50;">
+                <tr>
+                  <td style="padding:10px 12px; background-color:#f7f9fb; border:1px solid #e6e9ed; font-weight:bold; width:130px; text-align:right;">שם</td>
+                  <td style="padding:10px 12px; border:1px solid #e6e9ed; text-align:right;">{{1.`שם`}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 12px; background-color:#f7f9fb; border:1px solid #e6e9ed; font-weight:bold; text-align:right;">ת.ז.</td>
+                  <td style="padding:10px 12px; border:1px solid #e6e9ed; text-align:right; direction:ltr;">{{1.`ת.ז.`}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 12px; background-color:#f7f9fb; border:1px solid #e6e9ed; font-weight:bold; text-align:right;">תפקיד</td>
+                  <td style="padding:10px 12px; border:1px solid #e6e9ed; text-align:right;">{{1.`תפקיד`}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 12px; background-color:#f7f9fb; border:1px solid #e6e9ed; font-weight:bold; text-align:right;">מוסד</td>
+                  <td style="padding:10px 12px; border:1px solid #e6e9ed; text-align:right;">{{1.`מוסד`}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 12px; background-color:#f7f9fb; border:1px solid #e6e9ed; font-weight:bold; text-align:right;">סוג תקלה</td>
+                  <td style="padding:10px 12px; border:1px solid #e6e9ed; text-align:right;">{{1.`סוג תקלה`}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 12px; background-color:#f7f9fb; border:1px solid #e6e9ed; font-weight:bold; text-align:right;">תאריך תקלה</td>
+                  <td style="padding:10px 12px; border:1px solid #e6e9ed; text-align:right; direction:ltr;">{{1.`תאריך תקלה`}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- פירוט התקלה -->
+          <tr>
+            <td style="padding:0 28px 24px 28px;">
+              <div style="font-weight:bold; color:#2c3e50; font-size:14px; margin-bottom:8px; text-align:right;">פירוט התקלה</div>
+              <div style="background-color:#fdf3f2; border-right:4px solid #c0392b; border-radius:6px; padding:12px 14px; color:#7b241c; font-size:13px; line-height:1.6; text-align:right; word-break:break-word; direction:ltr;">
+                {{1.`פירוט`}}
+              </div>
+            </td>
+          </tr>
+
+          <!-- כותרת תחתונה -->
+          <tr>
+            <td style="background-color:#f7f9fb; border-top:1px solid #e6e9ed; padding:16px 28px; color:#8a9099; font-size:12px; text-align:right; line-height:1.6;">
+              מזהה בקשה (requestId): <span style="direction:ltr; display:inline-block;">{{1.requestId}}</span><br>
+              הודעה זו נשלחה אוטומטית ממערכת טופס התקנים של שתילים.
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

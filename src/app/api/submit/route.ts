@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
 import { submitForm } from '@/lib/submit';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
+import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { logger } from '@/lib/logger';
 
 /**
@@ -34,9 +35,30 @@ export async function POST(req: NextRequest) {
       { institutionMosadId: gate.institution.mosadId, employee, role, schedule },
       gate.requestId,
     );
+    await notifySubmitWebhook(
+      {
+        tz: employee.tz,
+        association: gate.institution.association,
+        name: employee.name,
+        role: role.roleTitle,
+        institution: gate.institution.name,
+      },
+      gate.requestId,
+    );
     return NextResponse.json({ ok: true, ...out });
   } catch (e) {
     logger.error({ requestId: gate.requestId, err: String(e) }, 'submit failed');
+    await notifyError(
+      {
+        stage: 'airtable_write',
+        name: employee.name,
+        tz: employee.tz,
+        role: role.roleTitle,
+        institution: gate.institution.name,
+        detail: String(e),
+      },
+      gate.requestId,
+    );
     return NextResponse.json({ ok: false, message: 'שגיאה בשמירת הטופס.' }, { status: 500 });
   }
 }

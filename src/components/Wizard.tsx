@@ -133,6 +133,7 @@ export function Wizard({
           docs={docs}
           mode={isEdit ? 'edit' : 'new'}
           positionId={positionId}
+          onScheduleChange={setSchedule}
           onBack={() => setStep('schedule')}
           onEdit={(s) => setStep(s)}
           onNewPosition={!isEdit ? () => {

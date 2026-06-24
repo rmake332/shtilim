@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
 import type { PositionSummary } from '@/app/api/positions/route';
-import { DAYS, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
+import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
 
 type WeekData = Record<Day, Shift[]>;
 
@@ -368,9 +368,12 @@ function StatCard({ icon, label, value, color }: {
 function WeekGrid({ week }: { week: WeekData }) {
   const hasAny = DAYS.some((d) => (week[d] ?? []).some((s) => s.in && s.out));
   if (!hasAny) return <p className="text-on-surface-variant text-body-md py-2">אין ימי עבודה מוגדרים.</p>;
+  // Show מוצ"ש only when it has shifts (regular schedules).
+  const motzashHasShifts = (week[MOTZASH] ?? []).some((s) => s.in && s.out);
+  const gridDays: readonly Day[] = motzashHasShifts ? [...DAYS, MOTZASH] : DAYS;
   return (
     <div className="grid grid-cols-3 gap-3">
-      {DAYS.map((day) => {
+      {gridDays.map((day) => {
         const shifts = (week[day] ?? []).filter((s) => s.in && s.out);
         const totalMin = shifts.reduce((s, sh) => {
           const [ih, im] = sh.in.split(':').map(Number);

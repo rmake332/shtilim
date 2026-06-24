@@ -17,7 +17,8 @@ import { toMinutes } from '@/lib/schedule/time';
  *   { ok: false, overlaps: OverlapItem[] } — list of clashing positions
  */
 
-const DAYS: Day[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
+// Includes מוצ"ש (regular schedules); absent days simply have no shifts to compare.
+const DAYS: Day[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'];
 
 interface TimeRange {
   in: string;  // "HH:MM"
@@ -40,6 +41,7 @@ const DAY_LABELS: Record<Day, string> = {
   wed: 'רביעי',
   thu: 'חמישי',
   fri: 'שישי',
+  motzash: 'מוצ״ש',
 };
 
 function secsToHHMM(secs: number): string {

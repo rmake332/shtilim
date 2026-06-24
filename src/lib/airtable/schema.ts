@@ -76,6 +76,8 @@ export const POSITION_FIELDS = {
   employeeStatus: 'fld6bWDfusUy8d7oY',
   submittedAt: 'fldLlJ96ZBwOWZACL',
   conditionsWorseningReason: 'fldSi9R0RCfrHNDuU', // סיבת הרעת תנאים
+  systemUpdateDate: 'fldgoevjfnIveWkp4', // תאריך עדכון מערכת (date) — edit mode
+  updateReason: 'fldbAkB0EJBSnbyg6', // סיבת עדכון (singleSelect) — edit mode
   hasMinistryFile: 'fld4RpO0teYLfUQ8C', // קיים תיק במשרד החינוך (כן/לא)
   // Youth-employee document attachments (multipleAttachments) — uploaded post-create.
   docEducationalInstitution: 'fldKu5XvvJNEd1vDV', // אישור ממוסד לימודי - נוער
@@ -130,6 +132,15 @@ export const DOC_FIELDS = [
 export type DocFieldDef = (typeof DOC_FIELDS)[number];
 export type DocKey = DocFieldDef['key'];
 
+/** סיבת עדכון (POSITION_FIELDS.updateReason) — singleSelect choices, edit mode only. */
+export const UPDATE_REASON_OPTIONS = [
+  'אישור תקן שנה קודמת',
+  'שינוי מערכת שעות (ללא הורדה בשעות)',
+  'שינוי בהיקף משרה ',
+  'הוספת גמול / ריכוז / הערה',
+  'שינוי תפקיד',
+] as const;
+
 /** Weekly schedule entry/exit duration fields per day, with shift variants (1,2,3). */
 export const SCHEDULE_FIELDS = {
   sun: { in: ['fldRs7nLEvFS2UX1P', 'fldh8hi9nshbkE9DZ', 'fldHlFHRUMIh9LPL1'], out: ['fld1LZh4tlLjyy7fW', 'fld8vPa6b0Ym9J87V', 'fldK7TdLd8WjdtpTp'] },
@@ -138,6 +149,8 @@ export const SCHEDULE_FIELDS = {
   wed: { in: ['fldqRS0nsqYRBuY3z', 'fldQMFQqfHidvKxdH', 'fldYmvcGklghQsEsS'], out: ['fldide6dKF3I5ZMEZ', 'fldfP9jHtloy7FLRD', 'fldd8vWuepMvzlasQ'] },
   thu: { in: ['fldx6EMqIKtSSKsHA', 'fldwXfhhSVJTG3Cl9', 'fldf6HsXbb0j0BR7n'], out: ['fld6L9sIeQmLlmWfE', 'fldpNBHJ7COzrf1HA', 'fldGrJ2h5lZbFh1Ji'] },
   fri: { in: ['flddTGbnwxpSOVbXI', 'fldMzeIlH06Sz2Diu', 'fldqFb2ko8DV3nDBP'], out: ['flddOx4eM0KgJdNW9', 'fld91SeV6Jr6c1PcR', 'fldIlwMFtr5n8RNrW'] },
+  // מוצ"ש — regular schedules only, a single shift (one entry/exit).
+  motzash: { in: ['fld3Bh04ocFY8neUw'], out: ['fldQlk76he0xsnmsd'] },
 } as const;
 
 /** לוח צלצולים fields (bell-schedule slots, keyed by סוג to match BUDGET_FIELDS.bellScheduleNum) */
