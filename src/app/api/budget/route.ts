@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveInstitutionByToken } from '@/lib/institution';
-import { listRecords } from '@/lib/airtable/client';
+import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, BUDGET_FIELDS, SYMBOL_FIELDS } from '@/lib/airtable/schema';
 
 export interface BudgetRow {
@@ -43,23 +43,17 @@ export async function GET(req: NextRequest) {
   const institution = await resolveInstitutionByToken(token);
   if (!institution) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const { mosadId } = institution;
+  const { mosadId, name: mosadName } = institution;
 
-  // Fetch symbol names for lookup
-  let symbolMap: Record<string, string> = {};
-  try {
-    const symbols = await listRecords(TABLES.institutionSymbols, {
-      fields: [SYMBOL_FIELDS.symbolCode, SYMBOL_FIELDS.displayName],
-    });
-    for (const s of symbols) {
-      symbolMap[s.id] = String(s.fields[SYMBOL_FIELDS.displayName] ?? s.fields[SYMBOL_FIELDS.symbolCode] ?? '');
-    }
-  } catch { /* symbol names are optional */ }
-
-  // Fetch all budget records, filter by institution in-memory
+  // Fetch only this institution's budget rows (filtered in Airtable by the linked
+  // מוסד's name — each row links to a single institution, so ARRAYJOIN yields exactly
+  // that name). Avoids scanning all ~1450 budget rows across ~15 pages.
   let allRecords;
   try {
     allRecords = await listRecords(TABLES.budget, {
+      filterByFormula: mosadName
+        ? `ARRAYJOIN({${BUDGET_FIELDS.institutionLink}})="${escapeFormulaValue(mosadName)}"`
+        : undefined,
       fields: [
         BUDGET_FIELDS.role,
         BUDGET_FIELDS.category,
@@ -80,17 +74,47 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'שגיאה בטעינת תקציב' }, { status: 500 });
   }
 
-  const rows: BudgetRow[] = allRecords
-    .filter((r) => {
-      const links = r.fields[BUDGET_FIELDS.institutionLink];
-      if (!links) return false;
-      const arr = Array.isArray(links) ? links : [links];
-      return arr.some((v) => (typeof v === 'string' ? v : (v as Record<string, string>)?.id) === mosadId);
-    })
+  // Defensive in-memory check on institutionLink (guards a row linking to several institutions).
+  const institutionRecords = allRecords.filter((r) => {
+    const links = r.fields[BUDGET_FIELDS.institutionLink];
+    if (!links) return false;
+    const arr = Array.isArray(links) ? links : [links];
+    return arr.some((v) => (typeof v === 'string' ? v : (v as Record<string, string>)?.id) === mosadId);
+  });
+
+  // Fetch names only for the symbols actually referenced by these rows (not the whole table).
+  const neededSymbolIds = new Set<string>();
+  for (const r of institutionRecords) {
+    const symLinks = r.fields[BUDGET_FIELDS.symbolLink];
+    (Array.isArray(symLinks) ? symLinks : []).forEach((v) => {
+      const id = typeof v === 'string' ? v : (v as Record<string, string>)?.id;
+      if (id) neededSymbolIds.add(id);
+    });
+  }
+  const symbolMap: Record<string, string> = {};
+  if (neededSymbolIds.size > 0) {
+    try {
+      const idFilter = `OR(${Array.from(neededSymbolIds)
+        .map((id) => `RECORD_ID()="${escapeFormulaValue(id)}"`)
+        .join(',')})`;
+      const symbols = await listRecords(TABLES.institutionSymbols, {
+        filterByFormula: idFilter,
+        fields: [SYMBOL_FIELDS.symbolCode, SYMBOL_FIELDS.displayName],
+      });
+      for (const s of symbols) {
+        symbolMap[s.id] = String(s.fields[SYMBOL_FIELDS.displayName] ?? s.fields[SYMBOL_FIELDS.symbolCode] ?? '');
+      }
+    } catch { /* symbol names are optional */ }
+  }
+
+  const rows: BudgetRow[] = institutionRecords
     .map((r) => {
       const f = r.fields;
-      const symLinks = Array.isArray(f[BUDGET_FIELDS.symbolLink]) ? f[BUDGET_FIELDS.symbolLink] as string[] : [];
-      const symName = symLinks.length ? (symbolMap[symLinks[0]] ?? '') : '';
+      const rawSymLinks = Array.isArray(f[BUDGET_FIELDS.symbolLink]) ? (f[BUDGET_FIELDS.symbolLink] as unknown[]) : [];
+      const firstSymId = rawSymLinks.length
+        ? (typeof rawSymLinks[0] === 'string' ? rawSymLinks[0] : (rawSymLinks[0] as Record<string, string>)?.id)
+        : '';
+      const symName = firstSymId ? (symbolMap[firstSymId] ?? '') : '';
       return {
         id: r.id,
         role: single(f[BUDGET_FIELDS.role]),

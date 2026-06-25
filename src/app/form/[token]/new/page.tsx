@@ -30,6 +30,7 @@ export default async function NewPositionPage({
         tz: details.tz,
         address: details.address,
         email: details.email,
+        phone: details.phone,
         gender: details.gender as EmployeeData['gender'],
         maritalStatus: details.maritalStatus as EmployeeData['maritalStatus'],
         childrenUnder14: '',

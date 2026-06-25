@@ -81,12 +81,21 @@ function mapRole(r: AirtableRecord): MappedBudget {
   };
 }
 
-/** All budget records linked to the institution, filtered in-memory by institutionLink.
- *  Cached per mosadId for 60 seconds so repeated role/symbol lookups within a session
- *  are instant. TTL is short enough that remainingHours stays reasonably fresh. */
+/** All budget records for the institution.
+ *  Filtered in Airtable by the linked מוסד's name (each budget row links to a single
+ *  institution, so ARRAYJOIN yields exactly that name) — this returns only the dozens
+ *  of rows for this institution instead of scanning all ~1450 rows across ~15 pages.
+ *  A defensive in-memory check on institutionLink still guards against any row that
+ *  links to multiple institutions. Cached per (mosadId, mosadName) for 10 minutes:
+ *  budget figures (remainingHours) don't change minute-to-minute, and the longer TTL
+ *  keeps repeated role/symbol lookups within a session instant. */
 const fetchBudgetForInstitution = unstable_cache(
-  async (mosadId: string): Promise<AirtableRecord[]> => {
+  async (mosadId: string, mosadName: string): Promise<AirtableRecord[]> => {
+    const filterByFormula = mosadName
+      ? `ARRAYJOIN({${BUDGET_FIELDS.institutionLink}})="${escapeFormulaValue(mosadName)}"`
+      : undefined;
     const all = await listRecords(TABLES.budget, {
+      filterByFormula,
       fields: [
         BUDGET_FIELDS.role,
         BUDGET_FIELDS.category,
@@ -114,8 +123,8 @@ const fetchBudgetForInstitution = unstable_cache(
       return arr.some((v) => (typeof v === 'string' ? v : (v as any)?.id) === mosadId);
     });
   },
-  ['budget-for-institution-v2'],
-  { revalidate: 60 },
+  ['budget-for-institution-v3'],
+  { revalidate: 600 },
 );
 
 /**
@@ -125,8 +134,9 @@ const fetchBudgetForInstitution = unstable_cache(
 export async function getRoles(
   mosadId: string,
   symbolId: string,
+  mosadName = '',
 ): Promise<RoleOption[]> {
-  const budget = await fetchBudgetForInstitution(mosadId);
+  const budget = await fetchBudgetForInstitution(mosadId, mosadName);
   const excludedCats = new Set<string>([CATEGORY.gemul, CATEGORY.paraGemul, CATEGORY.roles]);
 
   return budget
@@ -139,6 +149,23 @@ export async function getRoles(
     });
 }
 
+/**
+ * A single role resolved by its budget record id, without the symbol filter.
+ * Used in edit mode, where the position doesn't store a symbol link, so the
+ * bell-schedule lookup can't go through getRoles (which requires a symbolId).
+ * Returns null when the id isn't a budget row for this institution.
+ */
+export async function getRoleById(
+  mosadId: string,
+  roleId: string,
+  mosadName = '',
+): Promise<RoleOption | null> {
+  if (!roleId) return null;
+  const budget = await fetchBudgetForInstitution(mosadId, mosadName);
+  const rec = budget.find((r) => r.id === roleId);
+  return rec ? mapRole(rec) : null;
+}
+
 /** Gemul / extra-role lines (category match) with remaining > 0, for the institution.
  *  - גמול: filters by יתרת גמולים לניצול > 0
  *  - תפקידים: filters by יתרת תפקידים לניצול > 0
@@ -147,8 +174,9 @@ export async function getRoles(
 export async function getExtraLines(
   mosadId: string,
   category: 'gemul' | 'roles',
+  mosadName = '',
 ): Promise<ExtraBudgetLine[]> {
-  const budget = await fetchBudgetForInstitution(mosadId);
+  const budget = await fetchBudgetForInstitution(mosadId, mosadName);
   const wanted: Set<string> =
     category === 'gemul'
       ? new Set([CATEGORY.gemul, CATEGORY.paraGemul])

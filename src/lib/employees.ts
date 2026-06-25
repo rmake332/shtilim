@@ -51,6 +51,7 @@ export interface EmployeeDetails {
   tz: string;
   address: string;
   email: string;
+  phone: string;
   gender: string;
   maritalStatus: string;
   birthDate: string;
@@ -85,6 +86,7 @@ export async function getEmployeeById(
     tz: str(f[EMPLOYEE_FIELDS.tz]),
     address: str(f[EMPLOYEE_FIELDS.address]),
     email: str(f[EMPLOYEE_FIELDS.email]),
+    phone: str(f[EMPLOYEE_FIELDS.phone]),
     gender: str(f[EMPLOYEE_FIELDS.gender]),
     maritalStatus: str(f[EMPLOYEE_FIELDS.maritalStatus]),
     birthDate: str(f[EMPLOYEE_FIELDS.birthDate]),

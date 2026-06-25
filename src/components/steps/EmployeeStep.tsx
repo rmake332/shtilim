@@ -15,6 +15,7 @@ import {
   type Gender,
 } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
+import { isValidIsraeliPhone } from '@/lib/validation/phone';
 import { DOC_FIELDS } from '@/lib/airtable/schema';
 import { DocUpload } from '@/components/steps/DocUpload';
 
@@ -103,6 +104,7 @@ export function EmployeeStep({
           tz: e.tz ?? '',
           address: e.address ?? '',
           email: e.email ?? '',
+          phone: e.phone ?? '',
           gender,
           maritalStatus: (e.maritalStatus as EmployeeData['maritalStatus']) || '',
           birthDate: e.birthDate ?? '',
@@ -198,6 +200,8 @@ export function EmployeeStep({
       if (!isValidIsraeliId(data.tz)) e.tz = 'ת.ז. לא תקינה';
       if (!data.address.trim()) e.address = 'שדה חובה';
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) e.email = 'מייל לא תקין';
+      if (!data.phone.trim()) e.phone = 'שדה חובה';
+      else if (!isValidIsraeliPhone(data.phone)) e.phone = 'מספר טלפון לא תקין';
       if (!data.gender) e.gender = 'שדה חובה';
       if (!data.maritalStatus) e.maritalStatus = 'שדה חובה';
       if (!data.birthDate) e.birthDate = 'שדה חובה';
@@ -215,6 +219,12 @@ export function EmployeeStep({
       e.youthRulesAcknowledged = 'יש לאשר שקראת את הוראות העסקת הנוער';
     }
     setErrors(e);
+    // An existing employee shows read-only; if a profile field is invalid (e.g. a
+    // missing phone), open edit mode so the secretary can actually fix it.
+    const profileKeys = ['name', 'tz', 'address', 'email', 'phone', 'gender', 'maritalStatus', 'birthDate'];
+    if (selectedExisting && !editing && profileKeys.some((k) => e[k])) {
+      setEditing(true);
+    }
     if (Object.keys(e).length === 0) onNext(data);
   }
 
@@ -428,6 +438,15 @@ export function EmployeeStep({
                     onChange={(v) => set('email', v)}
                     placeholder="example@mail.com"
                     type="email"
+                    disabled={locked}
+                  />
+                </Field>
+                <Field label="טלפון" error={errors.phone} locked={locked}>
+                  <Input
+                    value={data.phone}
+                    onChange={(v) => set('phone', v)}
+                    placeholder="05X-XXXXXXX"
+                    type="tel"
                     disabled={locked}
                   />
                 </Field>

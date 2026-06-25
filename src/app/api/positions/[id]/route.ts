@@ -93,6 +93,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       tz: strField(empFields[EMPLOYEE_FIELDS.tz]),
       address: strField(empFields[EMPLOYEE_FIELDS.address]),
       email: strField(empFields[EMPLOYEE_FIELDS.email]),
+      phone: strField(empFields[EMPLOYEE_FIELDS.phone]),
       gender: (strField(empFields[EMPLOYEE_FIELDS.gender]) || 'זכר') as EmployeeData['gender'],
       maritalStatus: strField(empFields[EMPLOYEE_FIELDS.maritalStatus]) as EmployeeData['maritalStatus'],
       childrenUnder14: (strField(pf[POSITION_FIELDS.childrenUnder14]) || '') as EmployeeData['childrenUnder14'],

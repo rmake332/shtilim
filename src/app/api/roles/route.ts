@@ -16,11 +16,11 @@ export async function GET(req: NextRequest) {
 
   try {
     if (extra === 'gemul' || extra === 'roles') {
-      const lines = await getExtraLines(gate.institution.mosadId, extra);
+      const lines = await getExtraLines(gate.institution.mosadId, extra, gate.institution.name);
       return NextResponse.json({ lines });
     }
     if (!symbolId) return NextResponse.json({ roles: [] });
-    const roles = await getRoles(gate.institution.mosadId, symbolId);
+    const roles = await getRoles(gate.institution.mosadId, symbolId, gate.institution.name);
     return NextResponse.json({ roles });
   } catch (e) {
     logger.error({ requestId: gate.requestId, err: String(e) }, 'roles failed');

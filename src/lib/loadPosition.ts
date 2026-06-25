@@ -5,6 +5,7 @@ import {
   POSITION_FIELDS,
   EMPLOYEE_FIELDS,
   SCHEDULE_FIELDS,
+  BUDGET_FIELDS,
 } from '@/lib/airtable/schema';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
@@ -30,6 +31,19 @@ function strField(v: unknown): string {
   }
   if (typeof v === 'object' && 'name' in (v as object)) return String((v as { name: unknown }).name);
   return String(v);
+}
+
+function multiNames(v: unknown): string[] {
+  if (!Array.isArray(v)) {
+    const s = strField(v);
+    return s ? [s] : [];
+  }
+  return v
+    .map((x) => {
+      if (typeof x === 'object' && x !== null && 'name' in (x as object)) return String((x as { name: unknown }).name);
+      return x == null ? '' : String(x);
+    })
+    .filter(Boolean);
 }
 
 function linkIds(v: unknown): string[] {
@@ -79,6 +93,7 @@ export async function loadPosition(
     tz: strField(empFields[EMPLOYEE_FIELDS.tz]),
     address: strField(empFields[EMPLOYEE_FIELDS.address]),
     email: strField(empFields[EMPLOYEE_FIELDS.email]),
+    phone: strField(empFields[EMPLOYEE_FIELDS.phone]),
     gender: (strField(empFields[EMPLOYEE_FIELDS.gender]) || 'זכר') as EmployeeData['gender'],
     maritalStatus: strField(empFields[EMPLOYEE_FIELDS.maritalStatus]) as EmployeeData['maritalStatus'],
     childrenUnder14: (strField(pf[POSITION_FIELDS.childrenUnder14]) || '') as EmployeeData['childrenUnder14'],
@@ -94,6 +109,16 @@ export async function loadPosition(
   const gemulIds = linkIds(pf[POSITION_FIELDS.bonusesLink]);
   const extraRoleIds = linkIds(pf[POSITION_FIELDS.rolesLink]);
 
+  // The schedule UI (bell-schedule grid vs. manual grid vs. fixed-hours pickers) is
+  // chosen from the role's scheduleType / bellScheduleNums, which live on the linked
+  // budget row (תקציב התחלתי) — not on the position. Without them, a teaching position
+  // (scheduleType "הוראה") falls through to the regular manual grid in edit mode.
+  let budgetFields: Record<string, unknown> = {};
+  if (roleIds[0]) {
+    const budgetRec = await getRecord(TABLES.budget, roleIds[0], requestId);
+    if (budgetRec) budgetFields = budgetRec.fields;
+  }
+
   const categoryRaw = pf[POSITION_FIELDS.category];
   const category = Array.isArray(categoryRaw) ? strField(categoryRaw[0]) : strField(categoryRaw);
 
@@ -108,7 +133,7 @@ export async function loadPosition(
     roleId: roleIds[0] ?? '',
     roleTitle: strField(pf[POSITION_FIELDS.roleTitleText]),
     category,
-    scheduleType: null,
+    scheduleType: strField(budgetFields[BUDGET_FIELDS.scheduleType]) || null,
     remainingHours: currentHours,
     layer: strField(pf[POSITION_FIELDS.layer]),
     subRole: strField(pf[POSITION_FIELDS.subRole]),
@@ -116,14 +141,14 @@ export async function loadPosition(
     selectedGemulTitles: linkTitles(pf[POSITION_FIELDS.bonusesLink]),
     selectedExtraRoleIds: extraRoleIds,
     selectedExtraRoleTitles: linkTitles(pf[POSITION_FIELDS.rolesLink]),
-    paraBoard: false,
-    ofekChadash: false,
-    severeDisability: false,
-    bellScheduleNums: [],
-    salaryType: null,
-    tariff: null,
-    ranking: null,
-    seniority: null,
+    paraBoard: Boolean(budgetFields[BUDGET_FIELDS.paraBoard]),
+    ofekChadash: Boolean(budgetFields[BUDGET_FIELDS.ofekChadash]),
+    severeDisability: Boolean(budgetFields[BUDGET_FIELDS.severeDisabilityBonus]),
+    bellScheduleNums: multiNames(budgetFields[BUDGET_FIELDS.bellScheduleNum]),
+    salaryType: strField(budgetFields[BUDGET_FIELDS.salaryType]) || null,
+    tariff: strField(budgetFields[BUDGET_FIELDS.tariff]) || null,
+    ranking: strField(budgetFields[BUDGET_FIELDS.ranking]) || null,
+    seniority: strField(budgetFields[BUDGET_FIELDS.seniority]) || null,
     hasMinistryFile: '',
   };
 

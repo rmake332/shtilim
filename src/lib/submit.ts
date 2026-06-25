@@ -79,6 +79,7 @@ export async function submitForm(
         [EMPLOYEE_FIELDS.tz]: employee.tz,
         [EMPLOYEE_FIELDS.address]: employee.address,
         [EMPLOYEE_FIELDS.email]: employee.email,
+        [EMPLOYEE_FIELDS.phone]: employee.phone,
         [EMPLOYEE_FIELDS.maritalStatus]: employee.maritalStatus,
         [EMPLOYEE_FIELDS.gender]: employee.gender,
         [EMPLOYEE_FIELDS.birthDate]: employee.birthDate,
@@ -93,6 +94,7 @@ export async function submitForm(
     if (employee.name)          empUpdate[EMPLOYEE_FIELDS.name]          = employee.name;
     if (employee.address)       empUpdate[EMPLOYEE_FIELDS.address]       = employee.address;
     if (employee.email)         empUpdate[EMPLOYEE_FIELDS.email]         = employee.email;
+    if (employee.phone)         empUpdate[EMPLOYEE_FIELDS.phone]         = employee.phone;
     if (employee.maritalStatus) empUpdate[EMPLOYEE_FIELDS.maritalStatus] = employee.maritalStatus;
     if (employee.gender)        empUpdate[EMPLOYEE_FIELDS.gender]        = employee.gender;
     if (employee.birthDate)     empUpdate[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;

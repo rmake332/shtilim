@@ -87,6 +87,8 @@ export interface EmployeeData {
   tz: string;
   address: string;
   email: string;
+  /** טלפון — required; must pass Israeli phone validation. */
+  phone: string;
   gender: GenderUnset;
   maritalStatus: MaritalStatus | '';
   childrenUnder14: YesNoUnset;
@@ -225,6 +227,7 @@ export function emptyEmployee(): EmployeeData {
     tz: '',
     address: '',
     email: '',
+    phone: '',
     gender: '',
     maritalStatus: '',
     childrenUnder14: '',

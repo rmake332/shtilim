@@ -116,6 +116,7 @@ export async function loadPrevYearFull(
         tz: str(ef[EMPLOYEE_FIELDS.tz]),
         address: str(ef[EMPLOYEE_FIELDS.address]),
         email: str(ef[EMPLOYEE_FIELDS.email]),
+        phone: str(ef[EMPLOYEE_FIELDS.phone]),
         gender: (str(ef[EMPLOYEE_FIELDS.gender]) || '') as EmployeeData['gender'],
         maritalStatus: (str(ef[EMPLOYEE_FIELDS.maritalStatus]) || '') as EmployeeData['maritalStatus'],
         birthDate: str(ef[EMPLOYEE_FIELDS.birthDate]),

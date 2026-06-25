@@ -1,4 +1,4 @@
-import { listRecords, type AirtableRecord } from '@/lib/airtable/client';
+import { listRecords, escapeFormulaValue, type AirtableRecord } from '@/lib/airtable/client';
 import { TABLES, BELL_FIELDS } from '@/lib/airtable/schema';
 import { durationToHHMM, toMinutes } from './time';
 
@@ -86,13 +86,17 @@ export async function getBellSlots(types: string[], requestId?: string): Promise
   const wanted = new Set(types.filter(Boolean));
   if (wanted.size === 0) return [];
 
-  // The bell-schedule table is large (~1500 rows); fetch the relevant fields and
-  // filter by סוג in memory (linked-id/select formula filtering is unreliable here).
+  // The bell-schedule table is large (~1500 rows). Filter by סוג in Airtable so only the
+  // few hundred matching rows come back (e.g. סוג="1" → ~214 rows / 3 pages vs 1484 / 15).
+  // A redundant in-memory `wanted` check below guards correctness. סוג is a singleSelect;
+  // matching its choice name in a formula is reliable.
+  const typeFilter = `OR(${Array.from(wanted)
+    .map((t) => `{${BELL_FIELDS.type}}="${escapeFormulaValue(t)}"`)
+    .join(',')})`;
   const rows = await listRecords(
     TABLES.bellSchedule,
     {
-      // No maxRecords: we filter by סוג in memory, so all rows must be fetched
-      // (a cap would drop matching slots that sit past it).
+      filterByFormula: typeFilter,
       fields: [
         BELL_FIELDS.type,
         BELL_FIELDS.entry,

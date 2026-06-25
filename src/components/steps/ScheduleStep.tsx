@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
+import { formatNum } from '@/lib/formatNum';
 import { ScheduleData, emptySchedule, RoleData, EmployeeData } from '@/lib/formTypes';
 import type { PrevYearPosition } from '@/lib/prevYearPosition';
 import { BellSlotPicker, type BellSlot } from './BellSlotPicker';
@@ -163,7 +164,7 @@ function PrevYearSummary({ prevYear }: { prevYear: PrevYearPosition }) {
           value !== null ? (
             <div key={label} className="flex items-baseline gap-1.5 text-body-sm">
               <span className="text-on-surface-variant">{label}:</span>
-              <span className="font-bold text-on-surface">{value}</span>
+              <span className="font-bold text-on-surface">{formatNum(value)}</span>
             </div>
           ) : null,
         )}
@@ -680,7 +681,7 @@ function GridSchedule({
                 <div className="flex justify-between items-baseline mb-1">
                   <span className="text-on-surface-variant text-body-md">סה״כ שעות לניצול</span>
                   <span className={`text-display-lg-mobile font-bold ${displayOverCap ? 'text-error' : 'text-primary'}`}>
-                    {displayHours.toFixed(2)}
+                    {formatNum(displayHours)}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
@@ -698,7 +699,7 @@ function GridSchedule({
           {isDeputy1 && (
             <div className="mt-3 text-label-sm flex justify-between text-on-surface-variant">
               <span>סה״כ שעות שהוזנו במערכת:</span>
-              <span>{totalHours.toFixed(2)}</span>
+              <span>{formatNum(totalHours)}</span>
             </div>
           )}
 
@@ -710,19 +711,19 @@ function GridSchedule({
               <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
                 <div className="flex justify-between text-on-surface-variant">
                   <span>שעות בפועל:</span>
-                  <span className="font-bold">{paraHours.toFixed(2)}</span>
+                  <span className="font-bold">{formatNum(paraHours)}</span>
                 </div>
                 <div className="flex justify-between text-on-surface-variant">
                   <span>שעות לבדיקה באופק:</span>
                   <span className={`font-bold ${snapped === null ? 'text-error' : 'text-primary'}`}>
-                    {snapped !== null ? snapped.toFixed(2) : 'לא ניתן לעגל'}
+                    {snapped !== null ? formatNum(snapped) : 'לא ניתן לעגל'}
                   </span>
                 </div>
                 {diff !== null && Math.abs(diff) > 0.001 && (
                   <div className="flex justify-between text-on-surface-variant">
                     <span>הפרש:</span>
                     <span className={`font-bold ${diff > 0 ? 'text-[#1a6b2f]' : 'text-error'}`}>
-                      {diff > 0 ? '+' : ''}{diff.toFixed(2)}
+                      {diff > 0 ? '+' : ''}{formatNum(diff)}
                     </span>
                   </div>
                 )}
@@ -732,7 +733,7 @@ function GridSchedule({
 
           <div className="mt-4 text-label-lg flex justify-between">
             <span className="text-on-surface-variant">יתרת תקציב:</span>
-            <span className="font-bold text-primary">{role.remainingHours} שעות</span>
+            <span className="font-bold text-primary">{formatNum(role.remainingHours)} שעות</span>
           </div>
 
           {needsOfek && ofek?.ok && (
@@ -811,8 +812,8 @@ function GridSchedule({
           const dayMin = shifts.reduce((s, sh) => s + shiftMinutes(sh), 0);
           const paraDayResult = isParaCat ? paraDayHours(dayMin) : null;
           const dayLabel = isParaCat
-            ? paraDayResult?.ok ? `${paraDayResult.hours.toFixed(2)} שע׳` : null
-            : dayMin > 0 ? `${(dayMin / 60).toFixed(2)} שעות` : null;
+            ? paraDayResult?.ok ? `${formatNum(paraDayResult.hours)} שע׳` : null
+            : dayMin > 0 ? `${formatNum(dayMin / 60)} שעות` : null;
           return (
             <div
               key={day}
@@ -882,7 +883,7 @@ function GridSchedule({
                 <div className="text-body-md">
                   <p className="font-bold">שעות קטנות מהשנה הקודמת — נדרשת סיבה</p>
                   <p className="text-label-sm mt-0.5">
-                    שנה שעברה: {activeOfek.previousYear} שעות ← השנה (סה״כ): {activeOfek.totalCurrentHours} שעות
+                    שנה שעברה: {formatNum(activeOfek.previousYear ?? 0)} שעות ← השנה (סה״כ): {formatNum(activeOfek.totalCurrentHours ?? 0)} שעות
                   </p>
                 </div>
               </div>
@@ -1125,6 +1126,15 @@ function BellScheduleGrid({
       });
     }
     setPicks(newPicks);
+
+    // תפקיד צהריים: רצועות בוקר (לפני 12:00) מותרות רק ביום עובדת הבוקר. אם אין morningDay
+    // (לא נשמר על התקן), נבחר את היום שיש בו רצועה מוקדמת כך שהרצועה תוצג ולא תיחסם.
+    if (isAfternoonRole && !data.morningDay) {
+      const morning = DAYS.find((d) =>
+        newPicks[d].some((p) => p && (toMinutes(p.in) ?? 24 * 60) < 12 * 60),
+      );
+      if (morning) setData((prev) => ({ ...prev, morningDay: morning }));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slots]);
 
@@ -1356,7 +1366,7 @@ function BellScheduleGrid({
                 <div className="flex justify-between items-baseline mb-1">
                   <span className="text-on-surface-variant text-body-md">סה״כ שעות לניצול</span>
                   <span className={`text-display-lg-mobile font-bold ${displayOverCap ? 'text-error' : 'text-primary'}`}>
-                    {displayHours.toFixed(2)}
+                    {formatNum(displayHours)}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
@@ -1377,17 +1387,17 @@ function BellScheduleGrid({
             <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
               <div className="flex justify-between text-on-surface-variant">
                 <span>שעות בפועל:</span>
-                <span className="font-bold">{weeklyHours.toFixed(2)}</span>
+                <span className="font-bold">{formatNum(weeklyHours)}</span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
                 <span>שעות לבדיקה באופק:</span>
-                <span className="font-bold text-primary">{snappedHours.toFixed(2)}</span>
+                <span className="font-bold text-primary">{formatNum(snappedHours)}</span>
               </div>
               {snapDiff !== null && Math.abs(snapDiff) > 0.001 && (
                 <div className="flex justify-between text-on-surface-variant">
                   <span>הפרש:</span>
                   <span className={`font-bold ${snapDiff > 0 ? 'text-[#1a6b2f]' : 'text-error'}`}>
-                    {snapDiff > 0 ? '+' : ''}{snapDiff.toFixed(2)}
+                    {snapDiff > 0 ? '+' : ''}{formatNum(snapDiff)}
                   </span>
                 </div>
               )}
@@ -1396,7 +1406,7 @@ function BellScheduleGrid({
 
           <div className="mt-4 text-label-lg flex justify-between">
             <span className="text-on-surface-variant">יתרת תקציב:</span>
-            <span className="font-bold text-primary">{role.remainingHours} שעות</span>
+            <span className="font-bold text-primary">{formatNum(role.remainingHours)} שעות</span>
           </div>
 
           {ofek?.ok && <OfekBreakdown ofek={ofek} />}
@@ -1482,7 +1492,7 @@ function BellScheduleGrid({
                   <span className="font-bold text-primary">{DAY_LABELS[day]}</span>
                   {dayHours > 0 && (
                     <span className="text-label-sm font-bold text-[#003466] bg-[#89f5e7] px-2 py-0.5 rounded-md">
-                      {dayHours.toFixed(2)} שע׳
+                      {formatNum(dayHours)} שע׳
                     </span>
                   )}
                 </div>
@@ -1542,7 +1552,7 @@ function BellScheduleGrid({
                 <div className="text-body-md">
                   <p className="font-bold">שעות קטנות מהשנה הקודמת — נדרשת סיבה</p>
                   <p className="text-label-sm mt-0.5">
-                    שנה שעברה: {activeOfek.previousYear} שעות ← השנה (סה״כ): {activeOfek.totalCurrentHours} שעות
+                    שנה שעברה: {formatNum(activeOfek.previousYear ?? 0)} שעות ← השנה (סה״כ): {formatNum(activeOfek.totalCurrentHours ?? 0)} שעות
                   </p>
                 </div>
               </div>
@@ -1641,9 +1651,9 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                 <Line label="שהייה מהבית" value={ofek1.stayHoursHome} />
                 <Line
                   label="סה״כ שעות שבועיות"
-                  value={Number((ofek1.frontalHours + ofek1.individualHours + ofek1.stayHoursInstitution + ofek1.stayHoursHome).toFixed(2))}
+                  value={ofek1.frontalHours + ofek1.individualHours + ofek1.stayHoursInstitution + ofek1.stayHoursHome}
                 />
-                <Line label="אחוז משרה" value={`${Math.round(ofek1.jobPercent)}%`} />
+                <Line label="אחוז משרה" value={`${formatNum(ofek1.jobPercent)}%`} />
                 <Line label="משרת אם" value={ofek1.motherPosition ? 'כן' : 'לא'} />
               </div>
             )}
@@ -1722,7 +1732,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                         <Line label="פרונטלי" value={ofek3.ofekRow.frontalHours} />
                         <Line label="פרטני" value={ofek3.ofekRow.individualHours} />
                         <Line label="שהייה" value={ofek3.ofekRow.stayHours} />
-                        <Line label="אחוז משרה" value={`${Math.round(ofek3.ofekRow.jobPercent)}%`} />
+                        <Line label="אחוז משרה" value={`${formatNum(ofek3.ofekRow.jobPercent)}%`} />
                       </>
                     ) : (
                       <>
@@ -1731,7 +1741,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                         <Line label="פרטני" value={ofek3.individualHours} />
                         <Line label="שהייה מהמוסד" value={ofek3.stayHoursInstitution} />
                         <Line label="שהייה מהבית" value={ofek3.stayHoursHome} />
-                        <Line label="אחוז משרה" value={`${Math.round(ofek3.jobPercent)}%`} />
+                        <Line label="אחוז משרה" value={`${formatNum(ofek3.jobPercent)}%`} />
                       </>
                     )}
                   </div>
@@ -1745,7 +1755,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                     <Line label="שהייה מהבית" value={ofek3.stayHoursHome} />
                     <Line
                       label="סה״כ שעות שבועיות"
-                      value={Number((ofek3.frontalHours + ofek3.individualHours + ofek3.stayHoursInstitution + ofek3.stayHoursHome).toFixed(2))}
+                      value={ofek3.frontalHours + ofek3.individualHours + ofek3.stayHoursInstitution + ofek3.stayHoursHome}
                     />
                     <Line label="משרת אם" value={ofek3.motherPosition ? 'כן' : 'לא'} />
                   </div>
@@ -1771,7 +1781,7 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
           <Line label="פרונטלי" value={ofek.ofekRow.frontalHours} />
           <Line label="פרטני" value={ofek.ofekRow.individualHours} />
           <Line label="שהייה" value={ofek.ofekRow.stayHours} />
-          <Line label="אחוז משרה" value={`${Math.round(ofek.ofekRow.jobPercent)}%`} />
+          <Line label="אחוז משרה" value={`${formatNum(ofek.ofekRow.jobPercent)}%`} />
         </div>
       )}
       <div className="space-y-0.5">
@@ -1784,7 +1794,7 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
         <Line label="שהייה מהבית" value={ofek.stayHoursHome} />
         <Line
           label="סה״כ שעות שבועיות"
-          value={Number((ofek.frontalHours + ofek.individualHours + ofek.stayHoursInstitution + ofek.stayHoursHome).toFixed(2))}
+          value={ofek.frontalHours + ofek.individualHours + ofek.stayHoursInstitution + ofek.stayHoursHome}
         />
         <Line label="משרת אם" value={ofek.motherPosition ? 'כן' : 'לא'} />
       </div>
@@ -1795,7 +1805,7 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 function Line({ label, value }: { label: string; value: string | number }) {
-  const display = typeof value === 'number' ? value.toFixed(2) : value;
+  const display = typeof value === 'number' ? formatNum(value) : value;
   return (
     <div className="flex justify-between text-on-surface-variant">
       <span>{label}:</span>

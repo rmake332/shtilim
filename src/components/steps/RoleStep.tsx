@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
+import { formatNum } from '@/lib/formatNum';
 import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate } from '@/lib/formTypes';
 import { CATEGORY, DOC_FIELDS, POSITION_FIELDS } from '@/lib/airtable/schema';
 import { DocUpload } from '@/components/steps/DocUpload';
@@ -310,7 +311,7 @@ export function RoleStep({
             <p className="text-headline-md text-primary truncate">{data.roleTitle || '—'}</p>
             <p className="text-body-sm text-on-surface-variant">
               {data.category}{data.layer ? ` · ${data.layer}` : ''}
-              {data.remainingHours > 0 ? ` · ${data.remainingHours} שעות פנויות` : ''}
+              {data.remainingHours > 0 ? ` · ${formatNum(data.remainingHours)} שעות פנויות` : ''}
             </p>
           </div>
         </div>
@@ -402,7 +403,7 @@ export function RoleStep({
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-3">
                         <span className="px-3 py-1 rounded-full text-label-sm font-bold bg-tertiary-fixed text-on-tertiary-fixed">
-                          {selectedRole.remainingHours} שעות
+                          {formatNum(selectedRole.remainingHours)} שעות
                         </span>
                         <button
                           type="button"
@@ -464,7 +465,7 @@ export function RoleStep({
                                       : 'bg-surface-container-high text-on-surface-variant'
                                   }`}
                                 >
-                                  {role.remainingHours} שעות
+                                  {formatNum(role.remainingHours)} שעות
                                 </span>
                               </td>
                             </tr>
@@ -782,8 +783,8 @@ function CheckboxLine({
   onToggle: (checked: boolean) => void;
 }) {
   const countLabel = kind === 'gemul'
-    ? `${line.remainingCount} גמולים`
-    : `${line.remainingCount} תפקידים`;
+    ? `${formatNum(line.remainingCount)} גמולים`
+    : `${formatNum(line.remainingCount)} תפקידים`;
   return (
     <label className="flex items-center justify-between gap-2 p-3 rounded-lg border border-outline-variant cursor-pointer hover:bg-surface-container-low">
       <span className="flex items-center gap-2 text-body-md">

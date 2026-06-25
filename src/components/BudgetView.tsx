@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
+import { formatNum } from '@/lib/formatNum';
 import type { BudgetRow } from '@/app/api/budget/route';
 
 // ── Top Nav ─────────────────────────────────────────────────────────────────
@@ -175,7 +176,7 @@ export function BudgetView({
               <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm border border-outline-variant/50 flex flex-row-reverse items-center justify-between">
                 <div className="text-right">
                   <p className="text-label-sm text-on-surface-variant">שעות שנותרו</p>
-                  <p className="text-headline-md font-bold text-secondary">{totalHoursLeft.toFixed(2)}</p>
+                  <p className="text-headline-md font-bold text-secondary">{formatNum(totalHoursLeft)}</p>
                 </div>
                 <div className="w-12 h-12 rounded-lg bg-secondary-container text-secondary flex items-center justify-center">
                   <Icon name="timer" className="text-[22px]" />
@@ -238,13 +239,13 @@ export function BudgetView({
                           {row.layer.length ? row.layer.join(', ') : '—'}
                         </td>
                         <td className="p-4 text-center font-bold text-primary text-body-md">
-                          {row.remainingHours > 0 ? row.remainingHours.toFixed(2) : '—'}
+                          {row.remainingHours > 0 ? formatNum(row.remainingHours) : '—'}
                         </td>
                         <td className="p-4 text-center text-on-surface-variant text-body-md">
-                          {row.remainingGemulim > 0 ? row.remainingGemulim.toFixed(2) : '—'}
+                          {row.remainingGemulim > 0 ? formatNum(row.remainingGemulim) : '—'}
                         </td>
                         <td className="p-4 text-center text-on-surface-variant text-body-md">
-                          {row.remainingRoles > 0 ? row.remainingRoles.toFixed(2) : '—'}
+                          {row.remainingRoles > 0 ? formatNum(row.remainingRoles) : '—'}
                         </td>
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-center gap-2">

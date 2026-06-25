@@ -35,6 +35,7 @@ export const EMPLOYEE_FIELDS = {
   address: 'fld1GcJ85ecEm8e1J',
   maritalStatus: 'fld67gJC3ofqb4s8w',
   email: 'fldn6lV7OKDMPjaZS',
+  phone: 'fld6rX2fmXeNM8fNU',
   birthDate: 'fldNraALYMHCAT9O3',
   gender: 'fldp7dNkDDKMMT1Ub',
   ageHours: 'fldaw1LMV6s18X91k', // formula

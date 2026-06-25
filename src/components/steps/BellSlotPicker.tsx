@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
+import { formatNum } from '@/lib/formatNum';
 
 /** A bell-schedule slot as returned by /api/schedule/bell. */
 export interface BellSlot {
@@ -50,7 +51,7 @@ export function BellSlotPicker({
         <span className="font-bold text-on-surface">
           {selected.in}–{selected.out}
         </span>
-        <span className="text-on-surface-variant text-label-sm">{selected.dailyHours} ש׳</span>
+        <span className="text-on-surface-variant text-label-sm">{formatNum(selected.dailyHours)} ש׳</span>
         <button onClick={onClear} aria-label="הסר רצועה" className="mr-auto">
           <Icon name="close" className="text-outline hover:text-error text-[18px]" />
         </button>
@@ -102,7 +103,7 @@ export function BellSlotPicker({
                   {s.in}–{s.out}
                 </span>
                 <span className="text-on-surface-variant text-label-sm mr-auto">
-                  {s.dailyHours} ש׳
+                  {formatNum(s.dailyHours)} ש׳
                 </span>
               </button>
             </li>

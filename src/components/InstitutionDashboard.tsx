@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { formatNum } from '@/lib/formatNum';
 import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
 import type { PositionSummary } from '@/app/api/positions/route';
@@ -354,7 +355,7 @@ function StatCard({ icon, label, value, color }: {
     <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm border border-outline-variant/50 flex flex-row-reverse items-center justify-between">
       <div className="text-right">
         <p className="text-label-sm text-on-surface-variant">{label}</p>
-        <p className={`text-headline-md font-bold ${text[color]}`}>{value}</p>
+        <p className={`text-headline-md font-bold ${text[color]}`}>{typeof value === 'number' ? formatNum(value) : value}</p>
       </div>
       <div className={`w-12 h-12 rounded-lg ${bg[color]} flex items-center justify-center ${text[color]}`}>
         <Icon name={icon} className="text-[22px]" />
@@ -380,7 +381,7 @@ function WeekGrid({ week }: { week: WeekData }) {
           const [oh, om] = sh.out.split(':').map(Number);
           return s + (oh * 60 + om) - (ih * 60 + im);
         }, 0);
-        const dayLabel = totalMin > 0 ? `${(totalMin / 60).toFixed(2)} שע׳` : null;
+        const dayLabel = totalMin > 0 ? `${formatNum(totalMin / 60)} שע׳` : null;
         return (
           <div
             key={day}
@@ -722,11 +723,11 @@ export function InstitutionDashboard({
                                 )}
                               </div>
                             </td>
-                            <td className="p-4 text-center font-bold text-primary text-body-md">{pos.weeklyHours > 0 ? pos.weeklyHours : '—'}</td>
-                            <td className="p-4 text-center text-on-surface-variant text-body-md">{pos.frontalHours > 0 ? pos.frontalHours : '—'}</td>
-                            <td className="p-4 text-center text-on-surface-variant text-body-md">{pos.individualHours > 0 ? pos.individualHours : '—'}</td>
-                            <td className="p-4 text-center text-on-surface-variant text-body-md">{pos.stayHoursHome > 0 ? pos.stayHoursHome : '—'}</td>
-                            <td className="p-4 text-center text-on-surface-variant text-body-md">{pos.stayHoursInstitution > 0 ? pos.stayHoursInstitution : '—'}</td>
+                            <td className="p-4 text-center font-bold text-primary text-body-md">{pos.weeklyHours > 0 ? formatNum(pos.weeklyHours) : '—'}</td>
+                            <td className="p-4 text-center text-on-surface-variant text-body-md">{pos.frontalHours > 0 ? formatNum(pos.frontalHours) : '—'}</td>
+                            <td className="p-4 text-center text-on-surface-variant text-body-md">{pos.individualHours > 0 ? formatNum(pos.individualHours) : '—'}</td>
+                            <td className="p-4 text-center text-on-surface-variant text-body-md">{pos.stayHoursHome > 0 ? formatNum(pos.stayHoursHome) : '—'}</td>
+                            <td className="p-4 text-center text-on-surface-variant text-body-md">{pos.stayHoursInstitution > 0 ? formatNum(pos.stayHoursInstitution) : '—'}</td>
                             <td className="p-4 text-on-surface-variant text-body-md">{formatDate(pos.submittedAt)}</td>
                             <td className="p-4" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-2">

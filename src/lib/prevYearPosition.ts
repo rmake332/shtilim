@@ -1,5 +1,5 @@
 import { unstable_cache } from 'next/cache';
-import { listRecords } from '@/lib/airtable/client';
+import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, PREV_YEAR_FIELDS } from '@/lib/airtable/schema';
 import { durationToHHMM } from '@/lib/schedule/time';
 import type { ShiftData } from '@/lib/formTypes';
@@ -66,10 +66,22 @@ function normalize(s: string): string {
   return s.trim().replace(/\s+/g, ' ');
 }
 
-/** Fetch all prior-year rows once and cache for 30 minutes (table is read-only). */
-const fetchAllPrevYearRows = unstable_cache(
-  async () => listRecords(TABLES.prevYearPositions, { fields: allFields() }),
-  ['prev-year-positions-all-v2'],
+/**
+ * Fetch the prior-year rows for ONE employee (filtered in Airtable by ת.ז.), cached per
+ * tz for 30 minutes (table is read-only). ת.ז. is highly selective, so this returns a
+ * handful of rows instead of scanning all ~3785 rows across ~38 pages (~55s cold).
+ * Matches the tz both as given and as bare digits (leading zeros vary in source data).
+ */
+const fetchPrevYearRowsByTz = unstable_cache(
+  async (tz: string) => {
+    const digits = tz.replace(/\D/g, '');
+    const variants = Array.from(new Set([tz, digits].filter(Boolean)));
+    const filterByFormula = variants.length
+      ? `OR(${variants.map((v) => `{${PREV_YEAR_FIELDS.tz}}="${escapeFormulaValue(v)}"`).join(',')})`
+      : undefined;
+    return listRecords(TABLES.prevYearPositions, { filterByFormula, fields: allFields() });
+  },
+  ['prev-year-positions-by-tz-v1'],
   { revalidate: 1800 },
 );
 
@@ -84,16 +96,18 @@ export async function getPrevYearPosition(
   mosadName: string,
   requestId?: string,
 ): Promise<PrevYearPosition | null> {
-  const rows = await fetchAllPrevYearRows();
+  const rows = await fetchPrevYearRowsByTz(tz);
 
-  const normTz = normalize(tz);
+  const tzDigits = tz.replace(/\D/g, '');
   const normRole = normalize(roleTitle);
   const normCategory = normalize(category);
   const normMosad = normalize(mosadName);
 
   for (const row of rows) {
     const f = row.fields;
-    if (normalize(str(f[PREV_YEAR_FIELDS.tz])) !== normTz) continue;
+    // Match tz robustly: source data and form may differ on leading zeros.
+    const rowTzDigits = str(f[PREV_YEAR_FIELDS.tz]).replace(/\D/g, '');
+    if (rowTzDigits !== tzDigits) continue;
     if (normalize(str(f[PREV_YEAR_FIELDS.role])) !== normRole) continue;
     if (normalize(str(f[PREV_YEAR_FIELDS.category])) !== normCategory) continue;
     if (normalize(str(f[PREV_YEAR_FIELDS.mosad])) !== normMosad) continue;

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
+import { formatNum } from '@/lib/formatNum';
 import { EmployeeData, RoleData, ScheduleData, YouthDocs } from '@/lib/formTypes';
 import { maskTzClient } from '@/lib/maskClient';
 import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
@@ -186,6 +187,7 @@ export function SummaryStep({
               <Item label="שם מלא" value={employee.name} />
               <Item label="מספר זהות" value={`ת.ז. ${maskTzClient(employee.tz)}`} />
               <Item label="דוא״ל" value={employee.email} />
+              <Item label="טלפון" value={employee.phone} />
               <Item label="מצב משפחתי" value={employee.maritalStatus} />
               <Item label="תאריך תחילת חוזה" value={employee.contractStartDate} />
               <Item label="ילדים מתחת לגיל 14" value={employee.childrenUnder14} />
@@ -215,7 +217,7 @@ export function SummaryStep({
               <Item label="קטגוריה" value={role.category} />
               <Item label="סמל מוסד" value={role.symbolLabel} />
               <Item label="שכבה" value={role.layer} />
-              <Item label="יתרת שעות" value={`${role.remainingHours} שעות`} />
+              <Item label="יתרת שעות" value={`${formatNum(role.remainingHours)} שעות`} />
               {role.salaryType && <Item label="סוג שכר" value={role.salaryType} />}
               {role.tariff && <Item label="תעריף" value={role.tariff} />}
               {role.ranking && <Item label="דירוג" value={role.ranking} />}
@@ -291,7 +293,7 @@ export function SummaryStep({
             <div className="flex justify-between items-end mb-6">
               <span className="opacity-80">סה״כ שעות לניצול</span>
               <span className="text-display-lg-mobile font-bold text-on-tertiary-container">
-                {schedule.weeklyHours}
+                {formatNum(schedule.weeklyHours)}
               </span>
             </div>
             {hasBreakdown && (
@@ -302,12 +304,10 @@ export function SummaryStep({
                 <Row label="שהייה מהבית" value={schedule.stayHoursHome} />
                 <Row
                   label="סה״כ שעות שבועיות"
-                  value={
-                    Number((schedule.frontalHours + schedule.individualHours + schedule.stayHoursInstitution + schedule.stayHoursHome).toFixed(2))
-                  }
+                  value={schedule.frontalHours + schedule.individualHours + schedule.stayHoursInstitution + schedule.stayHoursHome}
                 />
                 {schedule.jobPercent > 0 && (
-                  <Row label="אחוז משרה" value={`${Math.round(schedule.jobPercent)}%`} />
+                  <Row label="אחוז משרה" value={`${formatNum(schedule.jobPercent)}%`} />
                 )}
               </>
             )}
@@ -441,7 +441,7 @@ function Row({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex justify-between py-1">
       <span className="opacity-80 text-label-lg">{label}</span>
-      <span className="font-bold">{value}</span>
+      <span className="font-bold">{typeof value === 'number' ? formatNum(value) : value}</span>
     </div>
   );
 }

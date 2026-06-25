@@ -36,7 +36,12 @@ export const getSymbolsForInstitution = unstable_cache(
     }
     if (symbolIds.size === 0) return [];
 
+    // Fetch only the symbol records we actually need (by RECORD_ID), not the whole table.
+    const idFilter = `OR(${Array.from(symbolIds)
+      .map((id) => `RECORD_ID()="${escapeFormulaValue(id)}"`)
+      .join(',')})`;
     const symbols = await listRecords(TABLES.institutionSymbols, {
+      filterByFormula: idFilter,
       maxRecords: 500,
       fields: [SYMBOL_FIELDS.displayName, SYMBOL_FIELDS.symbolCode, SYMBOL_FIELDS.institutionName],
     });
