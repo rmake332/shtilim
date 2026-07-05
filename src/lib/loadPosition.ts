@@ -7,6 +7,7 @@ import {
   SCHEDULE_FIELDS,
   BUDGET_FIELDS,
 } from '@/lib/airtable/schema';
+import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
 // מוצ"ש included so regular-type schedules round-trip in edit mode.
@@ -102,6 +103,9 @@ export async function loadPosition(
     contractStartDate: strField(pf[POSITION_FIELDS.contractStartDate]),
     youthRulesAcknowledged: true,
     fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
+    existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
+    existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
+    existingYouthDocs: existingYouthDocsFromFields(empFields),
   };
 
   const roleIds = linkIds(pf[POSITION_FIELDS.roleLink]);
@@ -137,6 +141,7 @@ export async function loadPosition(
     remainingHours: currentHours,
     layer: strField(pf[POSITION_FIELDS.layer]),
     subRole: strField(pf[POSITION_FIELDS.subRole]),
+    landbergApproval: strField(pf[POSITION_FIELDS.subRole]) ? 'כן' : '',
     selectedGemulIds: gemulIds,
     selectedGemulTitles: linkTitles(pf[POSITION_FIELDS.bonusesLink]),
     selectedExtraRoleIds: extraRoleIds,
@@ -150,6 +155,8 @@ export async function loadPosition(
     ranking: strField(budgetFields[BUDGET_FIELDS.ranking]) || null,
     seniority: strField(budgetFields[BUDGET_FIELDS.seniority]) || null,
     hasMinistryFile: '',
+    licenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
+    contractEndDate: strField(pf[POSITION_FIELDS.contractEndDate]),
   };
 
   const week: Record<string, { in: string; out: string }[]> = {};

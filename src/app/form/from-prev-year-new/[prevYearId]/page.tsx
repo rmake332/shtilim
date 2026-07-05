@@ -1,28 +1,36 @@
 import { notFound } from 'next/navigation';
 import { resolveInstitutionByToken } from '@/lib/institution';
+import { loadPrevYearForNewRole } from '@/lib/loadPrevYearForNewRole';
 import { getEmployeeById } from '@/lib/employees';
 import { Wizard } from '@/components/Wizard';
 import type { EmployeeData } from '@/lib/formTypes';
 
 /**
- * /form/[token]/new — הוספת תקן חדש (הטופס המקורי).
- * Query param: ?employee=<recordId> — טוען עובד קיים מראש ומדלג לשלב תפקיד.
+ * /form/from-prev-year-new/[prevYearId] — open a BRAND-NEW position for the same employee at
+ * the same institution as a תשפ"ו row, without carrying over the role or schedule.
+ *
+ * Entry point for the "הוסף תקן חדש לשנה זו" button in the תקנים תשפו table. Only the
+ * institution token and employee are derived server-side from the row; the secretary picks
+ * the role and enters hours from scratch, same as a plain new position. On submit the row is
+ * marked "נוסף תקן חדש" (no roleId carried over means it never matches as "same role").
  */
-export default async function NewPositionPage({
+export default async function FromPrevYearNewRolePage({
   params,
-  searchParams,
 }: {
-  params: { token: string };
-  searchParams: { employee?: string };
+  params: { prevYearId: string };
 }) {
-  const token = decodeURIComponent(params.token);
-  const institution = await resolveInstitutionByToken(token);
+  const prevYearId = params.prevYearId;
+  if (!/^rec[A-Za-z0-9]{6,}$/.test(prevYearId)) notFound();
+
+  const data = await loadPrevYearForNewRole(prevYearId).catch(() => null);
+  if (!data) notFound();
+
+  const institution = await resolveInstitutionByToken(data.token);
   if (!institution) notFound();
 
   let initialEmployee: EmployeeData | undefined;
-  const employeeId = searchParams.employee;
-  if (employeeId) {
-    const details = await getEmployeeById(employeeId);
+  if (data.employeeId) {
+    const details = await getEmployeeById(data.employeeId);
     if (details) {
       initialEmployee = {
         recordId: details.id,
@@ -48,11 +56,12 @@ export default async function NewPositionPage({
 
   return (
     <Wizard
-      token={token}
+      token={data.token}
       institution={institution}
       mode="new"
+      startStep="employee"
       initialEmployee={initialEmployee}
-      startStep={initialEmployee ? 'role' : undefined}
+      prevYearTrackingId={data.prevYearRecordId}
     />
   );
 }

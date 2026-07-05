@@ -35,6 +35,7 @@ export default async function FromPrevYearPage({
       initialRole={data.role}
       initialSchedule={data.schedule}
       initialPrevYear={data.prevYear}
+      ambiguousSymbols={data.ambiguousSymbols}
     />
   );
 }

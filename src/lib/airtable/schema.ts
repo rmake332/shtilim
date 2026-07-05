@@ -41,7 +41,62 @@ export const EMPLOYEE_FIELDS = {
   ageHours: 'fldaw1LMV6s18X91k', // formula
   institution: 'fld5nl16DpoM7Xn1h',
   fatherPosition: 'fldmjgP5oDc49Gmz1', // משרת אב (checkbox) — adds 2h to entered hours
+  licenseNumber: 'fldEVNaTqjZ9XqWsu', // מס' רישיון — קלינאות תקשורת / ריפוי בעיסוק
+  // Professional-license/qualification attachments, tied to the position's תת-תפקיד.
+  // Filed on the EMPLOYEE (reused across positions/years) — not re-requested if already on file.
+  docHealthLicenseClinic: 'fldC1g9HcVxdpRMpd', // רישיון משרד הבריאות קלינאות
+  docHealthLicenseOT: 'fldwFyObtzxSxVqre', // רישיון משרד הבריאות (ריפוי בעיסוק)
+  docArtTherapyMasters: 'fldabnKaTq0KGh3E5', // אישור תואר שני בטיפול
+  docArtTherapyInternship: 'fldA4idheSGsMDHAm', // אישור 960 שעות סטאז'
+  docSocialWorkerReg: 'fld8nuuhTs2er90Rx', // תעודת רישום משרד הרווחה
+  // Youth/role document attachments (multipleAttachments), filed on the EMPLOYEE (reused
+  // across positions/years) — not re-requested if already on file.
+  docEducationalInstitution: 'fldKu5XvvJNEd1vDV', // אישור ממוסד לימודי - נוער
+  docMedical: 'fldHVsFFxOfkDYO4H', // אישור רפואי- נוער
+  docNoViolence: 'fld3LLyKU8wcbQXdk', // אישור-העדר עבירות אלימות
+  docPoliceNoSexOffense: 'fldZBF1Fw0aCcuONK', // אישור משטרה-העדר עבירות מין
 } as const;
+
+/**
+ * Professional documents required for specific תת-תפקיד (subRole) values — filed on the
+ * EMPLOYEE record (רשימת עובדים), reused across positions/years, not re-requested once on file.
+ * `requiresLicenseNumber`: also prompt for EMPLOYEE_FIELDS.licenseNumber (shared by both
+ * license-requiring sub-roles).
+ */
+export const SUB_ROLE_DOC_FIELDS = [
+  {
+    subRole: 'קלינאות תקשורת',
+    fieldId: EMPLOYEE_FIELDS.docHealthLicenseClinic,
+    label: 'רישיון משרד הבריאות',
+    requiresLicenseNumber: true,
+  },
+  {
+    subRole: 'ריפוי בעיסוק',
+    fieldId: EMPLOYEE_FIELDS.docHealthLicenseOT,
+    label: 'רישיון משרד הבריאות',
+    requiresLicenseNumber: true,
+  },
+  {
+    subRole: 'מטפל/ת באומנות',
+    fieldId: EMPLOYEE_FIELDS.docArtTherapyMasters,
+    label: 'אישור תואר שני בטיפול',
+    requiresLicenseNumber: false,
+  },
+  {
+    subRole: 'מטפל/ת באומנות',
+    fieldId: EMPLOYEE_FIELDS.docArtTherapyInternship,
+    label: "אישור 960 שעות סטאז'",
+    requiresLicenseNumber: false,
+  },
+  {
+    subRole: 'עובדת סוציאלית',
+    fieldId: EMPLOYEE_FIELDS.docSocialWorkerReg,
+    label: 'תעודת רישום משרד הרווחה',
+    requiresLicenseNumber: false,
+  },
+] as const;
+
+export type SubRoleDocDef = (typeof SUB_ROLE_DOC_FIELDS)[number];
 
 /** תקנים פעילים fields */
 export const POSITION_FIELDS = {
@@ -55,9 +110,10 @@ export const POSITION_FIELDS = {
   roleLink: 'fldelhbayZ5YBxIqw', // → תקציב התחלתי
   symbolLink: 'fldEVBPoFW1nUcMJh', // → סמל מוסד
   contractStartDate: 'fld1MIv38C6TWkceL',
+  contractEndDate: 'fld5SDq6KJqPS8Vb2', // תאריך סיום העסקה — חובה למילוי מקום לתקופה מוגבלת
   childrenUnder14: 'fld4tBs8ZD7meiFG6', // singleSelect כן/לא
   layer: 'fldcbVOaF1RXu7Lrb', // שכבה (manual fallback)
-  subRole: 'fldNEsEr5LCQujJmN', // תת תפקיד (פרא)
+  subRole: 'fldo5YfqMeJSd9e4W', // תת-תפקיד (singleSelect: קלינאות תקשורת / ריפוי בעיסוק / מטפל-ת באומנות / מטפל-ת רגשית / פיזיו / עובדת סוציאלית / הדרכה קלינאות / הדרכה ריפוי בעיסוק)
   weeklyHours: 'fldd2cW5PIKabwmMv', // שעות שבועיות
   totalUtilizedHours: 'fldOijiio8e3LTzr3', // סה"כ שעות לניצול מהתקציב
   motherPosition: 'fldD59TOuspojEHZV', // משרת אם (singleLineText — "כן"/"לא")
@@ -80,53 +136,57 @@ export const POSITION_FIELDS = {
   systemUpdateDate: 'fldgoevjfnIveWkp4', // תאריך עדכון מערכת (date) — edit mode
   updateReason: 'fldbAkB0EJBSnbyg6', // סיבת עדכון (singleSelect) — edit mode
   hasMinistryFile: 'fld4RpO0teYLfUQ8C', // קיים תיק במשרד החינוך (כן/לא)
-  // Youth-employee document attachments (multipleAttachments) — uploaded post-create.
-  docEducationalInstitution: 'fldKu5XvvJNEd1vDV', // אישור ממוסד לימודי - נוער
-  docMedical: 'fldHVsFFxOfkDYO4H', // אישור רפואי- נוער
-  docNoViolence: 'fld3LLyKU8wcbQXdk', // אישור-העדר עבירות אלימות
-  docPoliceNoSexOffense: 'fldZBF1Fw0aCcuONK', // אישור משטרה-העדר עבירות מין
+  // Youth-employee document attachment — uploaded post-create.
   docEmployment: 'fldhzxp5c6BM6EREa', // נתוני העסקה — חובה לעובד חדש בפרא/הוראה
   // weekly schedule durations (3 shifts/day) — keyed [day][shift]
 } as const;
 
 /**
- * Document attachment fields, in display order, with their show conditions.
- * All render on the employee step: age/gender come from the employee, and the
- * violence-cert condition uses the INSTITUTION's layer (known from the token),
- * not the role's — so a role doesn't need to be chosen first.
- * When shown, every field is mandatory.
+ * Youth/role document attachments, in display order, with their show conditions.
+ * Filed on the EMPLOYEE record (רשימת עובדים) — reused across positions/years, not
+ * re-requested once already on file (same pattern as SUB_ROLE_DOC_FIELDS).
+ * Age/gender come from the employee; the violence-cert and police-cert conditions
+ * use the INSTITUTION's layer (known from the token), not the role's — so a role
+ * doesn't need to be chosen first. When shown, every field is mandatory.
+ * `menoExcluded`: never requested for institutions whose layer is מעון, regardless
+ * of the base condition (age/gender).
  */
 export const DOC_FIELDS = [
   {
     key: 'docEducationalInstitution',
-    fieldId: POSITION_FIELDS.docEducationalInstitution,
+    fieldId: EMPLOYEE_FIELDS.docEducationalInstitution,
     label:
       'אישור לימודים: אישור ממקום לימודו של הנער המופיע בו שעות לימוד הנער.\nחל איסור חוקי להעסיק בזמן שעות לימוד הנער.',
     condition: 'youth', // age 15–17 (>=15, <18)
+    menoExcluded: false,
   },
   {
     key: 'docMedical',
-    fieldId: POSITION_FIELDS.docMedical,
+    fieldId: EMPLOYEE_FIELDS.docMedical,
     label: 'צרוף אישור רפואי המאשר העסקתו של הנער',
     condition: 'youth', // age 15–17 (>=15, <18)
+    menoExcluded: false,
   },
   {
     key: 'docPoliceNoSexOffense',
-    fieldId: POSITION_FIELDS.docPoliceNoSexOffense,
+    fieldId: EMPLOYEE_FIELDS.docPoliceNoSexOffense,
     label: 'אישור משטרה - העדר עבירות מין',
     condition: 'male', // gender = זכר
+    menoExcluded: true, // לא נדרש במוסדות מסוג מעון
   },
   {
     key: 'docNoViolence',
-    fieldId: POSITION_FIELDS.docNoViolence,
+    fieldId: EMPLOYEE_FIELDS.docNoViolence,
     label: 'אישור העדר עבירות אלימות',
     condition: 'kindergartenLayer', // institution layer = גנים
+    menoExcluded: true, // לא נדרש במוסדות מסוג מעון
   },
   {
     key: 'docEmployment',
     fieldId: POSITION_FIELDS.docEmployment,
     label: 'נתוני העסקה',
     condition: 'newEmployeeParaOrTeaching', // עובד חדש + קטגוריה פרא/הוראה
+    menoExcluded: false,
   },
 ] as const;
 
@@ -221,12 +281,15 @@ export const CATEGORY = {
   invoice: 'חשבונית',
   roles: 'תפקידים',
   paraGemul: 'גמולי פרא',
+  temporarySubstitute: 'מילוי מקום לתקופה מוגבלת',
 } as const;
 
 export const SCHEDULE_TYPE = {
   regular: 'רגיל',
   teaching: 'הוראה',
   para: 'פרא',
+  /** הוראה - לוח פרא: הזנת שעות והזנת מערכת כמו פרא (הקלדה + נוסחת ÷45), אך אופק מחושב כמו הוראה. */
+  teachingParaSchedule: 'הוראה - לוח פרא',
   deputy1: 'סגן ראשון',
   deputy2: 'סגן שני',
   manager: 'מנהל/ת',

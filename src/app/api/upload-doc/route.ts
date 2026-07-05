@@ -4,8 +4,14 @@ import { getRecord, uploadAttachment, escapeFormulaValue, listRecords } from '@/
 import { TABLES, POSITION_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 
-/** Field IDs that may receive an upload — restricted to the document fields defined in DOC_FIELDS. */
-const ALLOWED_FIELD_IDS = new Set<string>(DOC_FIELDS.map((d) => d.fieldId));
+/**
+ * Field IDs that may receive an upload — restricted to the position-scoped document
+ * fields defined in DOC_FIELDS (currently only נתוני העסקה; the youth/role documents
+ * are filed on the employee via /api/upload-employee-doc instead).
+ */
+const ALLOWED_FIELD_IDS = new Set<string>(
+  DOC_FIELDS.filter((d) => d.key === 'docEmployment').map((d) => d.fieldId),
+);
 /** Server-side cap mirroring the client (Airtable upload-attachment limit ~5MB). */
 const MAX_DOC_BYTES = 5 * 1024 * 1024;
 

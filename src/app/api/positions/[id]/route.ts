@@ -10,6 +10,7 @@ import {
 } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { submitForm } from '@/lib/submit';
+import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
@@ -102,6 +103,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       contractStartDate: strField(pf[POSITION_FIELDS.contractStartDate]),
       youthRulesAcknowledged: true, // pre-acknowledged on original submission
       fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
+      existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
+      existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
+      existingYouthDocs: existingYouthDocsFromFields(empFields),
     };
 
     // RoleData — roleId and symbolId from the linked records
@@ -129,6 +133,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       remainingHours: currentHours,
       layer: strField(pf[POSITION_FIELDS.layer]),
       subRole: strField(pf[POSITION_FIELDS.subRole]),
+      landbergApproval: strField(pf[POSITION_FIELDS.subRole]) ? 'כן' : '',
       selectedGemulIds: gemulIds,
       selectedGemulTitles: linkTitles(pf[POSITION_FIELDS.bonusesLink]),
       selectedExtraRoleIds: extraRoleIds,
@@ -142,6 +147,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ranking: null,
       seniority: null,
       hasMinistryFile: '',
+      licenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
+      contractEndDate: strField(pf[POSITION_FIELDS.contractEndDate]),
     };
 
     // ScheduleData — reconstruct week from duration fields (seconds → "HH:MM")
@@ -333,6 +340,7 @@ async function updatePosition(
       [EMPLOYEE_FIELDS.maritalStatus]: employee.maritalStatus || undefined,
       [EMPLOYEE_FIELDS.gender]:        employee.gender        || undefined,
       [EMPLOYEE_FIELDS.birthDate]:     employee.birthDate     || undefined,
+      [EMPLOYEE_FIELDS.licenseNumber]: role.licenseNumber ? Number(role.licenseNumber) : undefined,
     };
     Object.keys(empFields).forEach((k) => empFields[k] === undefined && delete empFields[k]);
     logger.info({ requestId, employeeId, empFields }, 'updating employee fields');
@@ -341,6 +349,7 @@ async function updatePosition(
 
   const fields: Record<string, unknown> = {
     [POSITION_FIELDS.contractStartDate]: employee.contractStartDate || undefined,
+    [POSITION_FIELDS.contractEndDate]: role.contractEndDate || undefined,
     [POSITION_FIELDS.childrenUnder14]: employee.childrenUnder14 || undefined,
     [POSITION_FIELDS.roleLink]: role.roleId ? [role.roleId] : undefined,
     [POSITION_FIELDS.symbolLink]: role.symbolId ? [role.symbolId] : undefined,

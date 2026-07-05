@@ -4,8 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import { formatNum } from '@/lib/formatNum';
-import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate } from '@/lib/formTypes';
-import { CATEGORY, DOC_FIELDS, POSITION_FIELDS } from '@/lib/airtable/schema';
+import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate, subRoleDocsFor } from '@/lib/formTypes';
+import { CATEGORY, DOC_FIELDS, POSITION_FIELDS, SCHEDULE_TYPE } from '@/lib/airtable/schema';
 import { DocUpload } from '@/components/steps/DocUpload';
 import type { PrevYearPosition } from '@/lib/prevYearPosition';
 
@@ -50,8 +50,9 @@ interface ExtraLine {
 }
 
 const LAYER_OPTIONS = ['גנים', 'יסודי', 'חטיבה', 'שכר יסוד'];
-const PARA_CATEGORY = 'פרא רפואי';
 const GEMUL_ALLOWED_CATEGORIES = new Set(['הוראה', 'פרא רפואי']);
+/** תת-תפקיד שדורש אישור אפרת ולנדברג לפני המשך. */
+const LANDBERG_SUB_ROLES = new Set(['מטפל/ת רגשית', 'מטפל/ת באומנות']);
 
 export function RoleStep({
   token,
@@ -61,6 +62,7 @@ export function RoleStep({
   institutionLayer,
   isNewEmployee,
   lockedRole = false,
+  restrictedSymbols,
   docs,
   onDocsChange,
   onNext,
@@ -76,6 +78,13 @@ export function RoleStep({
   isNewEmployee?: boolean;
   /** from-prev-year flow: the role is preloaded and cannot be changed (no symbol/search/table). */
   lockedRole?: boolean;
+  /**
+   * from-prev-year flow, ambiguous case: same role+category matched several סמלי מוסד in
+   * תקציב התחלתי (the תשפ"ו row carries no סמל to disambiguate). Restricts the symbol
+   * dropdown to just these candidates instead of fetching every symbol for the institution;
+   * once the secretary picks one, the matching role auto-selects.
+   */
+  restrictedSymbols?: { id: string; label: string }[];
   docs: YouthDocs;
   onDocsChange: (docs: YouthDocs) => void;
   onNext: (data: RoleData, prevYear?: PrevYearPosition) => void;
@@ -102,7 +111,13 @@ export function RoleStep({
   const [subRoleChoices, setSubRoleChoices] = useState<string[]>([]);
 
   // Load symbols once. Auto-select if only one exists.
+  // Ambiguous prev-year case: skip the fetch and use the restricted candidate list instead.
   useEffect(() => {
+    if (restrictedSymbols) {
+      setSymbols(restrictedSymbols);
+      setSymbolsLoading(false);
+      return;
+    }
     setSymbolsLoading(true);
     fetch(`/api/symbols?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
@@ -116,7 +131,7 @@ export function RoleStep({
       .catch(() => setSymbols([]))
       .finally(() => setSymbolsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, restrictedSymbols]);
 
   // Load roles when a symbol is picked.
   useEffect(() => {
@@ -140,15 +155,21 @@ export function RoleStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load subRole choices from Airtable when a para role is selected.
+  // Load subRole choices from Airtable. גנים: לא מוצג. יסודי: כל הערכים.
+  // חטיבה: רק ערכי "הדרכה..." ורק כשהתפקיד הנבחר מכיל "הדרכ".
   useEffect(() => {
-    if (data.category !== PARA_CATEGORY) { setSubRoleChoices([]); return; }
-    fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=fldNEsEr5LCQujJmN`)
+    if (data.layer !== 'יסודי' && data.layer !== 'חטיבה') { setSubRoleChoices([]); return; }
+    fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${POSITION_FIELDS.subRole}`)
       .then((r) => r.json())
-      .then((j) => setSubRoleChoices(j.choices ?? []))
+      .then((j) => {
+        const choices: string[] = j.choices ?? [];
+        setSubRoleChoices(
+          data.layer === 'חטיבה' ? choices.filter((c) => c.includes('הדרכ')) : choices,
+        );
+      })
       .catch(() => setSubRoleChoices([]));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.roleId]);
+  }, [data.roleId, data.layer]);
 
   // Check for a prior-year position whenever a role is selected.
   // Skipped entirely when the role is locked (from-prev-year flow already loaded it).
@@ -203,10 +224,39 @@ export function RoleStep({
 
   function pickSymbol(id: string) {
     const sym = symbols.find((s) => s.id === id);
-    setData({ ...emptyRole(), symbolId: id, symbolLabel: sym?.label ?? '' });
+    // Ambiguous prev-year case: keep the prefilled roleTitle/category/subRole/etc. so the
+    // role auto-selects below once its options load for this symbol.
+    setData(restrictedSymbols
+      ? (d) => ({ ...d, symbolId: id, symbolLabel: sym?.label ?? '', roleId: '' })
+      : { ...emptyRole(), symbolId: id, symbolLabel: sym?.label ?? '' });
     setRoleQuery('');
     setError('');
   }
+
+  // Ambiguous prev-year case: once roles load for the chosen symbol, auto-select the one
+  // matching the original roleTitle+category so the secretary doesn't have to search again.
+  useEffect(() => {
+    if (!restrictedSymbols || !data.symbolId || data.roleId || roles.length === 0) return;
+    const found = roles.find((r) => r.title === data.roleTitle && r.category === data.category);
+    if (found && found.remainingHours > 0) {
+      setData((d) => ({
+        ...d,
+        roleId: found.id,
+        scheduleType: found.scheduleType,
+        remainingHours: found.remainingHours,
+        layer: found.layer[0] ?? institutionLayer ?? '',
+        paraBoard: found.paraBoard,
+        ofekChadash: found.ofekChadash,
+        severeDisability: found.severeDisability,
+        bellScheduleNums: found.bellScheduleNums,
+        salaryType: found.salaryType ?? null,
+        tariff: found.tariff ?? null,
+        ranking: found.ranking ?? null,
+        seniority: found.seniority ?? null,
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restrictedSymbols, data.symbolId, roles]);
 
   function pickRole(role: RoleOption) {
     if (role.remainingHours <= 0) {
@@ -224,6 +274,9 @@ export function RoleStep({
       remainingHours: role.remainingHours,
       layer: role.layer[0] ?? institutionLayer ?? '',
       subRole: '',
+      landbergApproval: '',
+      licenseNumber: '',
+      contractEndDate: '',
       paraBoard: role.paraBoard,
       ofekChadash: role.ofekChadash,
       severeDisability: role.severeDisability,
@@ -233,6 +286,13 @@ export function RoleStep({
       ranking: role.ranking ?? null,
       seniority: role.seniority ?? null,
     }));
+    // Drop any uploaded sub-role docs from the previous choice.
+    const stale = subRoleDocsFor(data.subRole);
+    if (stale.length > 0) {
+      const next = { ...docs };
+      stale.forEach((d) => delete next[d.fieldId]);
+      onDocsChange(next);
+    }
   }
 
   const selectedRole = roles.find((r) => r.id === data.roleId);
@@ -250,14 +310,37 @@ export function RoleStep({
     else rolesByCategory.push({ category: role.category, roles: [role] });
   }
   const needsLayer = Boolean(selectedRole && selectedRole.layer.length === 0 && !institutionLayer);
-  const isPara = data.category === PARA_CATEGORY;
+  // גנים + מוסד עם כמה סמלים: יש להזין מערכת שעות (וטופס) נפרד לכל סמל מוסד בנפרד.
+  const showGanimMultiSymbolNotice = Boolean(selectedRole) && data.layer === 'גנים' && symbols.length > 1;
   const canAddGemul = GEMUL_ALLOWED_CATEGORIES.has(data.category);
+  const showSubRole =
+    data.scheduleType === SCHEDULE_TYPE.para &&
+    (data.layer === 'יסודי' || (data.layer === 'חטיבה' && data.roleTitle.includes('הדרכ')));
+
+  const showContractEndDate = data.category === CATEGORY.temporarySubstitute;
 
   const employmentDocDef = DOC_FIELDS.find((d) => d.key === 'docEmployment')!;
   const showMinistryFileQuestion = Boolean(
     isNewEmployee && selectedRole && (data.category === 'פרא רפואי' || data.category === 'הוראה'),
   );
   const showEmploymentDoc = showMinistryFileQuestion && data.hasMinistryFile === 'כן';
+
+  // Professional-license documents tied to the chosen תת-תפקיד, filed on the EMPLOYEE
+  // record. Docs already on file (from a previous position/year) aren't re-requested.
+  const existingSubRoleDocs = new Set(employee?.existingSubRoleDocs ?? []);
+  const allSubRoleDocs = showSubRole ? subRoleDocsFor(data.subRole) : [];
+  const pendingSubRoleDocs = allSubRoleDocs.filter((d) => !existingSubRoleDocs.has(d.fieldId));
+  const alreadyOnFileSubRoleDocs = allSubRoleDocs.filter((d) => existingSubRoleDocs.has(d.fieldId));
+  const needsLicenseNumber = allSubRoleDocs.some((d) => d.requiresLicenseNumber);
+
+  // Prefill the license number already on file for this employee (once), so it isn't
+  // blindly re-requested — the secretary can still edit it.
+  useEffect(() => {
+    if (needsLicenseNumber && !data.licenseNumber && employee?.existingLicenseNumber) {
+      setData((d) => ({ ...d, licenseNumber: employee.existingLicenseNumber }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsLicenseNumber, employee?.existingLicenseNumber]);
 
   function validateAndNext(withPrevYear?: PrevYearPosition) {
     if (!data.roleId) {
@@ -283,12 +366,46 @@ export function RoleStep({
       setError('יש לציין האם קיים תיק במשרד החינוך');
       return;
     }
+    if (showContractEndDate && !data.contractEndDate) {
+      setError('יש להזין את תאריך סיום מילוי המקום');
+      return;
+    }
     if (showEmploymentDoc && !docs['docEmployment']) {
       setError('יש להעלות מסמך נתוני העסקה');
       return;
     }
+    if (showSubRole && !data.subRole) {
+      setError('יש לבחור תת-תפקיד');
+      return;
+    }
+    if (showSubRole && LANDBERG_SUB_ROLES.has(data.subRole)) {
+      if (!data.landbergApproval) {
+        setError('יש לציין האם עבר אישור של אפרת ולנדברג');
+        return;
+      }
+      if (data.landbergApproval === 'לא') {
+        setError('לא ניתן להמשיך ללא אישור של אפרת ולנדברג');
+        return;
+      }
+    }
+    if (needsLicenseNumber && !data.licenseNumber.trim()) {
+      setError('יש להזין מס\' רישיון');
+      return;
+    }
+    for (const doc of pendingSubRoleDocs) {
+      if (!docs[doc.fieldId]) {
+        setError(`יש לצרף ${doc.label}`);
+        return;
+      }
+    }
     const finalData = withPrevYear?.subRole?.trim()
-      ? { ...data, subRole: withPrevYear.subRole.trim() }
+      ? {
+          ...data,
+          subRole: withPrevYear.subRole.trim(),
+          landbergApproval: LANDBERG_SUB_ROLES.has(withPrevYear.subRole.trim())
+            ? ('כן' as const)
+            : data.landbergApproval,
+        }
       : data;
     setError('');
     onNext(finalData, withPrevYear);
@@ -314,6 +431,12 @@ export function RoleStep({
               {data.remainingHours > 0 ? ` · ${formatNum(data.remainingHours)} שעות פנויות` : ''}
             </p>
           </div>
+        </div>
+      )}
+
+      {restrictedSymbols && (
+        <div className="mb-4 p-4 rounded-xl border border-tertiary/40 bg-tertiary-container/30 text-body-sm text-on-surface">
+          התפקיד <b>{data.roleTitle}</b> קיים בכמה סמלי מוסד באותו מוסד. יש לבחור את הסמל הנכון כדי לטעון את השעות הפנויות המתאימות.
         </div>
       )}
 
@@ -481,6 +604,20 @@ export function RoleStep({
         </div>
       )}
 
+      {/* גנים + כמה סמלי מוסד: הזנה נפרדת לכל סמל */}
+      {showGanimMultiSymbolNotice && (
+        <div className="mb-4 p-4 rounded-xl border border-tertiary/40 bg-tertiary-container/30 flex items-start gap-3">
+          <Icon name="info" className="text-tertiary mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-label-lg font-semibold text-on-surface mb-1">שימו לב — מוסד עם כמה סמלים</p>
+            <p className="text-body-sm text-on-surface-variant">
+              במוסד גנים עם כמה סמלים יש להזין מערכת שעות נפרדת לכל סמל מוסד. אם העובד/ת עובד/ת
+              באותו תפקיד בכמה סמלים, יש למלא טופס נפרד לכל סמל בנפרד.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Prior-year search in progress */}
       {selectedRole && prevYearLoading && !loadedPrevYear && (
         <div className="mb-4 p-4 rounded-xl border border-primary/30 bg-primary/5 flex items-center gap-3">
@@ -524,7 +661,11 @@ export function RoleStep({
               onClick={() => {
                 setLoadedPrevYear(prevYear);
                 if (prevYear.subRole) {
-                  setData((d) => ({ ...d, subRole: prevYear.subRole }));
+                  setData((d) => ({
+                    ...d,
+                    subRole: prevYear.subRole,
+                    landbergApproval: LANDBERG_SUB_ROLES.has(prevYear.subRole) ? 'כן' : '',
+                  }));
                 }
               }}
             >
@@ -557,7 +698,7 @@ export function RoleStep({
             title="בטל טעינה"
             onClick={() => {
               setLoadedPrevYear(undefined);
-              setData((d) => ({ ...d, subRole: '' }));
+              setData((d) => ({ ...d, subRole: '', landbergApproval: '' }));
             }}
           >
             <Icon name="close" />
@@ -576,7 +717,7 @@ export function RoleStep({
               <select
                 className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
                 value={data.layer}
-                onChange={(e) => setData((d) => ({ ...d, layer: e.target.value }))}
+                onChange={(e) => setData((d) => ({ ...d, layer: e.target.value, subRole: '', landbergApproval: '' }))}
               >
                 <option value="">בחר שכבה</option>
                 {LAYER_OPTIONS.map((l) => (
@@ -588,6 +729,138 @@ export function RoleStep({
             </div>
           )}
 
+          {/* תאריך סיום מילוי מקום — חובה כשהקטגוריה היא "מילוי מקום לתקופה מוגבלת" */}
+          {showContractEndDate && (
+            <div className="max-w-xs">
+              <label className="text-label-lg text-on-surface block mb-2">
+                תאריך סיום מילוי המקום <span className="text-error">*</span>
+              </label>
+              <input
+                type="date"
+                className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+                value={data.contractEndDate}
+                onChange={(e) => {
+                  setData((d) => ({ ...d, contractEndDate: e.target.value }));
+                  if (error === 'יש להזין את תאריך סיום מילוי המקום') setError('');
+                }}
+              />
+            </div>
+          )}
+
+          {/* תת-תפקיד — חובה כשסוג מערכת השעות "פרא" וגם: יסודי (כל הערכים) או חטיבה+"הדרכ" בשם התפקיד (מסונן לערכי הדרכה). */}
+          {showSubRole && (
+            <div className="max-w-xs">
+              <label className="text-label-lg text-on-surface block mb-2">
+                תת-תפקיד <span className="text-error">*</span>
+              </label>
+              <select
+                className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+                value={data.subRole}
+                onChange={(e) => {
+                  const nextSubRole = e.target.value;
+                  setData((d) => ({ ...d, subRole: nextSubRole, landbergApproval: '', licenseNumber: '' }));
+                  if (error === 'יש לבחור תת-תפקיד') setError('');
+                  // Drop any uploaded sub-role docs that no longer apply to the new choice.
+                  const keep = new Set(subRoleDocsFor(nextSubRole).map((d) => d.fieldId));
+                  const stale = subRoleDocsFor(data.subRole).filter((d) => !keep.has(d.fieldId));
+                  if (stale.length > 0) {
+                    const next = { ...docs };
+                    stale.forEach((d) => delete next[d.fieldId]);
+                    onDocsChange(next);
+                  }
+                }}
+              >
+                <option value="">בחר תת-תפקיד</option>
+                {subRoleChoices.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* אישור אפרת ולנדברג — נדרש למטפל/ת רגשית או מטפל/ת באומנות */}
+          {showSubRole && LANDBERG_SUB_ROLES.has(data.subRole) && (
+            <div>
+              <p className="text-label-lg font-bold text-on-surface mb-3">
+                האם עבר אישור של אפרת ולנדברג?
+              </p>
+              <div className="flex gap-3">
+                {(['כן', 'לא'] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      setData((d) => ({ ...d, landbergApproval: opt }));
+                      if (error === 'יש לציין האם עבר אישור של אפרת ולנדברג' || error === 'לא ניתן להמשיך ללא אישור של אפרת ולנדברג') setError('');
+                    }}
+                    className={`px-6 py-2 rounded-xl border-2 font-bold text-label-lg transition-colors ${
+                      data.landbergApproval === opt
+                        ? 'bg-primary text-on-primary border-primary'
+                        : 'bg-white text-on-surface border-outline hover:border-primary'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              {data.landbergApproval === 'לא' && (
+                <p className="mt-2 text-body-sm text-error flex items-center gap-1">
+                  <Icon name="error" className="text-[16px]" /> לא ניתן להמשיך ללא אישור של אפרת ולנדברג
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* מסמכי הסמכה מקצועית + מס' רישיון — לפי תת-תפקיד. מתויקים בעובד; לא נדרשים שוב אם קיימים. */}
+          {needsLicenseNumber && (
+            <div className="max-w-xs">
+              <label className="text-label-lg text-on-surface block mb-2">
+                מס&apos; רישיון <span className="text-error">*</span>
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+                value={data.licenseNumber}
+                onChange={(e) => {
+                  setData((d) => ({ ...d, licenseNumber: e.target.value }));
+                  if (error === "יש להזין מס' רישיון") setError('');
+                }}
+              />
+            </div>
+          )}
+          {alreadyOnFileSubRoleDocs.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {alreadyOnFileSubRoleDocs.map((d) => (
+                <span
+                  key={d.fieldId}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-tertiary-container/30 text-on-surface text-label-sm"
+                >
+                  <Icon name="check_circle" className="text-tertiary text-[16px]" fill />
+                  {d.label} — קיים בתיק העובד
+                </span>
+              ))}
+            </div>
+          )}
+          {pendingSubRoleDocs.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-gutter gap-y-5">
+              {pendingSubRoleDocs.map((d) => (
+                <DocUpload
+                  key={d.fieldId}
+                  label={d.label}
+                  required
+                  value={docs[d.fieldId]}
+                  error={error === `יש לצרף ${d.label}` ? error : undefined}
+                  onChange={(uploaded) => {
+                    onDocsChange({ ...docs, [d.fieldId]: uploaded });
+                    if (uploaded && error === `יש לצרף ${d.label}`) setError('');
+                  }}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Gemulim — only for הוראה / פרא רפואי */}
           {canAddGemul && (

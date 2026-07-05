@@ -84,3 +84,18 @@ describe("isDocVisible — 'kindergartenLayer'", () => {
     expect(isDocVisible('kindergartenLayer', {})).toBe(false);
   });
 });
+
+describe('isDocVisible — menoExcluded (מעון institutions)', () => {
+  it('hides a male-conditioned doc for מעון when menoExcluded is true', () => {
+    expect(isDocVisible('male', { gender: 'זכר', layer: 'מעון' }, true)).toBe(false);
+  });
+
+  it('still shows a male-conditioned doc for non-מעון institutions when menoExcluded is true', () => {
+    expect(isDocVisible('male', { gender: 'זכר', layer: 'יסודי' }, true)).toBe(true);
+  });
+
+  it('does not affect docs where menoExcluded is false/omitted', () => {
+    expect(isDocVisible('male', { gender: 'זכר', layer: 'מעון' })).toBe(true);
+    expect(isDocVisible('male', { gender: 'זכר', layer: 'מעון' }, false)).toBe(true);
+  });
+});

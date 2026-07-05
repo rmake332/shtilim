@@ -177,6 +177,7 @@ const SCHEDULE_TYPE = {
   regular: 'רגיל',
   teaching: 'הוראה',
   para: 'פרא',
+  teachingParaSchedule: 'הוראה - לוח פרא',
   deputy1: 'סגן ראשון',
   deputy2: 'סגן שני',
   manager: 'מנהל/ת',
@@ -281,8 +282,8 @@ export function ScheduleStep({
   // ----- teaching staff with a bell schedule: pick slots instead of typing times -----
   // Only for the full-timetable teaching type (scheduleType "הוראה"). Roles that are
   // category=הוראה but use a different entry mechanism — סגן ראשון (37.5/40 picker),
-  // מנהל/ת & סגן שני (handled above), or רגיל (manual grid) — must NOT land here even
-  // if they happen to carry a bell-schedule number.
+  // מנהל/ת & סגן שני (handled above), "הוראה - לוח פרא" (typed grid, below), or רגיל
+  // (manual grid) — must NOT land here even if they happen to carry a bell-schedule number.
   if (type === SCHEDULE_TYPE.teaching && role.bellScheduleNums.length > 0) {
     return (
       <BellScheduleGrid
@@ -300,7 +301,7 @@ export function ScheduleStep({
     );
   }
 
-  // ----- schedule-grid types: regular / deputy1 / para / teaching (no bell schedule) -----
+  // ----- schedule-grid types: regular / deputy1 / para / teaching (no bell schedule) / הוראה-לוח פרא -----
   const maxShifts = type === SCHEDULE_TYPE.deputy1 ? 1 : 3;
   return (
     <GridSchedule
@@ -383,7 +384,9 @@ function GridSchedule({
   // Hours that actually count against the budget.
   // For סגן ראשון this is the chosen 37.5/40 — NOT the sum of the entered grid.
   const isDeputy1 = type === 'סגן ראשון';
-  const isParaCat = role.category === 'פרא רפואי';
+  // הוראה - לוח פרא: הזנת שעות והצגתן נעשית כמו פרא (הקלדה + נוסחת ÷45), למרות שהקטגוריה היא הוראה.
+  const isParaSchedule = type === SCHEDULE_TYPE.teachingParaSchedule;
+  const isParaCat = role.category === 'פרא רפואי' || isParaSchedule;
   // פרא: per-day academic hours using the deduction formula; accumulate errors for days < 80 min.
   let paraHours = 0;
   const paraDayErrors: string[] = [];
@@ -452,10 +455,10 @@ function GridSchedule({
     });
   }
 
-  const isPara = role.category === 'פרא רפואי';
-  // Ofek is needed only for real timetable entry: פרא, or teaching with scheduleType "הוראה".
+  const isPara = role.category === 'פרא רפואי' || isParaSchedule;
+  // Ofek is needed only for real timetable entry: פרא, or teaching with scheduleType "הוראה"/"הוראה - לוח פרא".
   // Roles that are category=הוראה but scheduleType סגן ראשון / מנהל/ת do NOT need the calculator.
-  const isTeaching = role.category === 'הוראה' && type === SCHEDULE_TYPE.teaching;
+  const isTeaching = role.category === 'הוראה' && (type === SCHEDULE_TYPE.teaching || isParaSchedule);
   const needsOfek = isPara || isTeaching;
 
   // When entered hours change, invalidate all ofek results so the user must re-run check 1.

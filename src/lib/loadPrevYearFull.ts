@@ -6,10 +6,12 @@ import {
   MOSAD_FIELDS,
   BUDGET_FIELDS,
   EMPLOYEE_FIELDS,
+  SYMBOL_FIELDS,
 } from '@/lib/airtable/schema';
 import { extractWeek, type PrevYearPosition } from '@/lib/prevYearPosition';
 import { emptyRole, emptyEmployee, emptySchedule } from '@/lib/formTypes';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
+import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 
 export interface PrevYearFull {
   /** Resolved institution token (derived server-side from the prior-year row's mosad name). */
@@ -20,6 +22,13 @@ export interface PrevYearFull {
   schedule: ScheduleData;
   /** Full prior-year position — drives the prev-year summary in the schedule step. */
   prevYear: PrevYearPosition;
+  /**
+   * Set only when the same role+category matched more than one סמל מוסד this year (the
+   * תשפ"ו row carries no סמל, so we can't tell which one it actually was). When present,
+   * role.roleId is left empty and the secretary must pick a symbol from this restricted
+   * list before the role can resolve.
+   */
+  ambiguousSymbols?: { id: string; label: string }[];
 }
 
 function numOrNull(v: unknown): number | null {
@@ -96,6 +105,7 @@ export async function loadPrevYearFull(
 
   // 2) ת.ז → רשימת עובדים record (full employee details come from that table via lookups).
   let employee: EmployeeData | null = null;
+  let employeeLicenseNumber = '';
   if (tz) {
     const digits = tz.replace(/\D/g, '');
     const empRecs = await listRecords(
@@ -109,6 +119,7 @@ export async function loadPrevYearFull(
     const e = empRecs[0];
     if (e) {
       const ef = e.fields;
+      employeeLicenseNumber = str(ef[EMPLOYEE_FIELDS.licenseNumber]);
       employee = {
         ...emptyEmployee(),
         recordId: e.id,
@@ -122,13 +133,23 @@ export async function loadPrevYearFull(
         birthDate: str(ef[EMPLOYEE_FIELDS.birthDate]),
         ageHours: Number(ef[EMPLOYEE_FIELDS.ageHours]) || 0,
         fatherPosition: Boolean(ef[EMPLOYEE_FIELDS.fatherPosition]),
+        existingSubRoleDocs: existingSubRoleDocsFromFields(ef),
+        existingLicenseNumber: employeeLicenseNumber,
+        existingYouthDocs: existingYouthDocsFromFields(ef),
         // childrenUnder14 / contractStartDate stay empty → secretary must fill them.
       };
     }
   }
 
   // 3) role name + category + mosad → תקציב התחלתי row → roleId (link) + symbolId.
-  const role: RoleData = { ...emptyRole(), roleTitle, category, subRole };
+  const role: RoleData = {
+    ...emptyRole(),
+    roleTitle,
+    category,
+    subRole,
+    landbergApproval: subRole ? 'כן' : '',
+    licenseNumber: employeeLicenseNumber,
+  };
   const budget = await listRecords(
     TABLES.budget,
     {
@@ -153,12 +174,39 @@ export async function loadPrevYearFull(
     },
     requestId,
   );
-  const match = budget.find((r) => {
+  const matches = budget.filter((r) => {
     const f = r.fields;
     if (!recordLinks(f[BUDGET_FIELDS.institutionLink]).includes(mosadId)) return false;
     if (normalize(str(f[BUDGET_FIELDS.category])) !== category) return false;
     return true;
   });
+  // Distinct סמלי מוסד among the matches — >1 means we can't tell which one תשפ"ו meant.
+  const distinctSymbolIds = Array.from(
+    new Set(matches.flatMap((r) => recordLinks(r.fields[BUDGET_FIELDS.symbolLink]))),
+  );
+  let ambiguousSymbols: { id: string; label: string }[] | undefined;
+  const match = distinctSymbolIds.length > 1 ? undefined : matches[0];
+  if (distinctSymbolIds.length > 1) {
+    const idFilter = `OR(${distinctSymbolIds.map((id) => `RECORD_ID()="${escapeFormulaValue(id)}"`).join(',')})`;
+    const symbolRecs = await listRecords(
+      TABLES.institutionSymbols,
+      {
+        filterByFormula: idFilter,
+        fields: [SYMBOL_FIELDS.displayName, SYMBOL_FIELDS.symbolCode, SYMBOL_FIELDS.institutionName],
+      },
+      requestId,
+    );
+    const byId = new Map(symbolRecs.map((s) => [s.id, s]));
+    ambiguousSymbols = distinctSymbolIds.map((id) => {
+      const rec = byId.get(id);
+      const code = rec ? str(rec.fields[SYMBOL_FIELDS.symbolCode]) : '';
+      const name = rec
+        ? str(rec.fields[SYMBOL_FIELDS.displayName]) || str(rec.fields[SYMBOL_FIELDS.institutionName])
+        : '';
+      const label = [code, name].filter(Boolean).join(' — ') || id;
+      return { id, label };
+    });
+  }
   if (match) {
     const f = match.fields;
     const layer = (Array.isArray(f[BUDGET_FIELDS.layer]) ? str((f[BUDGET_FIELDS.layer] as unknown[])[0]) : str(f[BUDGET_FIELDS.layer]));
@@ -181,6 +229,8 @@ export async function loadPrevYearFull(
   }
   // No budget match (role retired this year) → role keeps text only; the form will ask
   // the secretary to pick a role in the role step.
+  // Ambiguous match (same role+category, several סמלים) → role also keeps text only; the
+  // role step opens unlocked with symbol choices restricted to `ambiguousSymbols`.
 
   // 4) weekly schedule from the day fields + carry the prior-year row id for status update.
   const week = extractWeek(pf);
@@ -203,5 +253,5 @@ export async function loadPrevYearFull(
     stayHours: numOrNull(pf[PREV_YEAR_FIELDS.stayHours]),
   };
 
-  return { token, employee, role, schedule, prevYear };
+  return { token, employee, role, schedule, prevYear, ambiguousSymbols };
 }

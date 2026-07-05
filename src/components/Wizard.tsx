@@ -24,6 +24,15 @@ interface WizardProps {
   /** Prior-year position data (when the form was opened from a תשפ"ו row) — drives the
    *  prev-year summary in the schedule step and highlights the still-missing employee fields. */
   initialPrevYear?: PrevYearPosition;
+  /** From-prev-year flow only: set when the row's role+category matched several סמלי מוסד.
+   *  Keeps the role step unlocked so the secretary can pick the right symbol. */
+  ambiguousSymbols?: { id: string; label: string }[];
+  /**
+   * New-role-from-prev-year flow only: the תשפ"ו row id to mark "נוסף תקן חדש" on submit.
+   * Unlike initialPrevYear, no role/schedule data is prefilled — just tracked for the status
+   * update. Kept alive across role changes (which otherwise reset the schedule).
+   */
+  prevYearTrackingId?: string;
 }
 
 export function Wizard({
@@ -36,6 +45,8 @@ export function Wizard({
   initialRole,
   initialSchedule,
   initialPrevYear,
+  ambiguousSymbols,
+  prevYearTrackingId,
 }: WizardProps) {
   const defaultStart: StepId = mode === 'edit' ? (startStep ?? 'schedule') : (startStep ?? 'employee');
   const [step, setStep] = useState<StepId>(defaultStart);
@@ -46,6 +57,8 @@ export function Wizard({
   const [docs, setDocs] = useState<YouthDocs>({});
   /** True only on the from-prev-year flow: highlight the employee fields תשפ"ו can't supply. */
   const fromPrevYear = Boolean(initialPrevYear) && mode === 'new';
+  /** True when the same role+category matched several סמלי מוסד — role step stays unlocked. */
+  const hasAmbiguousSymbols = (ambiguousSymbols?.length ?? 0) > 0;
 
   const isEdit = mode === 'edit';
 
@@ -102,7 +115,8 @@ export function Wizard({
           mosadName={institution.name}
           institutionLayer={institution.layer}
           isNewEmployee={!isEdit && employee?.recordId === null}
-          lockedRole={fromPrevYear}
+          lockedRole={fromPrevYear && !hasAmbiguousSymbols}
+          restrictedSymbols={fromPrevYear && hasAmbiguousSymbols ? ambiguousSymbols : undefined}
           docs={docs}
           onDocsChange={setDocs}
           onBack={() => setStep('employee')}
@@ -112,7 +126,9 @@ export function Wizard({
             // Otherwise a fresh role choice resets the schedule (and adopts the role's prev-year).
             if (!fromPrevYear) {
               setPrevYear(loadedPrevYear);
-              setSchedule(undefined);
+              // New-role-from-prev-year: carry the tracking id through the reset so submit can
+              // still mark the תשפ"ו row, even though no role/schedule was prefilled from it.
+              setSchedule(prevYearTrackingId ? { ...emptySchedule(), prevYearRecordId: prevYearTrackingId } : undefined);
             }
             setStep('schedule');
           }}

@@ -71,6 +71,18 @@ const MOCK_BUDGET: AirtableRecord[] = [
     },
   },
   {
+    id: 'recRoleTeachingParaSchedule',
+    fields: {
+      [BUDGET_FIELDS.role]: 'מורה שילוב (הוראה - לוח פרא)',
+      [BUDGET_FIELDS.institutionLink]: [{ id: MOCK_MOSAD }],
+      [BUDGET_FIELDS.symbolLink]: [{ id: MOCK_SYMBOL }],
+      [BUDGET_FIELDS.category]: { name: 'הוראה' },
+      [BUDGET_FIELDS.scheduleType]: { name: 'הוראה - לוח פרא' },
+      [BUDGET_FIELDS.remainingHours]: 20,
+      [BUDGET_FIELDS.layer]: [{ name: 'יסודי' }],
+    },
+  },
+  {
     id: 'recRoleDeputy1',
     fields: {
       [BUDGET_FIELDS.role]: 'סגן מנהל ראשון (סגן ראשון)',
@@ -115,6 +127,18 @@ const MOCK_BUDGET: AirtableRecord[] = [
       [BUDGET_FIELDS.category]: { name: 'שכר יסוד' },
       [BUDGET_FIELDS.scheduleType]: { name: 'מילוי מקום' },
       [BUDGET_FIELDS.remainingHours]: 12,
+      [BUDGET_FIELDS.layer]: [{ name: 'יסודי' }],
+    },
+  },
+  {
+    id: 'recRoleTempSubstitute',
+    fields: {
+      [BUDGET_FIELDS.role]: 'ממלאת מקום זמנית (מילוי מקום לתקופה מוגבלת)',
+      [BUDGET_FIELDS.institutionLink]: [{ id: MOCK_MOSAD }],
+      [BUDGET_FIELDS.symbolLink]: [{ id: MOCK_SYMBOL }],
+      [BUDGET_FIELDS.category]: { name: 'מילוי מקום לתקופה מוגבלת' },
+      [BUDGET_FIELDS.scheduleType]: { name: 'רגיל' },
+      [BUDGET_FIELDS.remainingHours]: 15,
       [BUDGET_FIELDS.layer]: [{ name: 'יסודי' }],
     },
   },

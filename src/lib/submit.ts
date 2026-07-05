@@ -84,6 +84,7 @@ export async function submitForm(
         [EMPLOYEE_FIELDS.gender]: employee.gender,
         [EMPLOYEE_FIELDS.birthDate]: employee.birthDate,
         [EMPLOYEE_FIELDS.institution]: [institutionMosadId],
+        ...(role.licenseNumber ? { [EMPLOYEE_FIELDS.licenseNumber]: Number(role.licenseNumber) } : {}),
       },
       requestId,
     );
@@ -98,6 +99,7 @@ export async function submitForm(
     if (employee.maritalStatus) empUpdate[EMPLOYEE_FIELDS.maritalStatus] = employee.maritalStatus;
     if (employee.gender)        empUpdate[EMPLOYEE_FIELDS.gender]        = employee.gender;
     if (employee.birthDate)     empUpdate[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;
+    if (role.licenseNumber)     empUpdate[EMPLOYEE_FIELDS.licenseNumber] = Number(role.licenseNumber);
     if (Object.keys(empUpdate).length > 0) {
       logger.info({ requestId, employeeId }, 'updating existing employee on new-position submit');
       await updateRecord(TABLES.employees, employeeId, empUpdate, requestId);
@@ -112,6 +114,7 @@ export async function submitForm(
     [POSITION_FIELDS.roleLink]: role.roleId ? [role.roleId] : undefined,
     [POSITION_FIELDS.symbolLink]: role.symbolId ? [role.symbolId] : undefined,
     [POSITION_FIELDS.contractStartDate]: employee.contractStartDate || undefined,
+    [POSITION_FIELDS.contractEndDate]: role.contractEndDate || undefined,
     [POSITION_FIELDS.childrenUnder14]: employee.childrenUnder14,
     [POSITION_FIELDS.layer]: role.layer || undefined,
     [POSITION_FIELDS.subRole]: role.subRole || undefined,

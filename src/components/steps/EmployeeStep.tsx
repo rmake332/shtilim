@@ -110,6 +110,9 @@ export function EmployeeStep({
           birthDate: e.birthDate ?? '',
           ageHours: Number(e.ageHours) || 0,
           fatherPosition: Boolean(e.fatherPosition),
+          existingSubRoleDocs: e.existingSubRoleDocs ?? [],
+          existingLicenseNumber: e.licenseNumber ?? '',
+          existingYouthDocs: e.existingYouthDocs ?? [],
         }));
         // Gender is a new field — open edit mode automatically if it's missing.
         if (!gender) setEditing(true);
@@ -210,8 +213,8 @@ export function EmployeeStep({
     // prevent continuing past an unnoticed default.
     if (showChildrenField && !data.childrenUnder14) e.childrenUnder14 = 'יש לבחור כן/לא';
     if (!data.contractStartDate) e.contractStartDate = 'שדה חובה';
-    // Every document that is shown is mandatory.
-    for (const doc of visibleDocs) {
+    // Every document that is shown (and not already on file) is mandatory.
+    for (const doc of pendingDocs) {
       if (!docs[doc.key]) e[`doc_${doc.key}`] = 'יש לצרף קובץ';
     }
     // Minor → must acknowledge the youth-employment rules before continuing.
@@ -232,14 +235,20 @@ export function EmployeeStep({
   // ילדים מתחת לגיל 14 is only relevant for a woman who is not single.
   const showChildrenField = data.gender === 'נקבה' && Boolean(data.maritalStatus) && !data.maritalStatus.includes('רווק');
 
-  // Documents applicable right now: youth (age 15–17) + male + גנים (institution layer).
+  // Documents applicable right now: youth (age 15–17) + male + גנים (institution layer),
+  // excluding מעון for the two docs flagged menoExcluded.
   const visibleDocs = DOC_FIELDS.filter((doc) =>
-    isDocVisible(doc.condition, {
-      birthDate: data.birthDate,
-      gender: data.gender,
-      layer: institutionLayer,
-    }),
+    isDocVisible(
+      doc.condition,
+      { birthDate: data.birthDate, gender: data.gender, layer: institutionLayer },
+      doc.menoExcluded,
+    ),
   );
+  // Docs already on file for this employee (from a previous position/year) aren't
+  // re-requested — same pattern as SUB_ROLE_DOC_FIELDS in RoleStep.
+  const existingYouthDocs = new Set(data.existingYouthDocs ?? []);
+  const pendingDocs = visibleDocs.filter((d) => !existingYouthDocs.has(d.fieldId));
+  const alreadyOnFileDocs = visibleDocs.filter((d) => existingYouthDocs.has(d.fieldId));
 
   // Youth-employment warnings (by age) + a mandatory acknowledgement checkbox.
   const under16 = isUnder16(data.birthDate);
@@ -603,7 +612,8 @@ export function EmployeeStep({
         </section>
       )}
 
-      {/* Documents — shown only when applicable (age 15–17 / male / גנים). All mandatory. */}
+      {/* Documents — shown only when applicable (age 15–17 / male / גנים). All mandatory,
+          except docs already on file for this employee (filed on רשימת עובדים). */}
       {(selectedExisting || showNewForm) && visibleDocs.length > 0 && (
         <section className="bg-surface-container-lowest p-8 rounded-xl shadow-card border border-outline-variant mb-6">
           <div className="flex items-center gap-2 mb-1 border-b border-outline-variant pb-3">
@@ -613,28 +623,43 @@ export function EmployeeStep({
           <p className="text-body-md text-on-surface-variant mb-5">
             יש לצרף את המסמכים הבאים (PDF או תמונה, עד 5MB לקובץ).
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-gutter gap-y-5">
-            {visibleDocs.map((doc) => (
-              <DocUpload
-                key={doc.key}
-                label={doc.label}
-                required
-                value={docs[doc.key]}
-                error={errors[`doc_${doc.key}`]}
-                onChange={(uploaded) => {
-                  onDocsChange({ ...docs, [doc.key]: uploaded });
-                  // Clear the "missing file" error as soon as a file is attached.
-                  if (uploaded && errors[`doc_${doc.key}`]) {
-                    setErrors((prev) => {
-                      const next = { ...prev };
-                      delete next[`doc_${doc.key}`];
-                      return next;
-                    });
-                  }
-                }}
-              />
-            ))}
-          </div>
+          {alreadyOnFileDocs.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-5">
+              {alreadyOnFileDocs.map((d) => (
+                <span
+                  key={d.key}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-tertiary-container/30 text-on-surface text-label-sm"
+                >
+                  <Icon name="check_circle" className="text-tertiary text-[16px]" fill />
+                  {d.label} — קיים בתיק העובד
+                </span>
+              ))}
+            </div>
+          )}
+          {pendingDocs.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-gutter gap-y-5">
+              {pendingDocs.map((doc) => (
+                <DocUpload
+                  key={doc.key}
+                  label={doc.label}
+                  required
+                  value={docs[doc.key]}
+                  error={errors[`doc_${doc.key}`]}
+                  onChange={(uploaded) => {
+                    onDocsChange({ ...docs, [doc.key]: uploaded });
+                    // Clear the "missing file" error as soon as a file is attached.
+                    if (uploaded && errors[`doc_${doc.key}`]) {
+                      setErrors((prev) => {
+                        const next = { ...prev };
+                        delete next[`doc_${doc.key}`];
+                        return next;
+                      });
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
 

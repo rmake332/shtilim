@@ -8,6 +8,7 @@ import { EmployeeData, RoleData, ScheduleData, YouthDocs } from '@/lib/formTypes
 import { maskTzClient } from '@/lib/maskClient';
 import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
 import { DOC_FIELDS, UPDATE_REASON_OPTIONS } from '@/lib/airtable/schema';
+import { subRoleDocsFor } from '@/lib/formTypes';
 
 export function SummaryStep({
   token,
@@ -52,12 +53,12 @@ export function SummaryStep({
   }, [isEdit]);
 
   /**
-   * Upload youth documents after the position record exists. One request per file
+   * Upload נתוני העסקה after the position record exists. One request per file
    * (keeps each body small). A failed upload doesn't fail the submission — the
    * position is already saved; we surface a note so the secretary can retry/follow up.
    */
   async function uploadDocs(positionId: string): Promise<boolean> {
-    const pending = DOC_FIELDS.filter((d) => docs[d.key]);
+    const pending = DOC_FIELDS.filter((d) => d.key === 'docEmployment' && docs[d.key]);
     if (pending.length === 0) return true;
 
     let allOk = true;
@@ -69,6 +70,68 @@ export function SummaryStep({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token, positionId, fieldId: d.fieldId, file: docs[d.key] }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || !j.ok) allOk = false;
+      } catch {
+        allOk = false;
+      }
+    }
+    setUploadNote('');
+    return allOk;
+  }
+
+  /**
+   * Upload professional-license documents (תת-תפקיד-driven) to the EMPLOYEE record —
+   * these are filed on רשימת עובדים, not the position, so they carry over across years.
+   * Only uploads docs actually attached in this session (already-on-file ones are skipped
+   * in RoleStep and never enter `docs`).
+   */
+  async function uploadSubRoleDocs(employeeId: string): Promise<boolean> {
+    const applicable = subRoleDocsFor(role.subRole);
+    const pending = applicable.filter((d) => docs[d.fieldId]);
+    if (pending.length === 0) return true;
+
+    let allOk = true;
+    for (let i = 0; i < pending.length; i++) {
+      const d = pending[i];
+      setUploadNote(`מעלה מסמכים… (${i + 1}/${pending.length})`);
+      try {
+        const res = await fetch('/api/upload-employee-doc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, employeeId, fieldId: d.fieldId, file: docs[d.fieldId] }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || !j.ok) allOk = false;
+      } catch {
+        allOk = false;
+      }
+    }
+    setUploadNote('');
+    return allOk;
+  }
+
+  /**
+   * Upload youth/role documents (DOC_FIELDS, excluding נתוני העסקה) to the EMPLOYEE
+   * record — filed on רשימת עובדים so they carry over across positions/years. Keyed
+   * by `d.key` in `docs` (matching EmployeeStep), unlike the fieldId-keyed sub-role docs.
+   * Only uploads docs actually attached in this session (already-on-file ones are
+   * skipped in EmployeeStep and never enter `docs`).
+   */
+  async function uploadYouthDocsToEmployee(employeeId: string): Promise<boolean> {
+    const pending = DOC_FIELDS.filter((d) => d.key !== 'docEmployment' && docs[d.key]);
+    if (pending.length === 0) return true;
+
+    let allOk = true;
+    for (let i = 0; i < pending.length; i++) {
+      const d = pending[i];
+      setUploadNote(`מעלה מסמכים… (${i + 1}/${pending.length})`);
+      try {
+        const res = await fetch('/api/upload-employee-doc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, employeeId, fieldId: d.fieldId, file: docs[d.key] }),
         });
         const j = await res.json().catch(() => ({}));
         if (!res.ok || !j.ok) allOk = false;
@@ -99,7 +162,7 @@ export function SummaryStep({
     setResult(null);
     try {
       let res: Response;
-      let j: { ok: boolean; positionId?: string; message?: string };
+      let j: { ok: boolean; positionId?: string; employeeId?: string; message?: string };
 
       if (isEdit && positionId) {
         res = await fetch(`/api/positions/${positionId}?token=${encodeURIComponent(token)}`, {
@@ -109,7 +172,15 @@ export function SummaryStep({
         });
         j = await res.json();
         if (res.ok && j.ok) {
-          setResult({ ok: true, message: 'התקן עודכן בהצלחה!' });
+          const subRoleDocsOk = j.employeeId ? await uploadSubRoleDocs(j.employeeId) : true;
+          const youthDocsOk = j.employeeId ? await uploadYouthDocsToEmployee(j.employeeId) : true;
+          const docsOk = subRoleDocsOk && youthDocsOk;
+          setResult({
+            ok: true,
+            message: docsOk
+              ? 'התקן עודכן בהצלחה!'
+              : 'התקן עודכן, אך חלק מהמסמכים לא הועלו. ניתן לפנות למנהל המערכת להשלמתם.',
+          });
         } else {
           setResult({ ok: false, message: j.message || 'שגיאה בעדכון התקן.' });
         }
@@ -121,7 +192,10 @@ export function SummaryStep({
         });
         j = await res.json();
         if (res.ok && j.ok) {
-          const docsOk = await uploadDocs(j.positionId!);
+          const employmentDocOk = await uploadDocs(j.positionId!);
+          const subRoleDocsOk = j.employeeId ? await uploadSubRoleDocs(j.employeeId) : true;
+          const youthDocsOk = j.employeeId ? await uploadYouthDocsToEmployee(j.employeeId) : true;
+          const docsOk = employmentDocOk && subRoleDocsOk && youthDocsOk;
           setResult({
             ok: true,
             message: docsOk
@@ -144,8 +218,9 @@ export function SummaryStep({
   const motzashHasShifts = (week[MOTZASH] ?? []).some((s) => s.in && s.out);
   const summaryDays: readonly Day[] = motzashHasShifts ? [...DAYS, MOTZASH] : DAYS;
   // Frontal/individual/stay breakdown exists only when the ofek-חדש calculator ran:
-  // category פרא רפואי, or scheduleType "הוראה". "רגיל" and the rest have no breakdown.
-  const hasBreakdown = role.category === 'פרא רפואי' || role.scheduleType === 'הוראה';
+  // category פרא רפואי, or scheduleType "הוראה" / "הוראה - לוח פרא". "רגיל" and the rest have no breakdown.
+  const hasBreakdown =
+    role.category === 'פרא רפואי' || role.scheduleType === 'הוראה' || role.scheduleType === 'הוראה - לוח פרא';
 
   if (result?.ok) {
     return (
@@ -222,7 +297,27 @@ export function SummaryStep({
               {role.tariff && <Item label="תעריף" value={role.tariff} />}
               {role.ranking && <Item label="דירוג" value={role.ranking} />}
               {role.seniority && <Item label="ותק / אופק" value={role.seniority} />}
+              {role.subRole && <Item label="תת-תפקיד" value={role.subRole} />}
+              {role.licenseNumber && <Item label="מס' רישיון" value={role.licenseNumber} />}
+              {role.contractEndDate && <Item label="תאריך סיום מילוי המקום" value={role.contractEndDate} />}
             </Grid>
+            {(() => {
+              const attached = subRoleDocsFor(role.subRole).filter((d) => docs[d.fieldId]);
+              if (attached.length === 0) return null;
+              return (
+                <div className="mt-3 border-t border-outline-variant pt-3">
+                  <p className="text-label-sm text-on-surface-variant mb-1">מסמכי הסמכה מצורפים:</p>
+                  <ul className="space-y-1">
+                    {attached.map((d) => (
+                      <li key={d.fieldId} className="flex items-center gap-2 text-body-md">
+                        <Icon name="description" className="text-primary text-[18px]" />
+                        <span>{d.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
             {(role.selectedGemulIds.length > 0 || role.selectedExtraRoleIds.length > 0) && (
               <div className="mt-4 pt-4 border-t border-outline-variant space-y-3">
                 {role.selectedGemulTitles.length > 0 && (

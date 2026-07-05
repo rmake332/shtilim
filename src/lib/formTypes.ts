@@ -1,6 +1,7 @@
 /** Shared form state types for the multi-step wizard. */
 
 import type { Day } from '@/lib/schedule/time';
+import { SUB_ROLE_DOC_FIELDS, type SubRoleDocDef } from '@/lib/airtable/schema';
 export type { Day };
 
 export type Gender = 'זכר' | 'נקבה';
@@ -47,11 +48,15 @@ const PARA_OR_TEACHING_CATEGORIES = new Set(['פרא רפואי', 'הוראה'])
  * Whether a document field should be shown, given its condition + current form data.
  * Pure so it can run on the employee step and server-side. `layer` here is the
  * INSTITUTION's layer (from the token), not the role's.
+ * `menoExcluded`: when true, never shown for institutions whose layer is מעון
+ * (police / no-sex-offense and no-violence certs are not requested there).
  */
 export function isDocVisible(
   condition: 'youth' | 'male' | 'kindergartenLayer' | 'newEmployeeParaOrTeaching',
   ctx: { birthDate?: string; gender?: GenderUnset; layer?: string; isNewEmployee?: boolean; category?: string },
+  menoExcluded = false,
 ): boolean {
+  if (menoExcluded && ctx.layer === 'מעון') return false;
   switch (condition) {
     case 'youth': {
       const age = ageFromBirthDate(ctx.birthDate ?? '');
@@ -65,6 +70,12 @@ export function isDocVisible(
     case 'newEmployeeParaOrTeaching':
       return Boolean(ctx.isNewEmployee) && PARA_OR_TEACHING_CATEGORIES.has(ctx.category ?? '');
   }
+}
+
+/** Document/license requirements for a given תת-תפקיד (empty array if none apply). */
+export function subRoleDocsFor(subRole: string): readonly SubRoleDocDef[] {
+  if (!subRole) return [];
+  return SUB_ROLE_DOC_FIELDS.filter((d) => d.subRole === subRole);
 }
 
 /** Under 16 → employment forbidden during the school year (warning). */
@@ -104,6 +115,20 @@ export interface EmployeeData {
   youthRulesAcknowledged: boolean;
   /** משרת אב — adds 2 extra hours to entered hours in all schedule calculations. */
   fatherPosition: boolean;
+  /**
+   * Which SUB_ROLE_DOC_FIELDS.fieldId keys are already on file for this employee
+   * (from רשימת עובדים), fetched when an existing employee is loaded. Used to skip
+   * re-requesting a document that's already attached. Empty for a new employee.
+   */
+  existingSubRoleDocs: string[];
+  /** מס' רישיון already on file for this employee (from רשימת עובדים); '' for a new employee. */
+  existingLicenseNumber: string;
+  /**
+   * Which DOC_FIELDS.fieldId keys (youth/role documents) are already on file for this
+   * employee (from רשימת עובדים). Used to skip re-requesting a document that's already
+   * attached. Empty for a new employee.
+   */
+  existingYouthDocs: string[];
 }
 
 /** Step 2 — role selection. */
@@ -117,8 +142,13 @@ export interface RoleData {
   remainingHours: number;
   /** Final layer: from budget if present, else manually chosen. */
   layer: string;
-  /** Required when category = פרא רפואי. */
+  /** תת-תפקיד: יסודי → רשימה מלאה, חטיבה → מסונן ל"הדרכה...", גנים → לא מוצג. */
   subRole: string;
+  /**
+   * אישור אפרת ולנדברג למטפל/ת רגשית או מטפל/ת באומנות. שער UI בלבד (לא נשמר
+   * לאיירטייבל); "לא" חוסם המשך.
+   */
+  landbergApproval: YesNoUnset;
   selectedGemulIds: string[];
   selectedGemulTitles: string[];
   selectedExtraRoleIds: string[];
@@ -135,6 +165,10 @@ export interface RoleData {
   seniority: string | null;
   /** האם קיים תיק במשרד החינוך — רלוונטי לעובד חדש בפרא/הוראה. */
   hasMinistryFile: YesNoUnset;
+  /** מס' רישיון — required when subRole is קלינאות תקשורת / ריפוי בעיסוק; '' until entered. */
+  licenseNumber: string;
+  /** תאריך סיום העסקה — required when category is "מילוי מקום לתקופה מוגבלת" (YYYY-MM-DD). */
+  contractEndDate: string;
 }
 
 export function emptyRole(): RoleData {
@@ -148,6 +182,7 @@ export function emptyRole(): RoleData {
     remainingHours: 0,
     layer: '',
     subRole: '',
+    landbergApproval: '',
     selectedGemulIds: [],
     selectedGemulTitles: [],
     selectedExtraRoleIds: [],
@@ -161,6 +196,8 @@ export function emptyRole(): RoleData {
     ranking: null,
     seniority: null,
     hasMinistryFile: '',
+    licenseNumber: '',
+    contractEndDate: '',
   };
 }
 
@@ -236,5 +273,8 @@ export function emptyEmployee(): EmployeeData {
     contractStartDate: '',
     youthRulesAcknowledged: false,
     fatherPosition: false,
+    existingSubRoleDocs: [],
+    existingLicenseNumber: '',
+    existingYouthDocs: [],
   };
 }

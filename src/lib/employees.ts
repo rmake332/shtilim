@@ -1,6 +1,6 @@
 import 'server-only';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
-import { TABLES, EMPLOYEE_FIELDS } from '@/lib/airtable/schema';
+import { TABLES, EMPLOYEE_FIELDS, SUB_ROLE_DOC_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
 import { maskTz } from '@/lib/logger';
 import { normalizeIsraeliId } from '@/lib/validation/israeliId';
 
@@ -57,6 +57,11 @@ export interface EmployeeDetails {
   birthDate: string;
   ageHours: number;
   fatherPosition: boolean;
+  licenseNumber: string;
+  /** SUB_ROLE_DOC_FIELDS.fieldId values that already have an attachment on file. */
+  existingSubRoleDocs: string[];
+  /** DOC_FIELDS.fieldId values (youth/role documents) that already have an attachment on file. */
+  existingYouthDocs: string[];
 }
 
 function str(v: unknown): string {
@@ -64,6 +69,32 @@ function str(v: unknown): string {
   if (typeof v === 'object' && 'name' in (v as any)) return String((v as any).name);
   if (Array.isArray(v)) return v.map(str).filter(Boolean).join(', ');
   return String(v);
+}
+
+function fieldIdsWithAttachment(fieldIds: string[], fields: Record<string, unknown>): string[] {
+  return fieldIds
+    .filter((fieldId, idx, arr) => arr.indexOf(fieldId) === idx) // dedupe (fieldId repeats when reused across defs)
+    .filter((fieldId) => {
+      const v = fields[fieldId];
+      return Array.isArray(v) && v.length > 0;
+    });
+}
+
+/** Which SUB_ROLE_DOC_FIELDS.fieldId values already have an attachment in a רשימת עובדים fields object. */
+export function existingSubRoleDocsFromFields(fields: Record<string, unknown>): string[] {
+  return fieldIdsWithAttachment(SUB_ROLE_DOC_FIELDS.map((d) => d.fieldId), fields);
+}
+
+/**
+ * Which DOC_FIELDS.fieldId values (youth/role documents filed on the employee) already
+ * have an attachment in a רשימת עובדים fields object. docEmployment is excluded — it's
+ * filed on the position, not the employee.
+ */
+export function existingYouthDocsFromFields(fields: Record<string, unknown>): string[] {
+  return fieldIdsWithAttachment(
+    DOC_FIELDS.filter((d) => d.key !== 'docEmployment').map((d) => d.fieldId),
+    fields,
+  );
 }
 
 /** Fetch a single employee's full fields by record id (for the editable detail form). */
@@ -80,6 +111,8 @@ export async function getEmployeeById(
   const r = records[0];
   if (!r) return null;
   const f = r.fields;
+  const existingSubRoleDocs = existingSubRoleDocsFromFields(f);
+  const existingYouthDocs = existingYouthDocsFromFields(f);
   return {
     id: r.id,
     name: str(f[EMPLOYEE_FIELDS.name]),
@@ -92,6 +125,9 @@ export async function getEmployeeById(
     birthDate: str(f[EMPLOYEE_FIELDS.birthDate]),
     ageHours: Number(f[EMPLOYEE_FIELDS.ageHours]) || 0,
     fatherPosition: Boolean(f[EMPLOYEE_FIELDS.fatherPosition]),
+    licenseNumber: str(f[EMPLOYEE_FIELDS.licenseNumber]),
+    existingSubRoleDocs,
+    existingYouthDocs,
   };
 }
 
