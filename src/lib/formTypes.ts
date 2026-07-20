@@ -130,6 +130,11 @@ export interface EmployeeData {
   /** משרת אב — adds 2 extra hours to entered hours in all schedule calculations. */
   fatherPosition: boolean;
   /**
+   * העסקה 12 שעות — מפעיל את מסלול ההפסקות של פנימיה: חצי שעה בדיוק, מנוחת 8 שעות
+   * בין ימים, ותקרה שבועית של 52 שעות. ראה src/lib/schedule/breaks.ts.
+   */
+  twelveHourEmployment: boolean;
+  /**
    * Which SUB_ROLE_DOC_FIELDS.fieldId keys are already on file for this employee
    * (from רשימת עובדים), fetched when an existing employee is loaded. Used to skip
    * re-requesting a document that's already attached. Empty for a new employee.
@@ -223,6 +228,11 @@ export interface ShiftData {
 export interface ScheduleData {
   /** week[day] = up to 3 shifts. day keys: sun..fri */
   week: Record<string, ShiftData[]>;
+  /**
+   * הפסקה אחת ליום (כניסה/יציאה), ימים sun..fri בלבד — למוצ"ש אין שדות באיירטייבל.
+   * נדרשת ביום שעולה על 8.5 שעות; ראה src/lib/schedule/breaks.ts.
+   */
+  breaks?: Record<string, ShiftData>;
   /** Final weekly hours used against budget. */
   weeklyHours: number;
   frontalHours: number;
@@ -265,6 +275,7 @@ export interface ScheduleData {
 export function emptySchedule(): ScheduleData {
   return {
     week: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [] },
+    breaks: {},
     weeklyHours: 0,
     frontalHours: 0,
     individualHours: 0,
@@ -296,6 +307,7 @@ export function emptyEmployee(): EmployeeData {
     contractStartDate: DEFAULT_CONTRACT_START_DATE,
     youthRulesAcknowledged: false,
     fatherPosition: false,
+    twelveHourEmployment: false,
     existingSubRoleDocs: [],
     existingLicenseNumber: '',
     existingYouthDocs: [],

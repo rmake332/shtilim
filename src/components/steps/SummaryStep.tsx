@@ -181,6 +181,7 @@ export function SummaryStep({
   }
 
   const week = schedule.week as Record<Day, Shift[]>;
+  const breaks = (schedule.breaks ?? {}) as Record<Day, Shift | undefined>;
   // Show מוצ"ש only when it was entered (regular schedules); otherwise keep the sun..fri list.
   const motzashHasShifts = (week[MOTZASH] ?? []).some((s) => s.in && s.out);
   const summaryDays: readonly Day[] = motzashHasShifts ? [...DAYS, MOTZASH] : DAYS;
@@ -321,6 +322,8 @@ export function SummaryStep({
             <div className="divide-y divide-outline-variant/30">
               {summaryDays.map((d) => {
                 const shifts = (week[d] ?? []).filter((s) => s.in && s.out);
+                const brk = breaks[d];
+                const hasBreak = Boolean(brk?.in && brk?.out);
                 return (
                   <div key={d} className="flex items-start gap-4 py-3 first:pt-0 last:pb-0">
                     <span className="w-16 shrink-0 text-label-md font-semibold text-on-surface-variant pt-0.5">
@@ -337,6 +340,15 @@ export function SummaryStep({
                             <span className="font-bold">{s.out}</span>
                           </div>
                         ))}
+                        {hasBreak && (
+                          <div className="flex items-center gap-2 text-label-sm text-on-surface-variant">
+                            <Icon name="free_breakfast" className="text-[15px]" />
+                            <span>הפסקה</span>
+                            <span className="font-bold">{brk!.in}</span>
+                            <span>—</span>
+                            <span className="font-bold">{brk!.out}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

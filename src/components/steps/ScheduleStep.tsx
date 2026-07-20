@@ -31,6 +31,21 @@ import {
   youthTimeError,
   type YouthLimits,
 } from '@/lib/schedule/youth';
+import {
+  breakPolicyFor,
+  requiredBreakMinutes,
+  breakDayError,
+  breakMinutes,
+  dailyPresenceError,
+  restBetweenDaysError,
+  formatBreakMinutes,
+  BREAK_THRESHOLD_HOURS,
+  MAX_DAILY_PRESENCE_HOURS,
+  MIN_REST_HOURS,
+  TWELVE_HOUR_WEEKLY_CAP,
+  FIXED_BREAK_MINUTES,
+  type BreakPolicy,
+} from '@/lib/schedule/breaks';
 
 // ── Overlap-check types & helper ─────────────────────────────────────────────
 
@@ -163,6 +178,61 @@ function YouthNotice({ limits }: { limits: YouthLimits }) {
         <br />
         {youthLimitsSummary(limits)}. שעות מחוץ לטווח או חריגה מהמכסה ייחסמו.
       </p>
+    </div>
+  );
+}
+
+/** Banner shown above the grid on the boarding-school / 12-hour-employment track. */
+function TwelveHourNotice() {
+  return (
+    <div className="p-4 rounded-xl bg-secondary-container/40 text-on-secondary-container text-body-md flex items-start gap-2">
+      <Icon name="hotel" className="text-[20px] mt-0.5 shrink-0" />
+      <div>
+        <p className="font-bold">העסקה 12 שעות (פנימיה) — כללי מערכת השעות:</p>
+        <ul className="list-disc pr-5 mt-1 space-y-0.5 text-label-md">
+          <li>ביום שעולה על {BREAK_THRESHOLD_HOURS} שעות יש להזין הפסקה של {formatBreakMinutes(FIXED_BREAK_MINUTES)} בדיוק — לא יותר ולא פחות.</li>
+          <li>כל שאר שעות הנוכחות נספרות כשעות עבודה.</li>
+          <li>נדרשת מנוחה של {MIN_REST_HOURS} שעות בין סיום יום אחד לתחילת היום שאחריו.</li>
+          <li>התקרה השבועית היא {TWELVE_HOUR_WEEKLY_CAP} שעות.</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * שורת ההפסקה בכרטיס היום. מוצגת רק כאשר היום מחייב הפסקה (מעל 8.5 שעות),
+ * ומציגה את המשך הנדרש לצד סימון תקין/שגוי למה שהוזן.
+ */
+function BreakRow({
+  value,
+  requiredMinutes,
+  onChange,
+}: {
+  value: Shift | undefined;
+  requiredMinutes: number;
+  onChange: (field: 'in' | 'out', v: string) => void;
+}) {
+  const entered = breakMinutes(value);
+  const ok = entered === requiredMinutes;
+  return (
+    <div className="mt-3 pt-3 border-t border-outline-variant/60">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon name="free_breakfast" className="text-[18px] text-on-surface-variant" />
+        <span className="text-label-md font-semibold text-on-surface">הפסקה</span>
+        <span className="text-label-sm text-on-surface-variant">
+          נדרשת הפסקה של {formatBreakMinutes(requiredMinutes)}
+        </span>
+        {entered > 0 && (
+          <span className={`text-label-sm font-bold ${ok ? 'text-[#1a6b2f]' : 'text-error'}`}>
+            {ok ? '✓' : `הוזנו ${formatBreakMinutes(entered)}`}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-4">
+        <TimeBox label="כניסה להפסקה" value={value?.in ?? ''} onChange={(v) => onChange('in', v)} />
+        <TimeBox label="יציאה מהפסקה" value={value?.out ?? ''} onChange={(v) => onChange('out', v)} />
+      </div>
     </div>
   );
 }
@@ -402,7 +472,20 @@ function GridSchedule({
   const totalHours = totalMin / 60;
   // חוק העסקת נוער: חלון שעות + מכסה יומית נאכפים בהזנה; המכסה השבועית מחליפה את תקרת ה-42.
   const youth = youthLimitsFor(employee.birthDate);
-  const weeklyCap = youth ? youth.maxWeeklyHours : WEEKLY_CAP_HOURS;
+  // הפסקות: המדיניות נגזרת פעם אחת מסוג המערכת + שכבת התקן + דגל העובד, ומזינה גם את
+  // בדיקות היום (חסימה) וגם את שורת ההזנה בכרטיס היום.
+  const breakPolicy = breakPolicyFor({
+    scheduleType: type,
+    layer: role.layer,
+    twelveHourEmployment: employee.twelveHourEmployment,
+  });
+  const breaks = (data.breaks ?? {}) as Record<Day, Shift | undefined>;
+  // תקרה שבועית: נוער (40) גובר על מסלול 12 השעות (52), שגובר על ברירת המחדל (42).
+  const weeklyCap = youth
+    ? youth.maxWeeklyHours
+    : breakPolicy.twelveHour
+      ? TWELVE_HOUR_WEEKLY_CAP
+      : WEEKLY_CAP_HOURS;
   const overCap = totalHours > weeklyCap;
 
   // תפקיד צהריים: כניסה לפני 12:00 אסורה פרט ליום עובדת בוקר שנבחר מראש.
@@ -425,7 +508,36 @@ function GridSchedule({
     if (!result.ok) { paraDayErrors.push(`יום ${DAY_LABELS[d]}: ${result.error}`); continue; }
     paraHours += result.hours;
   }
-  const utilizedHours = isDeputy1 ? deputyWeekly : isParaCat ? paraHours : totalHours;
+
+  // שעות היום במדד של מדיניות ההפסקה (שעון או אקדמי) והדקות הנדרשות הנגזרות מהן.
+  // מוצ"ש מוחרג — אין לו שדות הפסקה באיירטייבל.
+  const breakDayHours = {} as Record<Day, number>;
+  const requiredBreak = {} as Record<Day, number>;
+  for (const d of DAYS) {
+    const dayMin = (week[d] ?? []).reduce((s, sh) => s + shiftMinutes(sh), 0);
+    let dayHours = dayMin / 60;
+    if (breakPolicy.metric === 'academic') {
+      const r = paraDayHours(dayMin);
+      dayHours = r?.ok ? r.hours : 0;
+    }
+    breakDayHours[d] = dayHours;
+    requiredBreak[d] = requiredBreakMinutes(dayHours, breakPolicy);
+  }
+  // הפסקה נספרת רק ביום שבו היא נדרשת — שארית מיום שהצטמצם לא גורעת שעות.
+  const totalBreakMin = DAYS.reduce(
+    (s, d) => s + (requiredBreak[d] > 0 ? breakMinutes(breaks[d]) : 0),
+    0,
+  );
+  /** שעות העבודה הנספרות — נוכחות פחות הפסקות במסלול שבו ההפסקה מנוכה. */
+  const netHours = breakPolicy.deducts ? (totalMin - totalBreakMin) / 60 : totalHours;
+  /**
+   * מה שנשמר בפועל: הפסקות של ימים שכבר אינן נדרשות (השעות ירדו מתחת ל-8.5) מושמטות,
+   * כדי שרישום ישן לא ידלוף לאיירטייבל.
+   */
+  const prunedBreaks = Object.fromEntries(
+    DAYS.filter((d) => requiredBreak[d] > 0 && breaks[d]).map((d) => [d, breaks[d]!]),
+  );
+  const utilizedHours = isDeputy1 ? deputyWeekly : isParaCat ? paraHours : netHours;
 
   const dayErrors: Partial<Record<Day, string>> = {};
   for (const d of gridDays) {
@@ -447,6 +559,22 @@ function GridSchedule({
     if (youth) {
       const ye = youthDayError(week[d] ?? [], youth);
       if (ye) dayErrors[d] = ye;
+    }
+    if (dayErrors[d]) continue;
+    // תקרת 12 שעות נוכחות — חלה על כל העובדים ובכל סוגי המערכת.
+    const pe = dailyPresenceError(week[d] ?? []);
+    if (pe) dayErrors[d] = pe;
+  }
+  // הפסקות ומנוחה בין ימים — נבדקות אחרי כל שאר כללי היום, בסדר הימים א'–ו'
+  // (מוצ"ש מוחרג: אין לו שדות הפסקה, ומנוחת 8 שעות נמדדת בין ימי החול).
+  for (let i = 0; i < DAYS.length; i++) {
+    const d = DAYS[i];
+    if (dayErrors[d]) continue;
+    const be = breakDayError(week[d] ?? [], breaks[d], breakDayHours[d], breakPolicy);
+    if (be) { dayErrors[d] = be; continue; }
+    if (breakPolicy.twelveHour && i > 0) {
+      const re = restBetweenDaysError(week[DAYS[i - 1]] ?? [], week[d] ?? []);
+      if (re) dayErrors[d] = re;
     }
   }
   const hasDayError = Object.keys(dayErrors).length > 0;
@@ -488,6 +616,16 @@ function GridSchedule({
       return { ...prev, week: w };
     });
   }
+  /** ההפסקה משנה את השעות הנספרות — לכן מאפסת את בדיקת האופק ואת בדיקת החפיפה. */
+  function updateBreak(day: Day, field: 'in' | 'out', val: string) {
+    setOfek(null);
+    invalidateOverlap();
+    setData((prev) => {
+      const b = { ...(prev.breaks ?? {}) };
+      b[day] = { ...(b[day] ?? { in: '', out: '' }), [field]: val };
+      return { ...prev, breaks: b };
+    });
+  }
 
   const isPara = role.category === 'פרא רפואי' || isParaSchedule;
   // Ofek is needed only for real timetable entry: פרא, or teaching with scheduleType "הוראה"/"הוראה - לוח פרא".
@@ -498,7 +636,7 @@ function GridSchedule({
   // When entered hours change, invalidate all ofek results so the user must re-run check 1.
   const currentHoursForOfek = isPara
     ? (paraDayErrors.length === 0 ? (snapToHalf(paraHours, 0.012) ?? null) : null)
-    : totalHours;
+    : netHours;
   useEffect(() => {
     if (hoursAtOfek1 === null) return;
     if (currentHoursForOfek === null) return;
@@ -516,7 +654,7 @@ function GridSchedule({
       if (paraDayErrors.length > 0) return null;
       return snapToHalf(paraHours, 0.012) ?? null;
     }
-    return totalHours;
+    return netHours;
   }
 
   /** Step 1 — current role only, no combined check. */
@@ -582,7 +720,7 @@ function GridSchedule({
       errs.push(
         youth
           ? youthWeeklyError(totalHours, youth)!
-          : 'מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות',
+          : `מערכת שעות לעובד מוגבלת לפי חוק ל-${weeklyCap} שעות שבועיות`,
       );
     if (isPara) errs.push(...paraDayErrors);
     // פרא: block if hours can't snap to nearest whole/half within ±0.01.
@@ -597,14 +735,15 @@ function GridSchedule({
       // Overlap check for deputy-1 before proceeding.
       const overlapOk = await runOverlapCheckIfNeeded(week);
       if (!overlapOk) return;
-      onNext({ ...data, weeklyHours: deputyWeekly });
+      onNext({ ...data, breaks: prunedBreaks, weeklyHours: deputyWeekly });
       return;
     }
 
     // Regular: just the entered hours; NO ofek calc, so there is no
     // frontal/individual/stay breakdown. Zero those out. Block if over budget.
     if (!needsOfek) {
-      const hours = Math.round(totalHours * 100) / 100;
+      // netHours = נוכחות פחות ההפסקות; זהה ל-totalHours כשההפסקה אינה מנוכה.
+      const hours = Math.round(netHours * 100) / 100;
       if (hours > role.remainingHours) errs.push(overBudgetMessage(hours, role.remainingHours));
       if (errs.length) { setErrors(errs); return; }
       // Overlap check for regular roles before proceeding.
@@ -612,6 +751,7 @@ function GridSchedule({
       if (!overlapOk) return;
       onNext({
         ...data,
+        breaks: prunedBreaks,
         weeklyHours: hours,
         frontalHours: 0,
         individualHours: 0,
@@ -656,6 +796,7 @@ function GridSchedule({
     setWarnings(warns);
     onNext({
       ...data,
+      breaks: prunedBreaks,
       weeklyHours: j.finalHours,
       frontalHours: j.frontalHours,
       individualHours: j.individualHours,
@@ -745,6 +886,26 @@ function GridSchedule({
             </div>
           )}
 
+          {/* הפסקות — נוכחות מול שעות עבודה בפועל */}
+          {totalBreakMin > 0 && (
+            <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
+              <div className="flex justify-between text-on-surface-variant">
+                <span>שעות נוכחות:</span>
+                <span className="font-bold">{formatNum(totalHours)}</span>
+              </div>
+              <div className="flex justify-between text-on-surface-variant">
+                <span>שעות הפסקה:</span>
+                <span className="font-bold text-error">−{formatNum(totalBreakMin / 60)}</span>
+              </div>
+              {breakPolicy.deducts && (
+                <div className="flex justify-between text-on-surface-variant">
+                  <span>שעות עבודה:</span>
+                  <span className="font-bold text-primary">{formatNum(netHours)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* עובד נוער — המכסה השבועית נמדדת בשעות שעון בפועל */}
           {youth && (
             <div className="mt-1 text-label-sm flex justify-between">
@@ -797,6 +958,7 @@ function GridSchedule({
       {/* Days grid */}
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
+        {breakPolicy.twelveHour && <TwelveHourNotice />}
         {(type === 'סגן ראשון') && (
           <div className="bg-white p-4 rounded-lg border border-outline-variant max-w-xs">
             <label className="text-label-lg text-on-surface block mb-2">מס׳ שעות שבועיות</label>
@@ -913,6 +1075,13 @@ function GridSchedule({
                   )}
                 </div>
               </div>
+              {day !== MOTZASH && requiredBreak[day] > 0 && (
+                <BreakRow
+                  value={breaks[day]}
+                  requiredMinutes={requiredBreak[day]}
+                  onChange={(field, v) => updateBreak(day, field, v)}
+                />
+              )}
               {err && <p className="text-error text-label-sm mt-2">{err}</p>}
             </div>
           );
@@ -1165,7 +1334,18 @@ function BellScheduleGrid({
 
   // חוק העסקת נוער: רצועות מחוץ לחלון השעות כלל אינן מוצעות לבחירה.
   const youth = youthLimitsFor(employee.birthDate);
-  const weeklyCap = youth ? youth.maxWeeklyHours : WEEKLY_CAP_HOURS;
+  // הפסקות: בלוח צלצולים הסף נמדד בשעות אקדמיות וההפסקה אינה מנוכה מהשעות שנספרות.
+  const breakPolicy = breakPolicyFor({
+    scheduleType: role.scheduleType,
+    layer: role.layer,
+    twelveHourEmployment: employee.twelveHourEmployment,
+  });
+  const breaks = (data.breaks ?? {}) as Record<Day, Shift | undefined>;
+  const weeklyCap = youth
+    ? youth.maxWeeklyHours
+    : breakPolicy.twelveHour
+      ? TWELVE_HOUR_WEEKLY_CAP
+      : WEEKLY_CAP_HOURS;
   const allowedSlots = youth ? slots.filter((s) => youthSlotAllowed(s, youth)) : slots;
 
   // Friday ("ו") slots differ from Sun–Thu ("א-ה"); offer the right group per day.
@@ -1311,6 +1491,15 @@ function BellScheduleGrid({
     });
   }
 
+  function updateBreak(day: Day, field: 'in' | 'out', val: string) {
+    bellInvalidateOverlap();
+    setData((prev) => {
+      const b = { ...(prev.breaks ?? {}) };
+      b[day] = { ...(b[day] ?? { in: '', out: '' }), [field]: val };
+      return { ...prev, breaks: b };
+    });
+  }
+
   // snappedHours = weeklyHours מעוגל לשלם/חצי בטווח ±0.3 (מה שנשלח לאופק)
   const snappedHours = weeklyHours > 0 ? (snapToHalf(weeklyHours, 0.3) ?? null) : null;
   const snapDiff = snappedHours !== null ? snappedHours - weeklyHours : null;
@@ -1335,6 +1524,20 @@ function BellScheduleGrid({
 
   const morningDay = data.morningDay ?? null;
 
+  // שעות היום לצורך סף ההפסקה — בלוח צלצולים אלה השעות האקדמיות של הרצועות שנבחרו.
+  const breakDayHours = {} as Record<Day, number>;
+  const requiredBreak = {} as Record<Day, number>;
+  for (const d of DAYS) {
+    const dayHours = picks[d].reduce((s, p) => s + (p?.dailyHours ?? 0), 0);
+    breakDayHours[d] = dayHours;
+    requiredBreak[d] = requiredBreakMinutes(dayHours, breakPolicy);
+  }
+
+  /** הפסקות של ימים שכבר אינן נדרשות מושמטות לפני השמירה. */
+  const prunedBreaks = Object.fromEntries(
+    DAYS.filter((d) => requiredBreak[d] > 0 && breaks[d]).map((d) => [d, breaks[d]!]),
+  );
+
   // Validate overlap/order for each day's picked slots + חוק צהריים.
   const bellDayErrors: Partial<Record<Day, string>> = {};
   for (const d of DAYS) {
@@ -1355,6 +1558,24 @@ function BellScheduleGrid({
       const ye = youthDayError(shifts, youth);
       if (ye) bellDayErrors[d] = ye;
     }
+    if (bellDayErrors[d]) continue;
+    // תקרת 12 שעות נוכחות — חלה על כל העובדים.
+    const pe = dailyPresenceError(shifts);
+    if (pe) { bellDayErrors[d] = pe; continue; }
+    // הפסקה נדרשת ביום שעולה על 8.5 שעות אקדמיות.
+    const be = breakDayError(shifts, breaks[d], breakDayHours[d], breakPolicy);
+    if (be) bellDayErrors[d] = be;
+  }
+  // מנוחת 8 שעות בין ימים — מסלול פנימיה / העסקה 12 שעות בלבד.
+  if (breakPolicy.twelveHour) {
+    for (let i = 1; i < DAYS.length; i++) {
+      const d = DAYS[i];
+      if (bellDayErrors[d]) continue;
+      const prev = picks[DAYS[i - 1]].filter((p): p is BellSlot => p !== null).map((p) => ({ in: p.in, out: p.out }));
+      const curr = picks[d].filter((p): p is BellSlot => p !== null).map((p) => ({ in: p.in, out: p.out }));
+      const re = restBetweenDaysError(prev, curr);
+      if (re) bellDayErrors[d] = re;
+    }
   }
   // מכסה שבועית לנוער נמדדת בשעות שעון (משך הרצועות), לא בשעות אקדמיות.
   const weeklyClockHours = DAYS.reduce(
@@ -1368,7 +1589,7 @@ function BellScheduleGrid({
     if (needsTypeChoice && !chosenType) errs.push('יש לבחור לוח צלצולים לפני הזנת המערכת');
     if (isAfternoonRole && !morningDay) errs.push('בתפקיד צהריים יש לבחור יום עובדת בוקר לפני הגשת המערכת');
     if (weeklyHours <= 0) errs.push('יש לבחור לפחות רצועה אחת');
-    if (weeklyHours > WEEKLY_CAP_HOURS) errs.push('מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות');
+    if (weeklyHours > weeklyCap) errs.push(`מערכת שעות לעובד מוגבלת לפי חוק ל-${weeklyCap} שעות שבועיות`);
     if (youth) {
       const we = youthWeeklyError(weeklyClockHours, youth);
       if (we) errs.push(we);
@@ -1474,6 +1695,7 @@ function BellScheduleGrid({
     if (!overlapOk) return;
     onNext({
       ...data,
+      breaks: prunedBreaks,
       weeklyHours: j.finalHours,
       frontalHours: j.frontalHours,
       individualHours: j.individualHours,
@@ -1486,8 +1708,6 @@ function BellScheduleGrid({
       ofekAllRolesRecordId: j.ofekAllRolesRecordId,
     });
   }
-
-  const overCap = weeklyHours > WEEKLY_CAP_HOURS;
 
   return (
     <>
@@ -1540,6 +1760,16 @@ function BellScheduleGrid({
             </div>
           )}
 
+          {/* הפסקות — נרשמות ונאכפות, אך אינן גורעות מהשעות האקדמיות */}
+          {DAYS.some((d) => requiredBreak[d] > 0) && (
+            <div className="mt-1 text-label-sm flex justify-between">
+              <span className="text-on-surface-variant">שעות הפסקה (אינן נגרעות):</span>
+              <span className="font-bold text-primary">
+                {formatNum(DAYS.reduce((s, d) => s + (requiredBreak[d] > 0 ? breakMinutes(breaks[d]) : 0), 0) / 60)}
+              </span>
+            </div>
+          )}
+
           {/* עיגול לאופק — מוצג רק כשיש הפרש */}
           {snappedHours !== null && (
             <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
@@ -1574,6 +1804,7 @@ function BellScheduleGrid({
       {/* Days grid */}
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
+        {breakPolicy.twelveHour && <TwelveHourNotice />}
         {slotsLoading && (
           <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant flex items-center gap-3 text-on-surface-variant text-body-md">
             <svg className="animate-spin h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
@@ -1749,6 +1980,13 @@ function BellScheduleGrid({
                   )}
                 </div>
               </div>
+              {requiredBreak[day] > 0 && (
+                <BreakRow
+                  value={breaks[day]}
+                  requiredMinutes={requiredBreak[day]}
+                  onChange={(field, v) => updateBreak(day, field, v)}
+                />
+              )}
               {bellDayErr && <p className="text-error text-label-sm mt-2">{bellDayErr}</p>}
             </div>
           );

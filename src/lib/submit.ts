@@ -1,6 +1,14 @@
 import 'server-only';
 import { createRecord, updateRecord, getRecord } from '@/lib/airtable/client';
-import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, PREV_YEAR_FIELDS, SCHEDULE_FIELDS } from '@/lib/airtable/schema';
+import {
+  TABLES,
+  EMPLOYEE_FIELDS,
+  POSITION_FIELDS,
+  PREV_YEAR_FIELDS,
+  SCHEDULE_FIELDS,
+  BREAK_FIELDS,
+  BREAK_DAY_KEYS,
+} from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { findEmployeeByExactId } from '@/lib/employees';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
@@ -27,6 +35,15 @@ function scheduleFields(schedule: ScheduleData): Record<string, number> {
       if (inSec != null) out[def.in[idx]] = inSec;
       if (outSec != null) out[def.out[idx]] = outSec;
     });
+  }
+  // הפסקה יומית — א'–ו' בלבד (למוצ"ש אין שדות באיירטייבל).
+  for (const day of BREAK_DAY_KEYS) {
+    const brk = schedule.breaks?.[day];
+    if (!brk) continue;
+    const inSec = hhmmToSeconds(brk.in);
+    const outSec = hhmmToSeconds(brk.out);
+    if (inSec != null) out[BREAK_FIELDS[day].in] = inSec;
+    if (outSec != null) out[BREAK_FIELDS[day].out] = outSec;
   }
   return out;
 }

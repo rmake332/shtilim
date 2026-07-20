@@ -7,6 +7,8 @@ import {
   POSITION_FIELDS,
   EMPLOYEE_FIELDS,
   SCHEDULE_FIELDS,
+  BREAK_FIELDS,
+  BREAK_DAY_KEYS,
 } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { submitForm } from '@/lib/submit';
@@ -103,6 +105,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       contractStartDate: strField(pf[POSITION_FIELDS.contractStartDate]),
       youthRulesAcknowledged: true, // pre-acknowledged on original submission
       fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
+      twelveHourEmployment: Boolean(empFields[EMPLOYEE_FIELDS.twelveHourEmployment]),
       existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
       existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
       existingYouthDocs: existingYouthDocsFromFields(empFields),
@@ -162,8 +165,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       week[day] = shifts;
     }
 
+    // הפסקה יומית — נטענת רק כשגם הכניסה וגם היציאה קיימות.
+    const breaks: Record<string, { in: string; out: string }> = {};
+    for (const day of BREAK_DAY_KEYS) {
+      const brkIn = secondsToHhmm(pf[BREAK_FIELDS[day].in]);
+      const brkOut = secondsToHhmm(pf[BREAK_FIELDS[day].out]);
+      if (brkIn && brkOut) breaks[day] = { in: brkIn, out: brkOut };
+    }
+
     const schedule: ScheduleData = {
       week,
+      breaks,
       weeklyHours: Number(pf[POSITION_FIELDS.weeklyHours]) || 0,
       frontalHours: Number(pf[POSITION_FIELDS.frontalHours]) || 0,
       individualHours: Number(pf[POSITION_FIELDS.individualHours]) || 0,
@@ -310,6 +322,14 @@ function buildScheduleFields(schedule: ScheduleData): Record<string, number> {
       out[def.in[idx]] = 0;
       out[def.out[idx]] = 0;
     }
+  }
+  // הפסקה יומית — א'–ו' בלבד. יום ללא הפסקה מאופס, כדי שהסרת הפסקה בעריכה תימחק גם באיירטייבל.
+  for (const day of BREAK_DAY_KEYS) {
+    const brk = schedule.breaks?.[day];
+    const inSec = brk ? hhmmToSeconds(brk.in) : null;
+    const outSec = brk ? hhmmToSeconds(brk.out) : null;
+    out[BREAK_FIELDS[day].in] = inSec ?? 0;
+    out[BREAK_FIELDS[day].out] = outSec ?? 0;
   }
   return out;
 }

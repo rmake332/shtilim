@@ -42,6 +42,7 @@ export const EMPLOYEE_FIELDS = {
   ageHours: 'fldaw1LMV6s18X91k', // formula
   institution: 'fld5nl16DpoM7Xn1h',
   fatherPosition: 'fldmjgP5oDc49Gmz1', // משרת אב (checkbox) — adds 2h to entered hours
+  twelveHourEmployment: 'fldDgcYm9abVpBB0D', // העסקה 12 שעות (checkbox) — מפעיל את מסלול ההפסקות של פנימיה
   licenseNumber: 'fldEVNaTqjZ9XqWsu', // מס' רישיון — קלינאות תקשורת / ריפוי בעיסוק
   // Professional-license/qualification attachments, tied to the position's תת-תפקיד.
   // Filed on the EMPLOYEE (reused across positions/years) — not re-requested if already on file.
@@ -216,6 +217,22 @@ export const SCHEDULE_FIELDS = {
   // מוצ"ש — regular schedules only, a single shift (one entry/exit).
   motzash: { in: ['fld3Bh04ocFY8neUw'], out: ['fldQlk76he0xsnmsd'] },
 } as const;
+
+/**
+ * הפסקה יומית (duration, שניות מחצות) — הפסקה אחת ליום, ימים א'–ו' בלבד.
+ * אין שדות הפסקה למוצ"ש ואין שדות מקבילים בטבלת תקנים תשפ"ו.
+ */
+export const BREAK_FIELDS = {
+  sun: { in: 'fldoENNn1afs9Mgnw', out: 'fldnsIuG1wPtlE3CN' },
+  mon: { in: 'fld8CndKgHIsiEN4j', out: 'fldyys3W6Q4n1ipOF' },
+  tue: { in: 'fldmwu3uOGFFC1zcP', out: 'fldVQxuvI7IYe4JgL' },
+  wed: { in: 'fldaqR30LeWRIvCp2', out: 'fldGl06yq4zrymNeM' },
+  thu: { in: 'fldJ1lUwlNhbAftGL', out: 'fld9rUQEmokGGNDoR' },
+  fri: { in: 'fldDkZmreqIbUOvd6', out: 'fldgQTGFc6r9RWdO1' },
+} as const;
+
+/** הימים שיש להם שדות הפסקה באיירטייבל (מוצ"ש מוחרג). */
+export const BREAK_DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
 
 /** לוח צלצולים fields (bell-schedule slots, keyed by סוג to match BUDGET_FIELDS.bellScheduleNum) */
 export const BELL_FIELDS = {

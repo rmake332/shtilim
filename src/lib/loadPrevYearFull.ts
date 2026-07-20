@@ -134,6 +134,7 @@ export async function loadPrevYearFull(
         birthDate: str(ef[EMPLOYEE_FIELDS.birthDate]),
         ageHours: Number(ef[EMPLOYEE_FIELDS.ageHours]) || 0,
         fatherPosition: Boolean(ef[EMPLOYEE_FIELDS.fatherPosition]),
+        twelveHourEmployment: Boolean(ef[EMPLOYEE_FIELDS.twelveHourEmployment]),
         existingSubRoleDocs: existingSubRoleDocsFromFields(ef),
         existingLicenseNumber: employeeLicenseNumber,
         existingYouthDocs: existingYouthDocsFromFields(ef),

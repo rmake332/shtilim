@@ -57,6 +57,8 @@ export interface EmployeeDetails {
   birthDate: string;
   ageHours: number;
   fatherPosition: boolean;
+  /** העסקה 12 שעות — מפעיל את מסלול ההפסקות של פנימיה (ראה schedule/breaks.ts). */
+  twelveHourEmployment: boolean;
   licenseNumber: string;
   /** SUB_ROLE_DOC_FIELDS.fieldId values that already have an attachment on file. */
   existingSubRoleDocs: string[];
@@ -125,6 +127,7 @@ export async function getEmployeeById(
     birthDate: str(f[EMPLOYEE_FIELDS.birthDate]),
     ageHours: Number(f[EMPLOYEE_FIELDS.ageHours]) || 0,
     fatherPosition: Boolean(f[EMPLOYEE_FIELDS.fatherPosition]),
+    twelveHourEmployment: Boolean(f[EMPLOYEE_FIELDS.twelveHourEmployment]),
     licenseNumber: str(f[EMPLOYEE_FIELDS.licenseNumber]),
     existingSubRoleDocs,
     existingYouthDocs,

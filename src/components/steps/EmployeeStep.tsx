@@ -114,6 +114,7 @@ export function EmployeeStep({
           birthDate: e.birthDate ?? '',
           ageHours: Number(e.ageHours) || 0,
           fatherPosition: Boolean(e.fatherPosition),
+          twelveHourEmployment: Boolean(e.twelveHourEmployment),
           existingSubRoleDocs: e.existingSubRoleDocs ?? [],
           existingLicenseNumber: e.licenseNumber ?? '',
           existingYouthDocs: e.existingYouthDocs ?? [],

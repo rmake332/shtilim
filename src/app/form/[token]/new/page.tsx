@@ -39,6 +39,7 @@ export default async function NewPositionPage({
         contractStartDate: DEFAULT_CONTRACT_START_DATE,
         youthRulesAcknowledged: false,
         fatherPosition: details.fatherPosition,
+        twelveHourEmployment: details.twelveHourEmployment,
         existingSubRoleDocs: details.existingSubRoleDocs,
         existingLicenseNumber: details.licenseNumber,
         existingYouthDocs: details.existingYouthDocs,

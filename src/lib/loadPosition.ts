@@ -6,6 +6,8 @@ import {
   EMPLOYEE_FIELDS,
   SCHEDULE_FIELDS,
   BUDGET_FIELDS,
+  BREAK_FIELDS,
+  BREAK_DAY_KEYS,
 } from '@/lib/airtable/schema';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { bellScheduleNumsFrom } from '@/lib/roles';
@@ -91,6 +93,7 @@ export async function loadPosition(
     contractStartDate: strField(pf[POSITION_FIELDS.contractStartDate]) || DEFAULT_CONTRACT_START_DATE,
     youthRulesAcknowledged: true,
     fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
+    twelveHourEmployment: Boolean(empFields[EMPLOYEE_FIELDS.twelveHourEmployment]),
     existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
     existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
     existingYouthDocs: existingYouthDocsFromFields(empFields),
@@ -157,8 +160,17 @@ export async function loadPosition(
     week[day] = shifts;
   }
 
+  // הפסקה יומית — נטענת רק כשגם הכניסה וגם היציאה קיימות.
+  const breaks: Record<string, { in: string; out: string }> = {};
+  for (const day of BREAK_DAY_KEYS) {
+    const brkIn = secondsToHhmm(pf[BREAK_FIELDS[day].in]);
+    const brkOut = secondsToHhmm(pf[BREAK_FIELDS[day].out]);
+    if (brkIn && brkOut) breaks[day] = { in: brkIn, out: brkOut };
+  }
+
   const schedule: ScheduleData = {
     week,
+    breaks,
     weeklyHours: Number(pf[POSITION_FIELDS.weeklyHours]) || 0,
     frontalHours: Number(pf[POSITION_FIELDS.frontalHours]) || 0,
     individualHours: Number(pf[POSITION_FIELDS.individualHours]) || 0,
