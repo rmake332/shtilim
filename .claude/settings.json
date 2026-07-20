@@ -192,7 +192,8 @@
       "Bash(timeout 20 bash -c 'until curl -sf http://localhost:3010 >/dev/null 2>&1; do sleep 1; done')",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3010)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3010 --max-time 3)",
-      "Bash(mkdir -p \"c:\\\\Users\\\\1\\\\shtilim\\\\src\\\\app\\\\form\\\\from-prev-year-new\\\\[prevYearId]\")"
+      "Bash(mkdir -p \"c:\\\\Users\\\\1\\\\shtilim\\\\src\\\\app\\\\form\\\\from-prev-year-new\\\\[prevYearId]\")",
+      "PowerShell($env:PORT=3010; npm run dev)"
     ],
     "additionalDirectories": [
       "\\tmp",

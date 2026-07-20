@@ -343,6 +343,13 @@ async function updatePosition(
       [EMPLOYEE_FIELDS.licenseNumber]: role.licenseNumber ? Number(role.licenseNumber) : undefined,
     };
     Object.keys(empFields).forEach((k) => empFields[k] === undefined && delete empFields[k]);
+    // תאריך תחילת עבודה: ממלאים רק אם ריק — לא דורסים תאריך קיים של עובד ותיק.
+    if (employee.contractStartDate) {
+      const current = await getRecord(TABLES.employees, employeeId, requestId);
+      if (current && !current.fields[EMPLOYEE_FIELDS.workStartDate]) {
+        empFields[EMPLOYEE_FIELDS.workStartDate] = employee.contractStartDate;
+      }
+    }
     logger.info({ requestId, employeeId, empFields }, 'updating employee fields');
     await updateRecord(TABLES.employees, employeeId, empFields, requestId);
   }

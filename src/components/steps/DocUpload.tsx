@@ -2,10 +2,9 @@
 
 import { useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
-import type { UploadedDoc } from '@/lib/formTypes';
+import { MAX_DOC_BYTES, type UploadedDoc } from '@/lib/formTypes';
 
-/** Max upload size — the Airtable upload-attachment endpoint caps payloads at ~5MB. */
-export const MAX_DOC_BYTES = 5 * 1024 * 1024;
+export { MAX_DOC_BYTES };
 const DOC_ACCEPT = 'application/pdf,image/jpeg,image/png';
 
 /** Read a File into a base64 string (no data: prefix). */
@@ -43,7 +42,7 @@ export function DocUpload({
     setLocalError('');
     if (!file) return;
     if (file.size > MAX_DOC_BYTES) {
-      setLocalError('הקובץ גדול מדי (מקסימום 5MB).');
+      setLocalError('הקובץ גדול מדי (מקסימום 3MB). יש לדחוס את הקובץ או לסרוק באיכות נמוכה יותר.');
       return;
     }
     try {

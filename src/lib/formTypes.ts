@@ -12,6 +12,14 @@ export type YesNo = 'כן' | 'לא';
 export type YesNoUnset = YesNo | '';
 
 /**
+ * Max size of a single uploaded document (raw bytes, before base64).
+ * The binding limit is the HOST's request-body cap (Vercel functions: 4.5MB), not
+ * Airtable's ~5MB — base64 inflates by ~4/3, so 3MB of file ≈ 4MB of JSON body.
+ * A larger file used to sail through the picker and only fail after submit.
+ */
+export const MAX_DOC_BYTES = 3 * 1024 * 1024;
+
+/**
  * A document picked for upload. Held as base64 in form state so it can be sent to
  * the Airtable upload-attachment endpoint after the position record is created.
  */

@@ -38,6 +38,7 @@ export const EMPLOYEE_FIELDS = {
   phone: 'fld6rX2fmXeNM8fNU',
   birthDate: 'fldNraALYMHCAT9O3',
   gender: 'fldp7dNkDDKMMT1Ub',
+  workStartDate: 'fldda6C1MqHsk4afu', // תאריך תחילת עבודה — נכתב מתאריך תחילת החוזה שבטופס
   ageHours: 'fldaw1LMV6s18X91k', // formula
   institution: 'fld5nl16DpoM7Xn1h',
   fatherPosition: 'fldmjgP5oDc49Gmz1', // משרת אב (checkbox) — adds 2h to entered hours

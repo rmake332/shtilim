@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
 import { getRecord, uploadAttachment, escapeFormulaValue, listRecords } from '@/lib/airtable/client';
-import { TABLES, POSITION_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
+import { TABLES, POSITION_FIELDS, EMPLOYEE_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
+import { getSymbolsForInstitution } from '@/lib/symbols';
+import { MAX_DOC_BYTES } from '@/lib/formTypes';
 import { logger } from '@/lib/logger';
 
 /**
@@ -12,8 +14,7 @@ import { logger } from '@/lib/logger';
 const ALLOWED_FIELD_IDS = new Set<string>(
   DOC_FIELDS.filter((d) => d.key === 'docEmployment').map((d) => d.fieldId),
 );
-/** Server-side cap mirroring the client (Airtable upload-attachment limit ~5MB). */
-const MAX_DOC_BYTES = 5 * 1024 * 1024;
+/** Server-side cap mirroring the client (see MAX_DOC_BYTES — bounded by the host body limit). */
 
 function recordLinks(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -22,7 +23,13 @@ function recordLinks(v: unknown): string[] {
 
 /**
  * Verify the position record belongs to the gated institution (IDOR guard).
- * Path: position.roleLink → תקציב התחלתי → its mosadID lookup includes mosadId.
+ * Three independent paths are tried, because relying on the budget link alone made a
+ * legitimate upload fail with 403 whenever that link was missing (e.g. the תקציב row it
+ * pointed at was removed after the position was created):
+ *   1. position.roleLink → תקציב התחלתי → its mosadID lookup includes mosadId.
+ *   2. position.symbolLink → one of the institution's סמל מוסד records.
+ *   3. position.employeeLink → employee's מוסד link includes mosadId.
+ * Any match proves the record is the institution's; all three failing means it isn't.
  */
 async function positionBelongsToInstitution(
   positionId: string,
@@ -31,12 +38,34 @@ async function positionBelongsToInstitution(
 ): Promise<boolean> {
   const position = await getRecord(TABLES.activePositions, positionId, requestId);
   if (!position) return false;
+
+  // 1. budget row → mosadID lookup
   const budgetId = recordLinks(position.fields[POSITION_FIELDS.roleLink])[0];
-  if (!budgetId) return false;
-  // Fetch the institution's budget rows and confirm this budget record is among them.
-  const formula = `FIND("${escapeFormulaValue(mosadId)}", ARRAYJOIN({mosadID}))`;
-  const budget = await listRecords(TABLES.budget, { filterByFormula: formula }, requestId);
-  return budget.some((b) => b.id === budgetId);
+  if (budgetId) {
+    const formula = `FIND("${escapeFormulaValue(mosadId)}", ARRAYJOIN({mosadID}))`;
+    const budget = await listRecords(TABLES.budget, { filterByFormula: formula }, requestId);
+    if (budget.some((b) => b.id === budgetId)) return true;
+  }
+
+  // 2. סמל מוסד of the position is one of the institution's symbols
+  const symbolId = recordLinks(position.fields[POSITION_FIELDS.symbolLink])[0];
+  if (symbolId) {
+    const symbols = await getSymbolsForInstitution(mosadId);
+    if (symbols.some((s) => s.id === symbolId)) return true;
+  }
+
+  // 3. the linked employee belongs to this institution
+  const employeeId = recordLinks(position.fields[POSITION_FIELDS.employeeLink])[0];
+  if (employeeId) {
+    const employee = await getRecord(TABLES.employees, employeeId, requestId);
+    if (employee && recordLinks(employee.fields[EMPLOYEE_FIELDS.institution]).includes(mosadId)) {
+      return true;
+    }
+  }
+
+  logger.warn({ requestId, positionId, hasBudget: Boolean(budgetId), hasSymbol: Boolean(symbolId) },
+    'position ownership could not be established');
+  return false;
 }
 
 /**

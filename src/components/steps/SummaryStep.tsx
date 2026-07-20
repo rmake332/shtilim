@@ -53,94 +53,76 @@ export function SummaryStep({
   }, [isEdit]);
 
   /**
-   * Upload נתוני העסקה after the position record exists. One request per file
-   * (keeps each body small). A failed upload doesn't fail the submission — the
-   * position is already saved; we surface a note so the secretary can retry/follow up.
+   * Every document attached in this session, with where it goes:
+   *   - נתוני העסקה  -> the POSITION record (/api/upload-doc)
+   *   - sub-role licenses + youth documents -> the EMPLOYEE record
+   *     (/api/upload-employee-doc), so they carry over across positions/years.
+   * Youth docs are keyed by `d.key` in `docs` (matching EmployeeStep); sub-role docs by
+   * fieldId. Docs already on file are skipped upstream and never enter `docs`.
    */
-  async function uploadDocs(positionId: string): Promise<boolean> {
-    const pending = DOC_FIELDS.filter((d) => d.key === 'docEmployment' && docs[d.key]);
-    if (pending.length === 0) return true;
+  function pendingUploads(positionId?: string, employeeId?: string) {
+    const out: { label: string; url: string; body: Record<string, unknown> }[] = [];
 
-    let allOk = true;
-    for (let i = 0; i < pending.length; i++) {
-      const d = pending[i];
-      setUploadNote(`מעלה מסמכים… (${i + 1}/${pending.length})`);
-      try {
-        const res = await fetch('/api/upload-doc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, positionId, fieldId: d.fieldId, file: docs[d.key] }),
-        });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || !j.ok) allOk = false;
-      } catch {
-        allOk = false;
+    for (const d of DOC_FIELDS) {
+      const file = docs[d.key];
+      if (!file) continue;
+      if (d.key === 'docEmployment') {
+        if (positionId) {
+          out.push({ label: d.label, url: '/api/upload-doc', body: { token, positionId, fieldId: d.fieldId, file } });
+        }
+      } else if (employeeId) {
+        out.push({ label: d.label, url: '/api/upload-employee-doc', body: { token, employeeId, fieldId: d.fieldId, file } });
       }
     }
-    setUploadNote('');
-    return allOk;
+
+    if (employeeId) {
+      for (const d of subRoleDocsFor(role.subRole)) {
+        const file = docs[d.fieldId];
+        if (!file) continue;
+        out.push({ label: d.label, url: '/api/upload-employee-doc', body: { token, employeeId, fieldId: d.fieldId, file } });
+      }
+    }
+    return out;
   }
 
   /**
-   * Upload professional-license documents (תת-תפקיד-driven) to the EMPLOYEE record —
-   * these are filed on רשימת עובדים, not the position, so they carry over across years.
-   * Only uploads docs actually attached in this session (already-on-file ones are skipped
-   * in RoleStep and never enter `docs`).
+   * Upload the attached documents, one request per file (keeps each body under the
+   * host's request-size limit). A failed upload doesn't fail the submission — the
+   * position is already saved — so we return the labels that failed and name them to
+   * the secretary instead of a vague "some documents". Each file gets one retry.
    */
-  async function uploadSubRoleDocs(employeeId: string): Promise<boolean> {
-    const applicable = subRoleDocsFor(role.subRole);
-    const pending = applicable.filter((d) => docs[d.fieldId]);
-    if (pending.length === 0) return true;
+  async function uploadDocuments(positionId?: string, employeeId?: string): Promise<string[]> {
+    const pending = pendingUploads(positionId, employeeId);
+    if (pending.length === 0) return [];
 
-    let allOk = true;
+    const failed: string[] = [];
     for (let i = 0; i < pending.length; i++) {
-      const d = pending[i];
-      setUploadNote(`מעלה מסמכים… (${i + 1}/${pending.length})`);
-      try {
-        const res = await fetch('/api/upload-employee-doc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, employeeId, fieldId: d.fieldId, file: docs[d.fieldId] }),
-        });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || !j.ok) allOk = false;
-      } catch {
-        allOk = false;
+      const item = pending[i];
+      setUploadNote(`מעלה מסמכים... (${i + 1}/${pending.length})`);
+      let ok = false;
+      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+        try {
+          const res = await fetch(item.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item.body),
+          });
+          const j = await res.json().catch(() => ({}));
+          ok = res.ok && Boolean(j.ok);
+        } catch {
+          ok = false;
+        }
       }
+      if (!ok) failed.push(item.label.split('\n')[0]);
     }
     setUploadNote('');
-    return allOk;
+    return failed;
   }
 
-  /**
-   * Upload youth/role documents (DOC_FIELDS, excluding נתוני העסקה) to the EMPLOYEE
-   * record — filed on רשימת עובדים so they carry over across positions/years. Keyed
-   * by `d.key` in `docs` (matching EmployeeStep), unlike the fieldId-keyed sub-role docs.
-   * Only uploads docs actually attached in this session (already-on-file ones are
-   * skipped in EmployeeStep and never enter `docs`).
-   */
-  async function uploadYouthDocsToEmployee(employeeId: string): Promise<boolean> {
-    const pending = DOC_FIELDS.filter((d) => d.key !== 'docEmployment' && docs[d.key]);
-    if (pending.length === 0) return true;
-
-    let allOk = true;
-    for (let i = 0; i < pending.length; i++) {
-      const d = pending[i];
-      setUploadNote(`מעלה מסמכים… (${i + 1}/${pending.length})`);
-      try {
-        const res = await fetch('/api/upload-employee-doc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, employeeId, fieldId: d.fieldId, file: docs[d.key] }),
-        });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || !j.ok) allOk = false;
-      } catch {
-        allOk = false;
-      }
-    }
-    setUploadNote('');
-    return allOk;
+  /** Success text, naming the documents that didn't make it (if any). */
+  function resultMessage(base: string, failed: string[]): string {
+    if (failed.length === 0) return base;
+    return `${base} המסמכים הבאים לא הועלו: ${failed.join(', ')}. ניתן לפנות למנהל המערכת להשלמתם.`;
   }
 
   async function submit() {
@@ -172,15 +154,8 @@ export function SummaryStep({
         });
         j = await res.json();
         if (res.ok && j.ok) {
-          const subRoleDocsOk = j.employeeId ? await uploadSubRoleDocs(j.employeeId) : true;
-          const youthDocsOk = j.employeeId ? await uploadYouthDocsToEmployee(j.employeeId) : true;
-          const docsOk = subRoleDocsOk && youthDocsOk;
-          setResult({
-            ok: true,
-            message: docsOk
-              ? 'התקן עודכן בהצלחה!'
-              : 'התקן עודכן, אך חלק מהמסמכים לא הועלו. ניתן לפנות למנהל המערכת להשלמתם.',
-          });
+          const failed = await uploadDocuments(positionId, j.employeeId);
+          setResult({ ok: true, message: resultMessage('התקן עודכן בהצלחה!', failed) });
         } else {
           setResult({ ok: false, message: j.message || 'שגיאה בעדכון התקן.' });
         }
@@ -192,16 +167,8 @@ export function SummaryStep({
         });
         j = await res.json();
         if (res.ok && j.ok) {
-          const employmentDocOk = await uploadDocs(j.positionId!);
-          const subRoleDocsOk = j.employeeId ? await uploadSubRoleDocs(j.employeeId) : true;
-          const youthDocsOk = j.employeeId ? await uploadYouthDocsToEmployee(j.employeeId) : true;
-          const docsOk = employmentDocOk && subRoleDocsOk && youthDocsOk;
-          setResult({
-            ok: true,
-            message: docsOk
-              ? 'הטופס נשלח בהצלחה! התקן נוצר במערכת.'
-              : 'הטופס נשלח והתקן נוצר, אך חלק מהמסמכים לא הועלו. ניתן לפנות למנהל המערכת להשלמתם.',
-          });
+          const failed = await uploadDocuments(j.positionId, j.employeeId);
+          setResult({ ok: true, message: resultMessage('הטופס נשלח בהצלחה! התקן נוצר במערכת.', failed) });
         } else {
           setResult({ ok: false, message: j.message || 'שגיאה בשליחת הטופס.' });
         }

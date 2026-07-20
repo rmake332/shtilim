@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
 import { uploadAttachment } from '@/lib/airtable/client';
 import { SUB_ROLE_DOC_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
+import { MAX_DOC_BYTES } from '@/lib/formTypes';
 import { logger } from '@/lib/logger';
 
 /**
@@ -12,8 +13,7 @@ const ALLOWED_FIELD_IDS = new Set<string>([
   ...SUB_ROLE_DOC_FIELDS.map((d) => d.fieldId),
   ...DOC_FIELDS.filter((d) => d.key !== 'docEmployment').map((d) => d.fieldId),
 ]);
-/** Server-side cap mirroring the client (Airtable upload-attachment limit ~5MB). */
-const MAX_DOC_BYTES = 5 * 1024 * 1024;
+/** Server-side cap mirroring the client (see MAX_DOC_BYTES — bounded by the host body limit). */
 
 /**
  * POST /api/upload-employee-doc — upload ONE professional-license or youth/role document

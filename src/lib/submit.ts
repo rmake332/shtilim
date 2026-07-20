@@ -1,5 +1,5 @@
 import 'server-only';
-import { createRecord, updateRecord } from '@/lib/airtable/client';
+import { createRecord, updateRecord, getRecord } from '@/lib/airtable/client';
 import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, PREV_YEAR_FIELDS, SCHEDULE_FIELDS } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { findEmployeeByExactId } from '@/lib/employees';
@@ -84,6 +84,10 @@ export async function submitForm(
         [EMPLOYEE_FIELDS.gender]: employee.gender,
         [EMPLOYEE_FIELDS.birthDate]: employee.birthDate,
         [EMPLOYEE_FIELDS.institution]: [institutionMosadId],
+        // תאריך תחילת עבודה יושב על העובד (לא על התקן) — נגזר מתאריך תחילת החוזה שבטופס.
+        ...(employee.contractStartDate
+          ? { [EMPLOYEE_FIELDS.workStartDate]: employee.contractStartDate }
+          : {}),
         ...(role.licenseNumber ? { [EMPLOYEE_FIELDS.licenseNumber]: Number(role.licenseNumber) } : {}),
       },
       requestId,
@@ -100,6 +104,13 @@ export async function submitForm(
     if (employee.gender)        empUpdate[EMPLOYEE_FIELDS.gender]        = employee.gender;
     if (employee.birthDate)     empUpdate[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;
     if (role.licenseNumber)     empUpdate[EMPLOYEE_FIELDS.licenseNumber] = Number(role.licenseNumber);
+    // תאריך תחילת עבודה: ממלאים רק אם הוא ריק — לעובד ותיק זהו התאריך המקורי ואין לדרוס אותו.
+    if (employee.contractStartDate) {
+      const current = await getRecord(TABLES.employees, employeeId, requestId);
+      if (current && !current.fields[EMPLOYEE_FIELDS.workStartDate]) {
+        empUpdate[EMPLOYEE_FIELDS.workStartDate] = employee.contractStartDate;
+      }
+    }
     if (Object.keys(empUpdate).length > 0) {
       logger.info({ requestId, employeeId }, 'updating existing employee on new-position submit');
       await updateRecord(TABLES.employees, employeeId, empUpdate, requestId);
