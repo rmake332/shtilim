@@ -52,10 +52,12 @@ export const EMPLOYEE_FIELDS = {
   docSocialWorkerReg: 'fld8nuuhTs2er90Rx', // תעודת רישום משרד הרווחה
   // Youth/role document attachments (multipleAttachments), filed on the EMPLOYEE (reused
   // across positions/years) — not re-requested if already on file.
-  docEducationalInstitution: 'fldKu5XvvJNEd1vDV', // אישור ממוסד לימודי - נוער
-  docMedical: 'fldHVsFFxOfkDYO4H', // אישור רפואי- נוער
-  docNoViolence: 'fld3LLyKU8wcbQXdk', // אישור-העדר עבירות אלימות
-  docPoliceNoSexOffense: 'fldZBF1Fw0aCcuONK', // אישור משטרה-העדר עבירות מין
+  // ⚠️ Fields of the SAME NAME also exist on תקנים פעילים (where they used to live). These
+  // are the רשימת עובדים ids — uploading to the position's ids returns 403 from Airtable.
+  docEducationalInstitution: 'fldSXiNNO0OHOUDEi', // אישור ממוסד לימודי - נוער
+  docMedical: 'fldcFEdGyxT1WV52J', // אישור רפואי- נוער
+  docNoViolence: 'fldA4lYDOx7NcjiqY', // אישור-העדר עבירות אלימות
+  docPoliceNoSexOffense: 'fldXQ4E1w8dN66qIi', // אישור משטרה-העדר עבירות מין
 } as const;
 
 /**
