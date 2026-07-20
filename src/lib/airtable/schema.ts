@@ -256,6 +256,8 @@ export const BUDGET_FIELDS = {
   institutionLink: 'fld91lKf1ba2ADEnL', // → מוסדות
   symbolLink: 'fldG29aOqYleLgfGt', // → סמלי מוסד
   bellScheduleNum: 'fldjzY10TI7bcDsBZ', // לוח צלצולים (multipleSelects)
+  bellScheduleNum2: 'fld9oZHCPR9ECJhxY', // לוח צלצולים 2 — extra schedules the role may choose from
+  bellScheduleNum3: 'fldYoBiKhQR3iwgEt', // לוח צלצולים 3
   severeDisabilityBonus: 'fldOgeNqOSkZZKbmC', // לקות קשה (checkbox)
   category: 'fld396nSlQajFyFir', // קטגוריה (singleSelect)
   ofekChadash: 'fld2Rydg2hk61j86a', // אופק חדש (checkbox)

@@ -86,16 +86,22 @@ export function subRoleDocsFor(subRole: string): readonly SubRoleDocDef[] {
   return SUB_ROLE_DOC_FIELDS.filter((d) => d.subRole === subRole);
 }
 
+/** Under 14 → employment forbidden outright; the form must not continue. */
+export function isUnderEmploymentAge(birthDate: string): boolean {
+  const age = ageFromBirthDate(birthDate);
+  return age != null && age < 14;
+}
+
 /** Under 16 → employment forbidden during the school year (warning). */
 export function isUnder16(birthDate: string): boolean {
   const age = ageFromBirthDate(birthDate);
   return age != null && age < 16;
 }
 
-/** Ages 15–17 (>=15, <18) → youth working-hours rules apply. */
-export function isYouthHoursAge(birthDate: string): boolean {
+/** Under 18 → youth-employment rules apply (working hours + acknowledgement). */
+export function isMinor(birthDate: string): boolean {
   const age = ageFromBirthDate(birthDate);
-  return age != null && age >= 15 && age < 18;
+  return age != null && age < 18;
 }
 
 /** Step 1 — selected or newly-entered employee. */
@@ -248,6 +254,12 @@ export interface ScheduleData {
    * (starts before 12:00). All other days must start at 12:00 or later.
    */
   morningDay?: Day;
+  /**
+   * Bell schedule (סוג in לוח צלצולים) chosen by the user when the role itself carries
+   * none. Form-session only — the position's לוח צלצולים field is a lookup from the
+   * budget row and can't be written to.
+   */
+  bellScheduleType?: string;
 }
 
 export function emptySchedule(): ScheduleData {
@@ -265,6 +277,9 @@ export function emptySchedule(): ScheduleData {
   };
 }
 
+/** ברירת מחדל לתאריך תחילת חוזה — 1 בספטמבר, תחילת שנת הלימודים תשפ"ז. */
+export const DEFAULT_CONTRACT_START_DATE = '2026-09-01';
+
 export function emptyEmployee(): EmployeeData {
   return {
     recordId: null,
@@ -278,7 +293,7 @@ export function emptyEmployee(): EmployeeData {
     childrenUnder14: '',
     birthDate: '',
     ageHours: 0,
-    contractStartDate: '',
+    contractStartDate: DEFAULT_CONTRACT_START_DATE,
     youthRulesAcknowledged: false,
     fatherPosition: false,
     existingSubRoleDocs: [],

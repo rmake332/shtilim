@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { ageFromBirthDate, isDocVisible, isUnder16, isYouthHoursAge } from './formTypes';
+import {
+  ageFromBirthDate,
+  isDocVisible,
+  isMinor,
+  isUnder16,
+  isUnderEmploymentAge,
+} from './formTypes';
 
 // Birth date (Jan 1) for a target completed age — birthday already passed this year.
 const birthForAge = (completedAge: number) => {
@@ -51,6 +57,14 @@ describe("isDocVisible — 'youth' (ages 15–17; >=15, <18)", () => {
 });
 
 describe('youth-employment warning thresholds', () => {
+  it('isUnderEmploymentAge — true below 14, false at/above 14', () => {
+    expect(isUnderEmploymentAge(birthForAge(12))).toBe(true);
+    expect(isUnderEmploymentAge(birthForAge(13))).toBe(true);
+    expect(isUnderEmploymentAge(birthForAge(14))).toBe(false);
+    expect(isUnderEmploymentAge(birthForAge(30))).toBe(false);
+    expect(isUnderEmploymentAge('')).toBe(false); // no date yet → don't block
+  });
+
   it('isUnder16 — true below 16, false at/above 16', () => {
     expect(isUnder16(birthForAge(14))).toBe(true);
     expect(isUnder16(birthForAge(15))).toBe(true);
@@ -59,13 +73,13 @@ describe('youth-employment warning thresholds', () => {
     expect(isUnder16('')).toBe(false);
   });
 
-  it('isYouthHoursAge — true for 15, 16 and 17 (>=15, <18)', () => {
-    expect(isYouthHoursAge(birthForAge(14))).toBe(false);
-    expect(isYouthHoursAge(birthForAge(15))).toBe(true);
-    expect(isYouthHoursAge(birthForAge(16))).toBe(true);
-    expect(isYouthHoursAge(birthForAge(17))).toBe(true);
-    expect(isYouthHoursAge(birthForAge(18))).toBe(false);
-    expect(isYouthHoursAge('')).toBe(false);
+  it('isMinor — true below 18, false at/above 18', () => {
+    expect(isMinor(birthForAge(14))).toBe(true);
+    expect(isMinor(birthForAge(15))).toBe(true);
+    expect(isMinor(birthForAge(16))).toBe(true);
+    expect(isMinor(birthForAge(17))).toBe(true);
+    expect(isMinor(birthForAge(18))).toBe(false);
+    expect(isMinor('')).toBe(false);
   });
 });
 

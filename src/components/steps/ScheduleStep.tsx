@@ -22,6 +22,15 @@ import {
   type Shift,
   type Day,
 } from '@/lib/schedule/time';
+import {
+  youthLimitsFor,
+  youthLimitsSummary,
+  youthDayError,
+  youthWeeklyError,
+  youthSlotAllowed,
+  youthTimeError,
+  type YouthLimits,
+} from '@/lib/schedule/youth';
 
 // ── Overlap-check types & helper ─────────────────────────────────────────────
 
@@ -141,6 +150,20 @@ function AlertBanners({ errors, warnings }: { errors: string[]; warnings: string
         </div>
       )}
     </>
+  );
+}
+
+/** Banner shown above the grid whenever the employee is a minor — the limits are enforced, not advisory. */
+function YouthNotice({ limits }: { limits: YouthLimits }) {
+  return (
+    <div className="p-4 rounded-xl bg-secondary-container/40 text-on-secondary-container text-body-md flex items-start gap-2">
+      <Icon name="gavel" className="text-[20px] mt-0.5 shrink-0" />
+      <p>
+        <span className="font-bold">חוק העסקת נוער — מגבלות מערכת השעות:</span>
+        <br />
+        {youthLimitsSummary(limits)}. שעות מחוץ לטווח או חריגה מהמכסה ייחסמו.
+      </p>
+    </div>
   );
 }
 
@@ -279,12 +302,14 @@ export function ScheduleStep({
     );
   }
 
-  // ----- teaching staff with a bell schedule: pick slots instead of typing times -----
+  // ----- teaching staff: pick bell-schedule slots instead of typing times -----
   // Only for the full-timetable teaching type (scheduleType "הוראה"). Roles that are
   // category=הוראה but use a different entry mechanism — סגן ראשון (37.5/40 picker),
   // מנהל/ת & סגן שני (handled above), "הוראה - לוח פרא" (typed grid, below), or רגיל
   // (manual grid) — must NOT land here even if they happen to carry a bell-schedule number.
-  if (type === SCHEDULE_TYPE.teaching && role.bellScheduleNums.length > 0) {
+  // A teaching role with no לוח צלצולים of its own still lands here: the grid then asks
+  // the user to pick one from the existing schedules before showing any slots.
+  if (type === SCHEDULE_TYPE.teaching) {
     return (
       <BellScheduleGrid
         token={token}
@@ -301,7 +326,7 @@ export function ScheduleStep({
     );
   }
 
-  // ----- schedule-grid types: regular / deputy1 / para / teaching (no bell schedule) / הוראה-לוח פרא -----
+  // ----- schedule-grid types: regular / deputy1 / para / הוראה-לוח פרא -----
   const maxShifts = type === SCHEDULE_TYPE.deputy1 ? 1 : 3;
   return (
     <GridSchedule
@@ -375,7 +400,10 @@ function GridSchedule({
   const gridDays: readonly Day[] = isRegular ? REGULAR_DAYS : DAYS;
   const totalMin = weeklyMinutes(week, gridDays);
   const totalHours = totalMin / 60;
-  const overCap = totalHours > WEEKLY_CAP_HOURS;
+  // חוק העסקת נוער: חלון שעות + מכסה יומית נאכפים בהזנה; המכסה השבועית מחליפה את תקרת ה-42.
+  const youth = youthLimitsFor(employee.birthDate);
+  const weeklyCap = youth ? youth.maxWeeklyHours : WEEKLY_CAP_HOURS;
+  const overCap = totalHours > weeklyCap;
 
   // תפקיד צהריים: כניסה לפני 12:00 אסורה פרט ליום עובדת בוקר שנבחר מראש.
   const isAfternoonRole = role.roleTitle.includes('צהריים');
@@ -413,6 +441,12 @@ function GridSchedule({
           break;
         }
       }
+    }
+    if (dayErrors[d]) continue;
+    // עובד נוער: חלון שעות ומכסה יומית. תופס גם שעות שהוזנו מראש (עריכה / שנה קודמת).
+    if (youth) {
+      const ye = youthDayError(week[d] ?? [], youth);
+      if (ye) dayErrors[d] = ye;
     }
   }
   const hasDayError = Object.keys(dayErrors).length > 0;
@@ -544,7 +578,12 @@ function GridSchedule({
     const warns: string[] = [];
     if (isAfternoonRole && !morningDay) errs.push('בתפקיד צהריים יש לבחור יום עובדת בוקר לפני הגשת המערכת');
     if (hasDayError) errs.push('יש לתקן את שגיאות מערכת השעות');
-    if (overCap) errs.push('מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות');
+    if (overCap)
+      errs.push(
+        youth
+          ? youthWeeklyError(totalHours, youth)!
+          : 'מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות',
+      );
     if (isPara) errs.push(...paraDayErrors);
     // פרא: block if hours can't snap to nearest whole/half within ±0.01.
     if (isPara && paraDayErrors.length === 0 && snapToHalf(paraHours, 0.012) === null)
@@ -678,7 +717,7 @@ function GridSchedule({
             } else {
               displayHours = utilizedHours;
             }
-            const displayOverCap = displayHours > WEEKLY_CAP_HOURS;
+            const displayOverCap = displayHours > weeklyCap;
             return (
               <>
                 <div className="flex justify-between items-baseline mb-1">
@@ -690,11 +729,11 @@ function GridSchedule({
                 <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
                   <div
                     className={`h-full ${displayOverCap ? 'bg-error' : 'bg-primary'}`}
-                    style={{ width: `${Math.min(100, (displayHours / WEEKLY_CAP_HOURS) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (displayHours / weeklyCap) * 100)}%` }}
                   />
                 </div>
                 <p className="text-label-sm text-on-surface-variant flex items-center gap-1">
-                  <Icon name="info" className="text-[16px]" /> מוגבל ל-42 שעות שבועיות לפי חוק
+                  <Icon name="info" className="text-[16px]" /> מוגבל ל-{weeklyCap} שעות שבועיות לפי חוק
                 </p>
               </>
             );
@@ -703,6 +742,16 @@ function GridSchedule({
             <div className="mt-3 text-label-sm flex justify-between text-on-surface-variant">
               <span>סה״כ שעות שהוזנו במערכת:</span>
               <span>{formatNum(totalHours)}</span>
+            </div>
+          )}
+
+          {/* עובד נוער — המכסה השבועית נמדדת בשעות שעון בפועל */}
+          {youth && (
+            <div className="mt-1 text-label-sm flex justify-between">
+              <span className="text-on-surface-variant">שעות שהייה בפועל (מכסת נוער):</span>
+              <span className={`font-bold ${totalHours > youth.maxWeeklyHours ? 'text-error' : 'text-primary'}`}>
+                {formatNum(totalHours)} / {youth.maxWeeklyHours}
+              </span>
             </div>
           )}
 
@@ -747,6 +796,7 @@ function GridSchedule({
 
       {/* Days grid */}
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
+        {youth && <YouthNotice limits={youth} />}
         {(type === 'סגן ראשון') && (
           <div className="bg-white p-4 rounded-lg border border-outline-variant max-w-xs">
             <label className="text-label-lg text-on-surface block mb-2">מס׳ שעות שבועיות</label>
@@ -836,8 +886,18 @@ function GridSchedule({
                 <div className="flex-1 flex flex-col gap-3">
                   {visible.map((s, idx) => (
                     <div key={idx} className="flex items-center gap-4">
-                      <TimeBox label="כניסה" value={s.in} onChange={(v) => updateShift(day, idx, 'in', v)} />
-                      <TimeBox label="יציאה" value={s.out} onChange={(v) => updateShift(day, idx, 'out', v)} />
+                      <TimeBox
+                        label="כניסה"
+                        value={s.in}
+                        onChange={(v) => updateShift(day, idx, 'in', v)}
+                        youth={youth}
+                      />
+                      <TimeBox
+                        label="יציאה"
+                        value={s.out}
+                        onChange={(v) => updateShift(day, idx, 'out', v)}
+                        youth={youth}
+                      />
                       <button onClick={() => removeShift(day, idx)} aria-label="מחק משמרת">
                         <Icon name="delete" className="text-outline hover:text-error" />
                       </button>
@@ -1055,8 +1115,26 @@ function BellScheduleGrid({
   onEditEmployee?: () => void;
   onNext: (d: ScheduleData) => void;
 }) {
+  // The timetable is always entered by ONE bell schedule. A role that offers exactly one
+  // uses it silently; otherwise the user picks — among the role's own schedules when it
+  // has several, or among all existing ones when it has none. The pick is kept on the
+  // form data so it survives navigating between steps.
+  const roleTypes = role.bellScheduleNums;
+  const needsTypeChoice = roleTypes.length !== 1;
+  /** When the role lists several, only those are offered — never the full list. */
+  const restrictedToRole = roleTypes.length > 1;
+  const storedType = data.bellScheduleType ?? '';
+  // A schedule kept from a role chosen earlier may not be one this role offers — ignore it.
+  const chosenType = restrictedToRole && !roleTypes.includes(storedType) ? '' : storedType;
+  const activeType = needsTypeChoice ? chosenType : '';
+  /** A bell schedule is known (the role's single one, or the one the user picked). */
+  const schedulePicked = !needsTypeChoice || chosenType !== '';
+  const [allTypes, setAllTypes] = useState<string[]>([]);
+  const [typesLoading, setTypesLoading] = useState(needsTypeChoice && !restrictedToRole);
+  const typeOptions = restrictedToRole ? roleTypes : allTypes;
+
   const [slots, setSlots] = useState<BellSlot[]>([]);
-  const [slotsLoading, setSlotsLoading] = useState(true);
+  const [slotsLoading, setSlotsLoading] = useState(!needsTypeChoice);
   const [loadErr, setLoadErr] = useState('');
   // Picked slot id + its daily hours, per day/shift. Mirrors data.week (which holds in/out).
   const [picks, setPicks] = useState<Record<Day, (BellSlot | null)[]>>(() => {
@@ -1085,21 +1163,49 @@ function BellScheduleGrid({
   // תפקיד צהריים: זיהוי לפי שם התפקיד.
   const isAfternoonRole = role.roleTitle.includes('צהריים');
 
+  // חוק העסקת נוער: רצועות מחוץ לחלון השעות כלל אינן מוצעות לבחירה.
+  const youth = youthLimitsFor(employee.birthDate);
+  const weeklyCap = youth ? youth.maxWeeklyHours : WEEKLY_CAP_HOURS;
+  const allowedSlots = youth ? slots.filter((s) => youthSlotAllowed(s, youth)) : slots;
+
   // Friday ("ו") slots differ from Sun–Thu ("א-ה"); offer the right group per day.
   // תפקיד צהריים: ביום הבוקר — כל הרצועות; בשאר הימים — רק 12:00 ומעלה.
   const slotsForDay = (day: Day): BellSlot[] => {
     const isFri = day === 'fri';
-    const pool = slots.filter((s) => (isFri ? s.weekday === 'friday' : s.weekday !== 'friday'));
+    const pool = allowedSlots.filter((s) => (isFri ? s.weekday === 'friday' : s.weekday !== 'friday'));
     if (!isAfternoonRole || day === morningDay) return pool;
     return pool.filter((s) => (toMinutes(s.in) ?? 0) >= 12 * 60);
   };
   // kept for non-afternoon roles (same logic, no day dependency)
-  const weekdaySlots = slots.filter((s) => s.weekday !== 'friday');
-  const fridaySlots = slots.filter((s) => s.weekday === 'friday');
+  const weekdaySlots = allowedSlots.filter((s) => s.weekday !== 'friday');
+  const fridaySlots = allowedSlots.filter((s) => s.weekday === 'friday');
+
+  // All existing bell schedules, read live from Airtable — needed only when the role
+  // itself names none. A role that lists several offers exactly those, no fetch needed.
+  useEffect(() => {
+    if (!needsTypeChoice || restrictedToRole) return;
+    setTypesLoading(true);
+    fetch(`/api/schedule/bell-types?token=${encodeURIComponent(token)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (Array.isArray(j.types)) setAllTypes(j.types);
+        else setLoadErr('לא נטענה רשימת לוחות הצלצולים');
+      })
+      .catch(() => setLoadErr('שגיאה בטעינת רשימת לוחות הצלצולים'))
+      .finally(() => setTypesLoading(false));
+  }, [token, needsTypeChoice, restrictedToRole]);
 
   useEffect(() => {
+    // Nothing to load until a schedule is known (role's own, or the user's pick).
+    if (needsTypeChoice && !activeType) {
+      setSlots([]);
+      setSlotsLoading(false);
+      return;
+    }
     setSlotsLoading(true);
+    setLoadErr('');
     const params = new URLSearchParams({ token, symbolId: role.symbolId, roleId: role.roleId });
+    if (activeType) params.set('type', activeType);
     fetch(`/api/schedule/bell?${params.toString()}`)
       .then((r) => r.json())
       .then((j) => {
@@ -1108,7 +1214,30 @@ function BellScheduleGrid({
       })
       .catch(() => setLoadErr('שגיאה בטעינת לוח הצלצולים'))
       .finally(() => setSlotsLoading(false));
-  }, [token, role.symbolId, role.roleId]);
+  }, [token, role.symbolId, role.roleId, needsTypeChoice, activeType]);
+
+  /**
+   * Switching schedules invalidates every pick — the slot ids belong to the old one.
+   * The FIRST choice keeps data.week untouched: in edit / prior-year mode the week is
+   * pre-filled and the effect below rebuilds the picks from it once the slots arrive.
+   */
+  function changeBellType(next: string) {
+    if (next === chosenType) return;
+    const replacing = chosenType !== '';
+    setOfek1(null); setHoursAtOfek1(null); setExisting(null); setOfek(null);
+    setErrors([]); setWarnings([]);
+    bellInvalidateOverlap();
+    if (replacing) {
+      const cleared = {} as Record<Day, (BellSlot | null)[]>;
+      for (const d of DAYS) cleared[d] = [];
+      setPicks(cleared);
+    }
+    setData((prev) => ({
+      ...prev,
+      bellScheduleType: next || undefined,
+      ...(replacing ? { week: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [] } } : {}),
+    }));
+  }
 
   // When slots are loaded and data.week was pre-populated (e.g. from prior year),
   // reconstruct picks by matching each shift's in/out to an available slot.
@@ -1220,14 +1349,30 @@ function BellScheduleGrid({
         bellDayErrors[d] = 'בתפקיד צהריים רצועה לפני 12:00 מותרת רק ביום עובדת הבוקר';
       }
     }
+    if (bellDayErrors[d]) continue;
+    // עובד נוער: חלון שעות ומכסה יומית — תופס גם רצועות שנטענו מראש (עריכה / שנה קודמת).
+    if (youth) {
+      const ye = youthDayError(shifts, youth);
+      if (ye) bellDayErrors[d] = ye;
+    }
   }
+  // מכסה שבועית לנוער נמדדת בשעות שעון (משך הרצועות), לא בשעות אקדמיות.
+  const weeklyClockHours = DAYS.reduce(
+    (acc, d) => acc + picks[d].reduce((s, p) => s + (p ? shiftMinutes({ in: p.in, out: p.out }) : 0), 0),
+    0,
+  ) / 60;
   const hasBellDayError = Object.keys(bellDayErrors).length > 0;
 
   function bellPreCheck(): string[] {
     const errs: string[] = [];
+    if (needsTypeChoice && !chosenType) errs.push('יש לבחור לוח צלצולים לפני הזנת המערכת');
     if (isAfternoonRole && !morningDay) errs.push('בתפקיד צהריים יש לבחור יום עובדת בוקר לפני הגשת המערכת');
     if (weeklyHours <= 0) errs.push('יש לבחור לפחות רצועה אחת');
     if (weeklyHours > WEEKLY_CAP_HOURS) errs.push('מערכת שעות לעובד מוגבלת לפי חוק ל-42 שעות שבועיות');
+    if (youth) {
+      const we = youthWeeklyError(weeklyClockHours, youth);
+      if (we) errs.push(we);
+    }
     if (weeklyHours > 0 && snappedHours === null) errs.push(NON_INTEGER_HOURS_ERROR);
     if (hasBellDayError)
       errs.push(...Object.entries(bellDayErrors).map(([d, e]) => `יום ${DAY_LABELS[d as Day]}: ${e}`));
@@ -1363,7 +1508,7 @@ function BellScheduleGrid({
             } else {
               displayHours = weeklyHours;
             }
-            const displayOverCap = displayHours > WEEKLY_CAP_HOURS;
+            const displayOverCap = displayHours > weeklyCap;
             return (
               <>
                 <div className="flex justify-between items-baseline mb-1">
@@ -1375,7 +1520,7 @@ function BellScheduleGrid({
                 <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden mb-3">
                   <div
                     className={`h-full ${displayOverCap ? 'bg-error' : 'bg-primary'}`}
-                    style={{ width: `${Math.min(100, (displayHours / WEEKLY_CAP_HOURS) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (displayHours / weeklyCap) * 100)}%` }}
                   />
                 </div>
                 <p className="text-label-sm text-on-surface-variant flex items-center gap-1 mb-2">
@@ -1384,6 +1529,16 @@ function BellScheduleGrid({
               </>
             );
           })()}
+
+          {/* עובד נוער — המכסה השבועית נמדדת בשעות שעון בפועל */}
+          {youth && (
+            <div className="mt-1 text-label-sm flex justify-between">
+              <span className="text-on-surface-variant">שעות שהייה בפועל (מכסת נוער):</span>
+              <span className={`font-bold ${weeklyClockHours > youth.maxWeeklyHours ? 'text-error' : 'text-primary'}`}>
+                {formatNum(weeklyClockHours)} / {youth.maxWeeklyHours}
+              </span>
+            </div>
+          )}
 
           {/* עיגול לאופק — מוצג רק כשיש הפרש */}
           {snappedHours !== null && (
@@ -1418,6 +1573,7 @@ function BellScheduleGrid({
 
       {/* Days grid */}
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
+        {youth && <YouthNotice limits={youth} />}
         {slotsLoading && (
           <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant flex items-center gap-3 text-on-surface-variant text-body-md">
             <svg className="animate-spin h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
@@ -1430,6 +1586,72 @@ function BellScheduleGrid({
         {!slotsLoading && loadErr && (
           <div className="p-3 rounded-lg bg-error-container text-on-error-container text-body-md flex items-center gap-2">
             <Icon name="error" /> {loadErr}
+          </div>
+        )}
+
+        {/* בחירת לוח צלצולים — כשלתפקיד יש כמה לוחות, או אף לא אחד */}
+        {needsTypeChoice && (
+          <div className="bg-white p-5 rounded-xl border border-outline-variant shadow-card">
+            <div className="flex items-start gap-2 mb-3">
+              <Icon name="notifications_active" className="text-[20px] text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="text-label-lg font-semibold text-on-surface">בחירת לוח צלצולים</p>
+                <p className="text-label-sm text-on-surface-variant mt-0.5">
+                  {restrictedToRole
+                    ? 'לתפקיד זה משויכים כמה לוחות צלצולים. יש לבחור לוח אחד, והרצועות שלו יוצגו להזנת המערכת.'
+                    : 'לתפקיד זה לא הוגדר לוח צלצולים בתקציב. יש לבחור לוח מתוך הרשימה, והרצועות שלו יוצגו להזנת המערכת.'}
+                </p>
+              </div>
+            </div>
+            {/* A role's own schedules are a handful — show them as chips; the full
+                list (dozens) stays a dropdown. */}
+            {restrictedToRole ? (
+              <div className="flex flex-wrap gap-2">
+                {typeOptions.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => changeBellType(t)}
+                    className={`px-4 py-2 rounded-lg text-label-md font-semibold border transition-colors ${
+                      chosenType === t
+                        ? 'bg-primary text-on-primary border-primary'
+                        : 'bg-surface-container-low text-on-surface border-outline-variant hover:border-primary hover:text-primary'
+                    }`}
+                  >
+                    לוח {t}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <select
+                className="bg-surface-container-low rounded-lg py-3 px-3 text-body-md w-full sm:w-72"
+                value={chosenType}
+                disabled={typesLoading}
+                onChange={(e) => changeBellType(e.target.value)}
+              >
+                <option value="">{typesLoading ? 'טוען לוחות…' : 'בחר לוח צלצולים…'}</option>
+                {typeOptions.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!chosenType && (
+              <p className="text-label-sm text-amber-700 mt-3 flex items-center gap-1">
+                <Icon name="info" className="text-[16px]" /> טרם נבחר לוח צלצולים — הרצועות יוצגו לאחר הבחירה
+              </p>
+            )}
+            {chosenType && !slotsLoading && slots.length === 0 && !loadErr && (
+              <p className="text-label-sm text-amber-700 mt-3 flex items-center gap-1">
+                <Icon name="info" className="text-[16px]" /> אין רצועות בלוח הצלצולים שנבחר
+              </p>
+            )}
+            {chosenType && (
+              <p className="text-label-sm text-on-surface-variant mt-3 flex items-center gap-1">
+                <Icon name="info" className="text-[16px]" /> החלפת הלוח תמחק את הרצועות שנבחרו
+              </p>
+            )}
           </div>
         )}
 
@@ -1480,7 +1702,7 @@ function BellScheduleGrid({
           </div>
         )}
 
-        {DAYS.map((day) => {
+        {schedulePicked && DAYS.map((day) => {
           const daySlots = isAfternoonRole ? slotsForDay(day) : (day === 'fri' ? fridaySlots : weekdaySlots);
           const dayPicks = picks[day];
           const dayHours = dayPicks.reduce((s, p) => s + (p?.dailyHours ?? 0), 0);
@@ -1504,7 +1726,9 @@ function BellScheduleGrid({
                     <div key={idx} className="flex items-center gap-2">
                       <div className="flex-1">
                         <BellSlotPicker
-                          slots={daySlots}
+                          // רצועה שכבר נבחרה (למשל מטעינת שנה קודמת) שאינה ברשימה המסוננת
+                          // עדיין מוצגת, כדי שהמשתמש יראה אותה ויוכל להסירה.
+                          slots={p && !daySlots.some((s) => s.id === p.id) ? [p, ...daySlots] : daySlots}
                           value={p?.id ?? null}
                           onPick={(slot) => pickSlot(day, idx, slot)}
                           onClear={() => clearSlot(day, idx)}
@@ -1850,36 +2074,46 @@ function TimeBox({
   label,
   value,
   onChange,
+  youth,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  /** When set, a time outside the youth-employment window is rejected and never committed. */
+  youth?: YouthLimits | null;
 }) {
   const [raw, setRaw] = useState(value);
-  const [invalid, setInvalid] = useState(false);
+  const [error, setError] = useState('');
 
   // Keep local raw text in sync when parent resets the value (e.g. shift deleted)
   useEffect(() => { setRaw(value); }, [value]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     setRaw(e.target.value);
-    setInvalid(false);
+    setError('');
   }
 
   function handleBlur() {
     if (!raw.trim()) {
       onChange('');
-      setInvalid(false);
+      setError('');
       return;
     }
     const parsed = parseTimeInput(raw);
-    if (parsed) {
-      setRaw(parsed);
-      setInvalid(false);
-      onChange(parsed);
-    } else {
-      setInvalid(true);
+    if (!parsed) {
+      setError('פורמט שגוי');
+      return;
     }
+    // חוק העסקת נוער: שעה מחוץ לטווח נחסמת — הערך לא נשמר והשדה חוזר לקודם.
+    const youthErr = youth ? youthTimeError(parsed, youth) : null;
+    if (youthErr) {
+      setRaw(parsed);
+      setError(youthErr);
+      return;
+    }
+    setRaw(parsed);
+    setError('');
+    onChange(parsed);
   }
 
   return (
@@ -1893,10 +2127,10 @@ function TimeBox({
         onChange={handleChange}
         onBlur={handleBlur}
         className={`rounded-lg py-2 px-3 text-body-md w-28 text-center ${
-          invalid ? 'bg-error-container border border-error' : 'bg-surface-container-low'
+          error ? 'bg-error-container border border-error' : 'bg-surface-container-low'
         }`}
       />
-      {invalid && <span className="text-[10px] text-error">פורמט שגוי</span>}
+      {error && <span className="text-[10px] text-error">{error}</span>}
     </div>
   );
 }

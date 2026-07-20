@@ -12,6 +12,7 @@ import { extractWeek, type PrevYearPosition } from '@/lib/prevYearPosition';
 import { emptyRole, emptyEmployee, emptySchedule } from '@/lib/formTypes';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
+import { bellScheduleNumsFrom } from '@/lib/roles';
 
 export interface PrevYearFull {
   /** Resolved institution token (derived server-side from the prior-year row's mosad name). */
@@ -136,7 +137,8 @@ export async function loadPrevYearFull(
         existingSubRoleDocs: existingSubRoleDocsFromFields(ef),
         existingLicenseNumber: employeeLicenseNumber,
         existingYouthDocs: existingYouthDocsFromFields(ef),
-        // childrenUnder14 / contractStartDate stay empty → secretary must fill them.
+        // childrenUnder14 stays empty → secretary must fill it.
+        // contractStartDate נשאר ברירת המחדל של emptyEmployee (1.9.2026).
       };
     }
   }
@@ -161,6 +163,8 @@ export async function loadPrevYearFull(
         BUDGET_FIELDS.remainingHours,
         BUDGET_FIELDS.layer,
         BUDGET_FIELDS.bellScheduleNum,
+        BUDGET_FIELDS.bellScheduleNum2,
+        BUDGET_FIELDS.bellScheduleNum3,
         BUDGET_FIELDS.ofekChadash,
         BUDGET_FIELDS.paraBoard,
         BUDGET_FIELDS.severeDisabilityBonus,
@@ -219,9 +223,7 @@ export async function loadPrevYearFull(
     role.paraBoard = Boolean(f[BUDGET_FIELDS.paraBoard]);
     role.ofekChadash = Boolean(f[BUDGET_FIELDS.ofekChadash]);
     role.severeDisability = Boolean(f[BUDGET_FIELDS.severeDisabilityBonus]);
-    role.bellScheduleNums = Array.isArray(f[BUDGET_FIELDS.bellScheduleNum])
-      ? (f[BUDGET_FIELDS.bellScheduleNum] as unknown[]).map((x) => str(x)).filter(Boolean)
-      : [];
+    role.bellScheduleNums = bellScheduleNumsFrom(f);
     role.salaryType = str(f[BUDGET_FIELDS.salaryType]) || null;
     role.tariff = str(f[BUDGET_FIELDS.tariff]) || null;
     role.ranking = str(f[BUDGET_FIELDS.ranking]) || null;

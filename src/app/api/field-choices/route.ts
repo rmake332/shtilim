@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
-import { BASE_ID, TABLES } from '@/lib/airtable/schema';
+import { TABLES } from '@/lib/airtable/schema';
+import { getFieldChoices } from '@/lib/airtable/meta';
 import { logger } from '@/lib/logger';
 
 /**
@@ -21,38 +22,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const airtableToken = process.env.AIRTABLE_TOKEN;
-    if (!airtableToken) throw new Error('AIRTABLE_TOKEN not set');
-
-    const res = await fetch(
-      `https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`,
-      {
-        headers: { Authorization: `Bearer ${airtableToken}` },
-        next: { revalidate: 3600 },
-      },
-    );
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      logger.error({ requestId: gate.requestId, status: res.status }, 'meta api error');
-      throw new Error(`Airtable Meta ${res.status}: ${text.slice(0, 200)}`);
-    }
-
-    const json = (await res.json()) as {
-      tables: Array<{
-        id: string;
-        fields: Array<{
-          id: string;
-          type: string;
-          options?: { choices?: Array<{ name: string }> };
-        }>;
-      }>;
-    };
-
-    const table = json.tables.find((t) => t.id === tableId);
-    const field = table?.fields.find((f) => f.id === fieldId);
-    const choices = (field?.options?.choices ?? []).map((c) => c.name);
-
+    const choices = await getFieldChoices(tableId, fieldId, gate.requestId);
     return NextResponse.json({ choices });
   } catch (e) {
     logger.error({ requestId: gate.requestId, err: String(e) }, 'field-choices failed');

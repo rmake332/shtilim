@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import {
+  ageFromBirthDate,
   EmployeeData,
   emptyEmployee,
   isDocVisible,
+  isMinor,
   isUnder16,
-  isYouthHoursAge,
+  isUnderEmploymentAge,
   MaritalStatus,
   YesNo,
   YouthDocs,
@@ -26,6 +28,8 @@ interface SearchResult {
 }
 
 const MARITAL_OPTIONS: MaritalStatus[] = ['רווק/ה', 'נשוי/ה', 'גרוש/ה', 'אלמן/ה'];
+
+const UNDER_AGE_MESSAGE = 'חל איסור חוקי להעסקת נוער תחת גיל 14.';
 
 export function EmployeeStep({
   token,
@@ -221,6 +225,8 @@ export function EmployeeStep({
     if (showYouthRules && !data.youthRulesAcknowledged) {
       e.youthRulesAcknowledged = 'יש לאשר שקראת את הוראות העסקת הנוער';
     }
+    // Under 14 → hard stop, whatever else is filled in.
+    if (underEmploymentAge) e.birthDate = UNDER_AGE_MESSAGE;
     setErrors(e);
     // An existing employee shows read-only; if a profile field is invalid (e.g. a
     // missing phone), open edit mode so the secretary can actually fix it.
@@ -250,10 +256,14 @@ export function EmployeeStep({
   const pendingDocs = visibleDocs.filter((d) => !existingYouthDocs.has(d.fieldId));
   const alreadyOnFileDocs = visibleDocs.filter((d) => existingYouthDocs.has(d.fieldId));
 
+  // Under 14 → employment is illegal at any time; the form is a dead end here.
+  const underEmploymentAge = isUnderEmploymentAge(data.birthDate);
+
   // Youth-employment warnings (by age) + a mandatory acknowledgement checkbox.
+  // The working-hours limits differ between 14–16 and 16–18.
   const under16 = isUnder16(data.birthDate);
-  const youthHoursAge = isYouthHoursAge(data.birthDate); // 16 or 17
-  const showYouthRules = under16 || youthHoursAge; // any minor → show rules + checkbox
+  // Any minor → show rules + checkbox. Under 14 there is nothing to acknowledge.
+  const showYouthRules = isMinor(data.birthDate) && !underEmploymentAge;
 
   // Drop any previously-attached doc whose condition no longer holds
   // (e.g. gender switched, or birth date edited out of the youth range).
@@ -416,6 +426,7 @@ export function EmployeeStep({
           {/* Same layout always; fields are locked unless editing (new employee = always editable). */}
           {(() => {
             const locked = selectedExisting && !editing;
+            const age = ageFromBirthDate(data.birthDate);
             return (
               <div
                 className={`grid grid-cols-1 md:grid-cols-3 gap-x-gutter gap-y-5 ${
@@ -496,6 +507,16 @@ export function EmployeeStep({
                 <Field label="תאריך לידה" error={errors.birthDate} locked={locked}>
                   <Input value={data.birthDate} onChange={(v) => set('birthDate', v)} type="date" disabled={locked} />
                 </Field>
+                {/* Derived from תאריך לידה — display only, never edited or saved. */}
+                <Field label="גיל" locked={locked} required={false}>
+                  <span
+                    className={`text-body-md font-bold block py-3 ${
+                      underEmploymentAge ? 'text-error' : 'text-on-background'
+                    }`}
+                  >
+                    {age !== null ? age : '—'}
+                  </span>
+                </Field>
                 {selectedExisting && editing && (
                   <div className="flex items-end flex-col gap-1">
                     <button
@@ -550,6 +571,21 @@ export function EmployeeStep({
         </section>
       )}
 
+      {/* Under 14 → hard block; the form cannot continue. */}
+      {(selectedExisting || showNewForm) && underEmploymentAge && (
+        <section className="bg-error-container text-on-error-container p-6 rounded-xl shadow-card mb-6">
+          <div className="flex items-start gap-3">
+            <Icon name="block" className="mt-0.5" />
+            <div>
+              <p className="text-body-md font-bold leading-relaxed">{UNDER_AGE_MESSAGE}</p>
+              <p className="text-body-md leading-relaxed mt-1">
+                לא ניתן להמשיך בטופס. יש לוודא שתאריך הלידה הוזן נכון.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Youth-employment warnings + mandatory acknowledgement (any minor employee). */}
       {(selectedExisting || showNewForm) && showYouthRules && (
         <section className="bg-surface-container-lowest p-8 rounded-xl shadow-card border border-outline-variant mb-6">
@@ -571,20 +607,28 @@ export function EmployeeStep({
             </div>
           )}
 
-          {youthHoursAge && (
-            <div className="mb-4 p-4 rounded-lg bg-secondary-container/40 text-on-secondary-container">
-              <div className="flex items-start gap-2">
-                <Icon name="schedule" className="mt-0.5" />
-                <p className="text-body-md leading-relaxed">
-                  <span className="font-bold">חוק העסקת נוער:</span>
-                  <br />
-                  העסקת נוער מותרת עד 9 שעות ביום ועד 40 שעות בשבוע,
-                  <br />
-                  לא לפני השעה 8:00 בבוקר ולא אחרי השעה 20:00.
-                </p>
-              </div>
+          <div className="mb-4 p-4 rounded-lg bg-secondary-container/40 text-on-secondary-container">
+            <div className="flex items-start gap-2">
+              <Icon name="schedule" className="mt-0.5" />
+              <p className="text-body-md leading-relaxed">
+                <span className="font-bold">חוק העסקת נוער:</span>
+                <br />
+                {under16 ? (
+                  <>
+                    העסקת נוער מותרת עד 8 שעות ביום ועד 40 שעות בשבוע,
+                    <br />
+                    לא לפני השעה 8:00 בבוקר ולא אחרי השעה 20:00.
+                  </>
+                ) : (
+                  <>
+                    העסקת נוער מותרת עד 9 שעות ביום ועד 40 שעות בשבוע,
+                    <br />
+                    לא לפני השעה 6:00 בבוקר ולא אחרי השעה 22:00.
+                  </>
+                )}
+              </p>
             </div>
-          )}
+          </div>
 
           <label className="flex items-start gap-3 cursor-pointer select-none">
             <input
@@ -668,7 +712,7 @@ export function EmployeeStep({
         subtitle={isEditMode ? 'לחצו "הבא" לחזרה לעריכת התפקיד.' : 'לאחר המעבר לשלב הבא, תבחרו את התפקיד עבור העובד.'}
         showBack={Boolean(onBack)}
         onBack={onBack}
-        nextDisabled={!selectedExisting && !showNewForm}
+        nextDisabled={(!selectedExisting && !showNewForm) || underEmploymentAge}
         onNext={validateAndNext}
       />
     </>
@@ -679,17 +723,19 @@ function Field({
   label,
   error,
   locked = false,
+  required = true,
   children,
 }: {
   label: string;
   error?: string;
   locked?: boolean;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1">
       <label className={`${locked ? 'text-label-sm text-on-surface-variant' : 'text-label-lg text-on-surface'}`}>
-        {label} {!locked && <span className="text-error">*</span>}
+        {label} {!locked && required && <span className="text-error">*</span>}
       </label>
       {children}
       {error && <span className="text-error text-label-sm">{error}</span>}

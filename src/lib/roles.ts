@@ -59,6 +59,21 @@ interface MappedBudget extends RoleOption {
   remainingRoles: number;
 }
 
+/**
+ * Every bell schedule a budget row offers: the values of "לוח צלצולים" plus the
+ * "לוח צלצולים 2/3" fields, deduped. More than one means the user picks which of them
+ * to enter the timetable by (see the bell-schedule grid); none means any schedule goes.
+ */
+export function bellScheduleNumsFrom(f: Record<string, unknown>): string[] {
+  return Array.from(
+    new Set([
+      ...multi(f[BUDGET_FIELDS.bellScheduleNum]),
+      ...multi(f[BUDGET_FIELDS.bellScheduleNum2]),
+      ...multi(f[BUDGET_FIELDS.bellScheduleNum3]),
+    ]),
+  );
+}
+
 function mapRole(r: AirtableRecord): MappedBudget {
   const f = r.fields;
   return {
@@ -70,7 +85,7 @@ function mapRole(r: AirtableRecord): MappedBudget {
     remainingGemulim: num(f[BUDGET_FIELDS.remainingGemulim]),
     remainingRoles: num(f[BUDGET_FIELDS.remainingRoles]),
     layer: multi(f[BUDGET_FIELDS.layer]),
-    bellScheduleNums: multi(f[BUDGET_FIELDS.bellScheduleNum]),
+    bellScheduleNums: bellScheduleNumsFrom(f),
     ofekChadash: Boolean(f[BUDGET_FIELDS.ofekChadash]),
     paraBoard: Boolean(f[BUDGET_FIELDS.paraBoard]),
     severeDisability: Boolean(f[BUDGET_FIELDS.severeDisabilityBonus]),
@@ -105,6 +120,8 @@ const fetchBudgetForInstitution = unstable_cache(
         BUDGET_FIELDS.remainingRoles,
         BUDGET_FIELDS.layer,
         BUDGET_FIELDS.bellScheduleNum,
+        BUDGET_FIELDS.bellScheduleNum2,
+        BUDGET_FIELDS.bellScheduleNum3,
         BUDGET_FIELDS.ofekChadash,
         BUDGET_FIELDS.paraBoard,
         BUDGET_FIELDS.severeDisabilityBonus,
@@ -123,7 +140,7 @@ const fetchBudgetForInstitution = unstable_cache(
       return arr.some((v) => (typeof v === 'string' ? v : (v as any)?.id) === mosadId);
     });
   },
-  ['budget-for-institution-v3'],
+  ['budget-for-institution-v4'], // bump when the fields[] list changes — cached rows are field-filtered
   { revalidate: 600 },
 );
 

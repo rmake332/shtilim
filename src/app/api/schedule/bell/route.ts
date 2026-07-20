@@ -5,9 +5,14 @@ import { getBellSlots } from '@/lib/schedule/bell';
 import { logger } from '@/lib/logger';
 
 /**
- * GET /api/schedule/bell?token=...&symbolId=...&roleId=...
- * Returns the bell-schedule slots available for the chosen role, filtered to the
- * role's לוח צלצולים (סוג). Empty list when the role has no bell schedule.
+ * GET /api/schedule/bell?token=...&symbolId=...&roleId=...[&type=...]
+ * Returns the bell-schedule slots to enter the timetable by, always from a SINGLE
+ * לוח צלצולים (סוג). Which one depends on the role (resolved server-side, so the
+ * client can't widen it):
+ *  - role offers exactly one   → that one, `type` ignored
+ *  - role offers several       → `type`, but only if it's one of the role's own
+ *  - role offers none          → any `type` the user picked from /api/schedule/bell-types
+ * No (valid) choice yet → empty list; the UI shows its schedule picker until then.
  */
 export async function GET(req: NextRequest) {
   const gate = await gateByToken(req);
@@ -15,6 +20,7 @@ export async function GET(req: NextRequest) {
 
   const symbolId = req.nextUrl.searchParams.get('symbolId') ?? '';
   const roleId = req.nextUrl.searchParams.get('roleId') ?? '';
+  const chosenType = req.nextUrl.searchParams.get('type') ?? '';
   if (!roleId) return NextResponse.json({ slots: [] });
 
   try {
@@ -31,7 +37,13 @@ export async function GET(req: NextRequest) {
     }
     if (!role) return NextResponse.json({ slots: [] });
 
-    const slots = await getBellSlots(role.bellScheduleNums, gate.requestId);
+    const roleTypes = role.bellScheduleNums;
+    let types: string[];
+    if (roleTypes.length === 1) types = roleTypes;
+    else if (roleTypes.length > 1) types = roleTypes.includes(chosenType) ? [chosenType] : [];
+    else types = chosenType ? [chosenType] : [];
+
+    const slots = await getBellSlots(types, gate.requestId);
     return NextResponse.json({ slots });
   } catch (e) {
     logger.error({ requestId: gate.requestId, err: String(e) }, 'bell slots failed');

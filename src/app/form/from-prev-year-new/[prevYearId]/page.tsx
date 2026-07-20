@@ -3,7 +3,7 @@ import { resolveInstitutionByToken } from '@/lib/institution';
 import { loadPrevYearForNewRole } from '@/lib/loadPrevYearForNewRole';
 import { getEmployeeById } from '@/lib/employees';
 import { Wizard } from '@/components/Wizard';
-import type { EmployeeData } from '@/lib/formTypes';
+import { DEFAULT_CONTRACT_START_DATE, type EmployeeData } from '@/lib/formTypes';
 
 /**
  * /form/from-prev-year-new/[prevYearId] — open a BRAND-NEW position for the same employee at
@@ -44,7 +44,7 @@ export default async function FromPrevYearNewRolePage({
         childrenUnder14: '',
         birthDate: details.birthDate,
         ageHours: details.ageHours,
-        contractStartDate: '',
+        contractStartDate: DEFAULT_CONTRACT_START_DATE,
         youthRulesAcknowledged: false,
         fatherPosition: details.fatherPosition,
         existingSubRoleDocs: details.existingSubRoleDocs,

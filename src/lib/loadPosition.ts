@@ -8,7 +8,8 @@ import {
   BUDGET_FIELDS,
 } from '@/lib/airtable/schema';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
-import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
+import { bellScheduleNumsFrom } from '@/lib/roles';
+import { DEFAULT_CONTRACT_START_DATE, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
 
 // מוצ"ש included so regular-type schedules round-trip in edit mode.
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'] as const;
@@ -32,19 +33,6 @@ function strField(v: unknown): string {
   }
   if (typeof v === 'object' && 'name' in (v as object)) return String((v as { name: unknown }).name);
   return String(v);
-}
-
-function multiNames(v: unknown): string[] {
-  if (!Array.isArray(v)) {
-    const s = strField(v);
-    return s ? [s] : [];
-  }
-  return v
-    .map((x) => {
-      if (typeof x === 'object' && x !== null && 'name' in (x as object)) return String((x as { name: unknown }).name);
-      return x == null ? '' : String(x);
-    })
-    .filter(Boolean);
 }
 
 function linkIds(v: unknown): string[] {
@@ -100,7 +88,7 @@ export async function loadPosition(
     childrenUnder14: (strField(pf[POSITION_FIELDS.childrenUnder14]) || '') as EmployeeData['childrenUnder14'],
     birthDate: strField(empFields[EMPLOYEE_FIELDS.birthDate]),
     ageHours: Number(empFields[EMPLOYEE_FIELDS.ageHours]) || 0,
-    contractStartDate: strField(pf[POSITION_FIELDS.contractStartDate]),
+    contractStartDate: strField(pf[POSITION_FIELDS.contractStartDate]) || DEFAULT_CONTRACT_START_DATE,
     youthRulesAcknowledged: true,
     fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
     existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
@@ -149,7 +137,7 @@ export async function loadPosition(
     paraBoard: Boolean(budgetFields[BUDGET_FIELDS.paraBoard]),
     ofekChadash: Boolean(budgetFields[BUDGET_FIELDS.ofekChadash]),
     severeDisability: Boolean(budgetFields[BUDGET_FIELDS.severeDisabilityBonus]),
-    bellScheduleNums: multiNames(budgetFields[BUDGET_FIELDS.bellScheduleNum]),
+    bellScheduleNums: bellScheduleNumsFrom(budgetFields),
     salaryType: strField(budgetFields[BUDGET_FIELDS.salaryType]) || null,
     tariff: strField(budgetFields[BUDGET_FIELDS.tariff]) || null,
     ranking: strField(budgetFields[BUDGET_FIELDS.ranking]) || null,
