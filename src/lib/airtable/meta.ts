@@ -9,7 +9,8 @@ import { logger } from '@/lib/logger';
 
 /**
  * The choice names of a singleSelect / multipleSelects field, in Airtable's order.
- * Returns [] when the table/field isn't found. Cached for an hour (schema rarely changes).
+ * Returns [] when the table/field isn't found. Cached for a minute only — edits to a
+ * select's choices in Airtable must show up in the form almost immediately.
  */
 export async function getFieldChoices(
   tableId: string,
@@ -21,7 +22,7 @@ export async function getFieldChoices(
 
   const res = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
     headers: { Authorization: `Bearer ${airtableToken}` },
-    next: { revalidate: 3600 },
+    next: { revalidate: 60 },
   });
 
   if (!res.ok) {

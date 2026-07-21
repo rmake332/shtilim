@@ -46,6 +46,7 @@ import {
   FIXED_BREAK_MINUTES,
   type BreakPolicy,
 } from '@/lib/schedule/breaks';
+import { POSITION_FIELDS } from '@/lib/airtable/schema';
 
 // ── Overlap-check types & helper ─────────────────────────────────────────────
 
@@ -458,7 +459,10 @@ function GridSchedule({
   const checkedWeekRef = useRef<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=fldSi9R0RCfrHNDuU`)
+    fetch(
+      `/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${POSITION_FIELDS.conditionsWorseningReason}`,
+      { cache: 'no-store' },
+    )
       .then((r) => r.json())
       .then((j) => { if (j.choices) setReductionChoices(j.choices); })
       .catch(() => {});
@@ -1322,7 +1326,10 @@ function BellScheduleGrid({
   const checkedWeekRef = useRef<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=fldSi9R0RCfrHNDuU`)
+    fetch(
+      `/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${POSITION_FIELDS.conditionsWorseningReason}`,
+      { cache: 'no-store' },
+    )
       .then((r) => r.json())
       .then((j) => { if (j.choices) setReductionChoices(j.choices); })
       .catch(() => {});
