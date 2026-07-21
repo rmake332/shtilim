@@ -142,6 +142,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       selectedExtraRoleIds: extraRoleIds,
       selectedExtraRoleTitles: linkTitles(pf[POSITION_FIELDS.rolesLink]),
       paraBoard: false, // budget flags loaded client-side when role chosen
+      paraSubRoleList: false,
       ofekChadash: false,
       severeDisability: false,
       bellScheduleNums: [],

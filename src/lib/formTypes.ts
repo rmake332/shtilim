@@ -161,7 +161,7 @@ export interface RoleData {
   remainingHours: number;
   /** Final layer: from budget if present, else manually chosen. */
   layer: string;
-  /** תת-תפקיד: יסודי → רשימה מלאה, חטיבה → מסונן ל"הדרכה...", גנים → לא מוצג. */
+  /** תת-תפקיד: מוצג רק כששדה "רשימה נפתחת לתפקידי פרא" מסומן בתקציב. חטיבה → מסונן ל"הדרכה...". */
   subRole: string;
   /**
    * אישור אפרת ולנדברג למטפל/ת רגשית או מטפל/ת באומנות. שער UI בלבד (לא נשמר
@@ -174,6 +174,8 @@ export interface RoleData {
   selectedExtraRoleTitles: string[];
   /** Budget flags needed by step-3 calculations. */
   paraBoard: boolean;
+  /** רשימה נפתחת לתפקידי פרא — כשמסומן בתקציב, שדה תת-תפקיד מוצג ונדרש. */
+  paraSubRoleList: boolean;
   ofekChadash: boolean;
   severeDisability: boolean;
   bellScheduleNums: string[];
@@ -207,6 +209,7 @@ export function emptyRole(): RoleData {
     selectedExtraRoleIds: [],
     selectedExtraRoleTitles: [],
     paraBoard: false,
+    paraSubRoleList: false,
     ofekChadash: false,
     severeDisability: false,
     bellScheduleNums: [],

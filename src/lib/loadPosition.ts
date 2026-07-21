@@ -138,6 +138,7 @@ export async function loadPosition(
     selectedExtraRoleIds: extraRoleIds,
     selectedExtraRoleTitles: linkTitles(pf[POSITION_FIELDS.rolesLink]),
     paraBoard: Boolean(budgetFields[BUDGET_FIELDS.paraBoard]),
+    paraSubRoleList: Boolean(budgetFields[BUDGET_FIELDS.paraSubRoleList]),
     ofekChadash: Boolean(budgetFields[BUDGET_FIELDS.ofekChadash]),
     severeDisability: Boolean(budgetFields[BUDGET_FIELDS.severeDisabilityBonus]),
     bellScheduleNums: bellScheduleNumsFrom(budgetFields),

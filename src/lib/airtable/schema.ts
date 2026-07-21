@@ -281,6 +281,7 @@ export const BUDGET_FIELDS = {
   category: 'fld396nSlQajFyFir', // קטגוריה (singleSelect)
   ofekChadash: 'fld2Rydg2hk61j86a', // אופק חדש (checkbox)
   paraBoard: 'fldpsfFEtZcf1Ax2P', // לוח פרא (checkbox)
+  paraSubRoleList: 'fld4dqsvTbPcgoj3o', // רשימה נפתחת לתפקידי פרא (checkbox) — מציג את שדה תת-תפקיד
   layer: 'fld73g5XuRBvVSdRR', // שכבה (multipleSelects)
   remainingHours: 'fldIQkVfVbYWRh7KT', // שעות שנותרו (formula)
   scheduleType: 'fldGS2hMdyzpoJXyG', // סוג מערכת שעות (singleSelect)

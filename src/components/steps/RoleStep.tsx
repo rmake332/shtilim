@@ -5,7 +5,7 @@ import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import { formatNum } from '@/lib/formatNum';
 import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate, subRoleDocsFor } from '@/lib/formTypes';
-import { CATEGORY, DOC_FIELDS, POSITION_FIELDS, SCHEDULE_TYPE } from '@/lib/airtable/schema';
+import { CATEGORY, DOC_FIELDS, POSITION_FIELDS } from '@/lib/airtable/schema';
 import { DocUpload } from '@/components/steps/DocUpload';
 import type { PrevYearPosition } from '@/lib/prevYearPosition';
 
@@ -35,6 +35,7 @@ interface RoleOption {
   remainingHours: number;
   layer: string[];
   paraBoard: boolean;
+  paraSubRoleList: boolean;
   ofekChadash: boolean;
   severeDisability: boolean;
   bellScheduleNums: string[];
@@ -155,10 +156,11 @@ export function RoleStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load subRole choices from Airtable. גנים: לא מוצג. יסודי: כל הערכים.
-  // חטיבה: רק ערכי "הדרכה..." ורק כשהתפקיד הנבחר מכיל "הדרכ".
+  // Load subRole choices from Airtable — only for roles whose budget row has
+  // "רשימה נפתחת לתפקידי פרא" checked. חטיבה: רק ערכי "הדרכה...". שאר השכבות: כל הערכים.
   useEffect(() => {
-    if (data.layer !== 'יסודי' && data.layer !== 'חטיבה') { setSubRoleChoices([]); return; }
+    const role = roles.find((r) => r.id === data.roleId);
+    if (!(role?.paraSubRoleList ?? data.paraSubRoleList)) { setSubRoleChoices([]); return; }
     fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${POSITION_FIELDS.subRole}`)
       .then((r) => r.json())
       .then((j) => {
@@ -169,7 +171,7 @@ export function RoleStep({
       })
       .catch(() => setSubRoleChoices([]));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.roleId, data.layer]);
+  }, [data.roleId, data.layer, data.paraSubRoleList, roles]);
 
   // Check for a prior-year position whenever a role is selected.
   // Skipped entirely when the role is locked (from-prev-year flow already loaded it).
@@ -246,6 +248,7 @@ export function RoleStep({
         remainingHours: found.remainingHours,
         layer: found.layer[0] ?? institutionLayer ?? '',
         paraBoard: found.paraBoard,
+        paraSubRoleList: found.paraSubRoleList,
         ofekChadash: found.ofekChadash,
         severeDisability: found.severeDisability,
         bellScheduleNums: found.bellScheduleNums,
@@ -278,6 +281,7 @@ export function RoleStep({
       licenseNumber: '',
       contractEndDate: '',
       paraBoard: role.paraBoard,
+      paraSubRoleList: role.paraSubRoleList,
       ofekChadash: role.ofekChadash,
       severeDisability: role.severeDisability,
       bellScheduleNums: role.bellScheduleNums,
@@ -313,9 +317,9 @@ export function RoleStep({
   // גנים + מוסד עם כמה סמלים: יש להזין מערכת שעות (וטופס) נפרד לכל סמל מוסד בנפרד.
   const showGanimMultiSymbolNotice = Boolean(selectedRole) && data.layer === 'גנים' && symbols.length > 1;
   const canAddGemul = GEMUL_ALLOWED_CATEGORIES.has(data.category);
-  const showSubRole =
-    data.scheduleType === SCHEDULE_TYPE.para &&
-    (data.layer === 'יסודי' || (data.layer === 'חטיבה' && data.roleTitle.includes('הדרכ')));
+  // תת-תפקיד מוצג לפי שדה "רשימה נפתחת לתפקידי פרא" (checkbox) בשורת התקציב של התפקיד.
+  // selectedRole קודם ל-data כדי שבמצב עריכה/טעינה הדגל יתעדכן ברגע שרשימת התפקידים נטענת.
+  const showSubRole = selectedRole?.paraSubRoleList ?? data.paraSubRoleList;
 
   const showContractEndDate = data.category === CATEGORY.temporarySubstitute;
 
@@ -747,7 +751,7 @@ export function RoleStep({
             </div>
           )}
 
-          {/* תת-תפקיד — חובה כשסוג מערכת השעות "פרא" וגם: יסודי (כל הערכים) או חטיבה+"הדרכ" בשם התפקיד (מסונן לערכי הדרכה). */}
+          {/* תת-תפקיד — מוצג וחובה כששדה "רשימה נפתחת לתפקידי פרא" מסומן בשורת התקציב של התפקיד. */}
           {showSubRole && (
             <div className="max-w-xs">
               <label className="text-label-lg text-on-surface block mb-2">

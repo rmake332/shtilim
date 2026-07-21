@@ -14,6 +14,8 @@ export interface RoleOption {
   bellScheduleNums: string[];
   ofekChadash: boolean;
   paraBoard: boolean;
+  /** רשימה נפתחת לתפקידי פרא — כשמסומן, שדה תת-תפקיד מוצג בטופס. */
+  paraSubRoleList: boolean;
   severeDisability: boolean;
   salaryType: string | null;
   tariff: string | null;
@@ -88,6 +90,7 @@ function mapRole(r: AirtableRecord): MappedBudget {
     bellScheduleNums: bellScheduleNumsFrom(f),
     ofekChadash: Boolean(f[BUDGET_FIELDS.ofekChadash]),
     paraBoard: Boolean(f[BUDGET_FIELDS.paraBoard]),
+    paraSubRoleList: Boolean(f[BUDGET_FIELDS.paraSubRoleList]),
     severeDisability: Boolean(f[BUDGET_FIELDS.severeDisabilityBonus]),
     salaryType: single(f[BUDGET_FIELDS.salaryType]),
     tariff: single(f[BUDGET_FIELDS.tariff]),
@@ -124,6 +127,7 @@ const fetchBudgetForInstitution = unstable_cache(
         BUDGET_FIELDS.bellScheduleNum3,
         BUDGET_FIELDS.ofekChadash,
         BUDGET_FIELDS.paraBoard,
+        BUDGET_FIELDS.paraSubRoleList,
         BUDGET_FIELDS.severeDisabilityBonus,
         BUDGET_FIELDS.symbolLink,
         BUDGET_FIELDS.institutionLink,
@@ -140,7 +144,7 @@ const fetchBudgetForInstitution = unstable_cache(
       return arr.some((v) => (typeof v === 'string' ? v : (v as any)?.id) === mosadId);
     });
   },
-  ['budget-for-institution-v4'], // bump when the fields[] list changes — cached rows are field-filtered
+  ['budget-for-institution-v5'], // bump when the fields[] list changes — cached rows are field-filtered
   { revalidate: 600 },
 );
 

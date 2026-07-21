@@ -168,6 +168,7 @@ export async function loadPrevYearFull(
         BUDGET_FIELDS.bellScheduleNum3,
         BUDGET_FIELDS.ofekChadash,
         BUDGET_FIELDS.paraBoard,
+        BUDGET_FIELDS.paraSubRoleList,
         BUDGET_FIELDS.severeDisabilityBonus,
         BUDGET_FIELDS.symbolLink,
         BUDGET_FIELDS.institutionLink,
@@ -222,6 +223,7 @@ export async function loadPrevYearFull(
     role.remainingHours = Number(f[BUDGET_FIELDS.remainingHours]) || 0;
     role.layer = layer || institutionLayer || '';
     role.paraBoard = Boolean(f[BUDGET_FIELDS.paraBoard]);
+    role.paraSubRoleList = Boolean(f[BUDGET_FIELDS.paraSubRoleList]);
     role.ofekChadash = Boolean(f[BUDGET_FIELDS.ofekChadash]);
     role.severeDisability = Boolean(f[BUDGET_FIELDS.severeDisabilityBonus]);
     role.bellScheduleNums = bellScheduleNumsFrom(f);
