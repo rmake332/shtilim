@@ -1,6 +1,6 @@
 import 'server-only';
-import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
-import { TABLES, HOURS_SUMMARY_FIELDS } from '@/lib/airtable/schema';
+import { PREV_YEAR_FIELDS } from '@/lib/airtable/schema';
+import { fetchPrevYearRowsByTz } from '@/lib/prevYearPosition';
 
 function num(v: unknown): number {
   if (typeof v === 'number') return v;
@@ -11,34 +11,52 @@ function num(v: unknown): number {
 function text(v: unknown): string {
   if (v == null) return '';
   if (typeof v === 'object' && 'name' in (v as any)) return String((v as any).name);
-  if (Array.isArray(v)) return v.map(text).join('');
+  if (Array.isArray(v)) return v.map(text).filter(Boolean).join(', ');
   return String(v);
 }
 
+function normalize(s: string): string {
+  return s.trim().replace(/\s+/g, ' ');
+}
+
+/** ת.ז. is 9 digits; the source data stores it both padded and unpadded. */
+function normalizeTz(s: string): string {
+  return s.replace(/\D/g, '').padStart(9, '0');
+}
+
 /**
- * Previous-year hours for an employee, matched by ת.ז. + category + institution
- * from סיכום שעות לעובד. Returns null if no prior record.
+ * Previous-year (תשפ"ו) weekly hours for an employee, summed LIVE from תקנים תשפו
+ * over every prior position matching ת.ז. + קטגוריה + מוסד + שכבה.
+ *
+ * Scoped identically to the current-year side of the comparison (see
+ * sumExistingPositions' sameInstitution totals) so both sides cover the same set of
+ * positions. Returns null when the employee had no matching prior position — the
+ * reduction check is then skipped rather than treated as a drop to zero.
  */
 export async function getPreviousYearHours(
-  params: { tz: string; category: string; institution: string },
+  params: { tz: string; category: string; mosadName: string; layer: string },
   requestId?: string,
 ): Promise<number | null> {
-  const tz = escapeFormulaValue(params.tz);
-  // ת.ז. in סיכום שעות לעובד may be a lookup (array). ARRAYJOIN flattens it before FIND.
-  const formula = `FIND("${tz}", ARRAYJOIN({${HOURS_SUMMARY_FIELDS.tz}}, ","))`;
-  const records = await listRecords(TABLES.hoursSummary, { filterByFormula: formula, maxRecords: 20 }, requestId);
+  void requestId; // rows are fetched through the shared per-tz cache
+  const rows = await fetchPrevYearRowsByTz(params.tz);
 
-  // Narrow by category + institution in memory (those are plain text in this table).
-  const match = records.find((r) => {
-    const cat = text(r.fields[HOURS_SUMMARY_FIELDS.category]);
-    const inst = text(r.fields[HOURS_SUMMARY_FIELDS.institution]);
-    // institution in the summary table may be a short name ("בדיקות") while
-    // the form sends the full symbolLabel ("999999 — בדיקות"); match either direction.
-    return (
-      (cat.includes(params.category) || params.category.includes(cat)) &&
-      (inst.includes(params.institution) || params.institution.includes(inst))
-    );
-  });
-  if (!match) return null;
-  return num(match.fields[HOURS_SUMMARY_FIELDS.previousYearHours]);
+  const normTz = normalizeTz(params.tz);
+  const normCategory = normalize(params.category);
+  const normMosad = normalize(params.mosadName);
+  const normLayer = normalize(params.layer);
+
+  let total = 0;
+  let matched = 0;
+  for (const row of rows) {
+    const f = row.fields;
+    // Match tz robustly: source data and form may differ on leading zeros.
+    if (normalizeTz(text(f[PREV_YEAR_FIELDS.tz])) !== normTz) continue;
+    if (normalize(text(f[PREV_YEAR_FIELDS.category])) !== normCategory) continue;
+    if (normalize(text(f[PREV_YEAR_FIELDS.mosad])) !== normMosad) continue;
+    if (normLayer && normalize(text(f[PREV_YEAR_FIELDS.layer])) !== normLayer) continue;
+    total += num(f[PREV_YEAR_FIELDS.weeklyHours]);
+    matched++;
+  }
+
+  return matched > 0 ? total : null;
 }

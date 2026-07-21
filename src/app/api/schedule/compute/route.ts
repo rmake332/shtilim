@@ -18,7 +18,7 @@ import { logger } from '@/lib/logger';
  * Body: { token, category, scheduleType, layer, ageHours, enteredHours,
  *         gender, maritalStatus, hasChildrenUnder14,
  *         paraBoard, severeDisabilityFlag, isBehaviorAnalyst,
- *         tz, institution, budgetRemaining }
+ *         tz, budgetRemaining }
  *
  * Returns the ofek breakdown (frontal/individual/stay split), bonus, motherPosition,
  * jobPercent, and budget / previous-year warnings. Reuses the tested pure functions.
@@ -88,7 +88,13 @@ export async function POST(req: NextRequest) {
 
     if (body.tz && !body.skipExisting) {
       const existing = await sumExistingPositions(
-        { tz: String(body.tz), category, layer, excludePositionId: body.editPositionId ?? undefined },
+        {
+          tz: String(body.tz),
+          category,
+          layer,
+          mosadId: gate.institution.mosadId,
+          excludePositionId: body.editPositionId ?? undefined,
+        },
         gate.requestId,
       );
       additionalRoles = existing.count;
@@ -161,18 +167,19 @@ export async function POST(req: NextRequest) {
     const overBudget = finalHours > budgetRemaining;
 
     // Previous-year reduction check (warning + reason required).
-    // Compare ALL current hours in the same category+institution (this role + existing roles)
-    // against the previous year total. Only the comparison uses totalCurrentHours —
-    // all ofek breakdowns remain based on finalHours for this role alone.
+    // Both sides are scoped to קטגוריה + מוסד + שכבה: current hours = this role plus the
+    // employee's other roles IN THIS INSTITUTION, previous year = the matching תקנים תשפו rows.
+    // Ofek deliberately stays cross-institution, so it keeps using the unscoped totals.
     let previousYear: number | null = null;
-    if (body.tz && category && body.institution) {
+    if (body.tz && category) {
       previousYear = await getPreviousYearHours(
-        { tz: String(body.tz), category, institution: String(body.institution) },
+        { tz: String(body.tz), category, mosadName: gate.institution.name, layer },
         gate.requestId,
       );
     }
-    const existingHoursSum = existingDebug
-      ? existingDebug.frontalHours + existingDebug.individualHours + existingDebug.stayHours
+    const sameInstitution = existingDebug?.sameInstitution;
+    const existingHoursSum = sameInstitution
+      ? sameInstitution.frontalHours + sameInstitution.individualHours + sameInstitution.stayHours
       : 0;
     const totalCurrentHours = finalHours + existingHoursSum;
     const reducedVsLastYear = previousYear != null && totalCurrentHours < previousYear;

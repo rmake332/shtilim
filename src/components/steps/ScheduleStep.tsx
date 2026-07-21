@@ -1225,7 +1225,6 @@ async function computeOfek(
       tz: employee.tz,
       skipExisting,
       editPositionId,
-      institution: role.symbolLabel,
       budgetRemaining: role.remainingHours,
     }),
   });

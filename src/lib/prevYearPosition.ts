@@ -23,6 +23,8 @@ function allFields(): string[] {
     PREV_YEAR_FIELDS.role,
     PREV_YEAR_FIELDS.category,
     PREV_YEAR_FIELDS.mosad,
+    PREV_YEAR_FIELDS.layer,
+    PREV_YEAR_FIELDS.weeklyHours,
     PREV_YEAR_FIELDS.subRole,
     PREV_YEAR_FIELDS.notes,
     PREV_YEAR_FIELDS.hoursForBudget,
@@ -72,16 +74,18 @@ function normalize(s: string): string {
  * handful of rows instead of scanning all ~3785 rows across ~38 pages (~55s cold).
  * Matches the tz both as given and as bare digits (leading zeros vary in source data).
  */
-const fetchPrevYearRowsByTz = unstable_cache(
+export const fetchPrevYearRowsByTz = unstable_cache(
   async (tz: string) => {
     const digits = tz.replace(/\D/g, '');
-    const variants = Array.from(new Set([tz, digits].filter(Boolean)));
+    // ת.ז. is 9 digits; the source data stores it both padded and unpadded.
+    const variants = Array.from(new Set([tz, digits, digits.padStart(9, '0')].filter(Boolean)));
     const filterByFormula = variants.length
       ? `OR(${variants.map((v) => `{${PREV_YEAR_FIELDS.tz}}="${escapeFormulaValue(v)}"`).join(',')})`
       : undefined;
     return listRecords(TABLES.prevYearPositions, { filterByFormula, fields: allFields() });
   },
-  ['prev-year-positions-by-tz-v1'],
+  // v2: added שכבה + שעות שבועיות to the fetched fields (getPreviousYearHours).
+  ['prev-year-positions-by-tz-v2'],
   { revalidate: 1800 },
 );
 

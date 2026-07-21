@@ -280,7 +280,7 @@ export function getMock(
       },
     ];
   }
-  if (tableId === TABLES.hoursSummary) return []; // no previous-year record in mock
+  if (tableId === TABLES.prevYearPositions) return []; // no previous-year position in mock
   if (tableId === TABLES.activePositions) {
     const m = opts.filterByFormula?.match(/"([^"]+)"/);
     const tz = m?.[1];

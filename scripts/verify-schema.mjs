@@ -35,7 +35,6 @@ const BLOCK_TABLE = {
   SYMBOL_FIELDS: 'institutionSymbols',
   BUDGET_FIELDS: 'budget',
   PREV_YEAR_FIELDS: 'prevYearPositions',
-  HOURS_SUMMARY_FIELDS: 'hoursSummary',
 };
 
 const source = readFileSync('src/lib/airtable/schema.ts', 'utf8');

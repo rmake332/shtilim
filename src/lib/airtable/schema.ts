@@ -12,7 +12,6 @@ export const TABLES = {
   prevYearPositions: 'tblRy4vCSm7ePybx8', // תקנים תשפו (read-only, prior year)
   budget: 'tblOL1fYEC9ZMOBE5', // תקציב התחלתי
   ofekCalc: 'tbluSqfzeX9Ns452y', // מחשבון אופק חדש
-  hoursSummary: 'tblSXESwLy4tedbJR', // סיכום שעות לעובד
   bellSchedule: 'tblmglINeMA2YItox', // לוח צלצולים
   institutionSymbols: 'tbl4BCMW4gwsIPxG7', // סמלי מוסד
 } as const;
@@ -109,6 +108,7 @@ export const POSITION_FIELDS = {
   employeeNameText: 'fldTu3q08qnIksiKD', // lookup text → שם העובד (singleLineText lookup)
   roleTitleText: 'fldj0mMBrS5n5QxlL',   // lookup text → שם התפקיד
   mosadNameText: 'fldFdcjyhrWoo6Pg9',   // multipleLookupValues → שם מוסד (for filtering)
+  mosadLookup: 'fldrV4iBdzmxdy76T',     // multipleLookupValues → מוסד, holds מוסדות record IDs
   category: 'fldh649jMlkn1ipqR', // קטגוריה (lookup)
   tzLookup: 'fldkPFYk5eyckkMf3', // ת.ז. (lookup)
   roleLink: 'fldelhbayZ5YBxIqw', // → תקציב התחלתי
@@ -325,6 +325,8 @@ export const PREV_YEAR_FIELDS = {
   role: 'fldRrjKUvrqQ4XEBs',
   category: 'fld3e93VixbRrLpjE',
   mosad: 'fldlOx2cVBnd9ykn6',
+  layer: 'fldJnr94ct5hvrVXe',        // שכבה (singleSelect)
+  weeklyHours: 'fldUv3s5k4INXimjp',  // שעות שבועיות — the previous-year total per position
   subRole: 'fldP90ItzxZgRB9ce',
   notes: 'fldxaIME5M14G33Ta',
   hoursForBudget: 'fldDkiaemqG0uz9zW',  // סה"כ שעות לניצול להתקציב
@@ -340,14 +342,4 @@ export const PREV_YEAR_FIELDS = {
     thu: { in: ['fldnYNjLWsqXxeUa6', 'fldrXzp2xVwEuYLet', 'fldzmj4eVxJUtNRUk'], out: ['fldMN3hyJadOxG4gy', 'fldLaoXdEAbZ1meCP', 'fldMDQE3M5lcdnaXp'] },
     fri: { in: ['fld0KZZfHC1EMxqSr', 'fldvBi3tLaXWSLreJ', 'fldxiXMTwjCQ7dqw1'], out: ['fldkQ62n6C3Y6c9sO', 'fld1GLvzSPF7bMIxA', 'fldilyw2oIcW8lH35'] },
   },
-} as const;
-
-/** סיכום שעות לעובד fields */
-export const HOURS_SUMMARY_FIELDS = {
-  name: 'fld45tmxh7eUCiwEx',
-  tz: 'fldCxP5CyLSTzdQaz',
-  institution: 'fldWr5w6Ix6ommYbd',
-  category: 'fldVhBXVbJ3l39p9k',
-  currentHours: 'fldiVjh1QE5Uu1Mqr',
-  previousYearHours: 'fldTJRZNg5to1WKQk',
 } as const;
