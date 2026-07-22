@@ -46,6 +46,7 @@ import {
   FIXED_BREAK_MINUTES,
   type BreakPolicy,
 } from '@/lib/schedule/breaks';
+import { isParaEntry } from '@/lib/schedule/ofek';
 import { POSITION_FIELDS } from '@/lib/airtable/schema';
 
 // ── Overlap-check types & helper ─────────────────────────────────────────────
@@ -499,9 +500,10 @@ function GridSchedule({
   // Hours that actually count against the budget.
   // For סגן ראשון this is the chosen 37.5/40 — NOT the sum of the entered grid.
   const isDeputy1 = type === 'סגן ראשון';
-  // הוראה - לוח פרא: הזנת שעות והצגתן נעשית כמו פרא (הקלדה + נוסחת ÷45), למרות שהקטגוריה היא הוראה.
-  const isParaSchedule = type === SCHEDULE_TYPE.teachingParaSchedule;
-  const isParaCat = role.category === 'פרא רפואי' || isParaSchedule;
+  // הזנה וספירה בסגנון פרא ("פרא" ו"הוראה - לוח פרא"): הקלדה + נוסחת ÷45.
+  // הקובע הוא סוג מערכת השעות ולא הקטגוריה: תקן בקטגוריית "פרא רפואי" שסוג מערכת
+  // השעות שלו "רגיל" נספר בשעות שעון (ועם ניכוי הפסקות) ולא בשעות אקדמיות.
+  const isPara = isParaEntry(type);
   // פרא: per-day academic hours using the deduction formula; accumulate errors for days < 80 min.
   let paraHours = 0;
   const paraDayErrors: string[] = [];
@@ -541,7 +543,7 @@ function GridSchedule({
   const prunedBreaks = Object.fromEntries(
     DAYS.filter((d) => requiredBreak[d] > 0 && breaks[d]).map((d) => [d, breaks[d]!]),
   );
-  const utilizedHours = isDeputy1 ? deputyWeekly : isParaCat ? paraHours : netHours;
+  const utilizedHours = isDeputy1 ? deputyWeekly : isPara ? paraHours : netHours;
 
   const dayErrors: Partial<Record<Day, string>> = {};
   for (const d of gridDays) {
@@ -631,11 +633,11 @@ function GridSchedule({
     });
   }
 
-  const isPara = role.category === 'פרא רפואי' || isParaSchedule;
-  // Ofek is needed only for real timetable entry: פרא, or teaching with scheduleType "הוראה"/"הוראה - לוח פרא".
-  // Roles that are category=הוראה but scheduleType סגן ראשון / מנהל/ת do NOT need the calculator.
-  const isTeaching = role.category === 'הוראה' && (type === SCHEDULE_TYPE.teaching || isParaSchedule);
-  const needsOfek = isPara || isTeaching;
+  // מחשבון אופק נדרש רק בהזנת מערכת אמיתית. בגריד הזה סוג "הוראה" לעולם לא מגיע
+  // (הוא מנותב ל-BellScheduleGrid), ולכן נותרו רק "פרא" ו"הוראה - לוח פרא".
+  // תקן בקטגוריית פרא רפואי / הוראה שסוג מערכת השעות שלו רגיל / סגן ראשון / מנהל/ת
+  // אינו נדרש למחשבון.
+  const needsOfek = isPara;
 
   // When entered hours change, invalidate all ofek results so the user must re-run check 1.
   const currentHoursForOfek = isPara
@@ -1029,8 +1031,8 @@ function GridSchedule({
           // מוצ"ש is a single-shift day regardless of the role's maxShifts.
           const dayMaxShifts = day === MOTZASH ? 1 : maxShifts;
           const dayMin = shifts.reduce((s, sh) => s + shiftMinutes(sh), 0);
-          const paraDayResult = isParaCat ? paraDayHours(dayMin) : null;
-          const dayLabel = isParaCat
+          const paraDayResult = isPara ? paraDayHours(dayMin) : null;
+          const dayLabel = isPara
             ? paraDayResult?.ok ? `${formatNum(paraDayResult.hours)} שע׳` : null
             : dayMin > 0 ? `${formatNum(dayMin / 60)} שעות` : null;
           return (

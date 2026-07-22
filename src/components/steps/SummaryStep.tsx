@@ -7,6 +7,7 @@ import { formatNum } from '@/lib/formatNum';
 import { EmployeeData, RoleData, ScheduleData, YouthDocs } from '@/lib/formTypes';
 import { maskTzClient } from '@/lib/maskClient';
 import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
+import { ofekCategoryFor } from '@/lib/schedule/ofek';
 import { DOC_FIELDS, UPDATE_REASON_OPTIONS } from '@/lib/airtable/schema';
 import { subRoleDocsFor } from '@/lib/formTypes';
 
@@ -185,10 +186,10 @@ export function SummaryStep({
   // Show מוצ"ש only when it was entered (regular schedules); otherwise keep the sun..fri list.
   const motzashHasShifts = (week[MOTZASH] ?? []).some((s) => s.in && s.out);
   const summaryDays: readonly Day[] = motzashHasShifts ? [...DAYS, MOTZASH] : DAYS;
-  // Frontal/individual/stay breakdown exists only when the ofek-חדש calculator ran:
-  // category פרא רפואי, or scheduleType "הוראה" / "הוראה - לוח פרא". "רגיל" and the rest have no breakdown.
-  const hasBreakdown =
-    role.category === 'פרא רפואי' || role.scheduleType === 'הוראה' || role.scheduleType === 'הוראה - לוח פרא';
+  // Frontal/individual/stay breakdown exists only when the ofek-חדש calculator ran, כלומר
+  // לפי סוג מערכת השעות: "פרא" / "הוראה" / "הוראה - לוח פרא". "רגיל" and the rest have no
+  // breakdown, גם כשהקטגוריה היא פרא רפואי.
+  const hasBreakdown = ofekCategoryFor(role.scheduleType) !== null;
 
   if (result?.ok) {
     return (

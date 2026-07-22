@@ -89,3 +89,22 @@ export function paraStaySplit({
 export function paraDailyUnits(dailyMinutes: number): number {
   return dailyMinutes / 45;
 }
+
+/**
+ * הזנת שעות בסגנון פרא - הקלדת כניסה/יציאה וספירה בשעות אקדמיות (נוסחת ÷45).
+ * הקובע הוא סוג מערכת השעות ולא הקטגוריה: תקן בקטגוריית "פרא רפואי" שסוג מערכת
+ * השעות שלו "רגיל" נספר בשעות שעון ככל תקן רגיל, כולל ניכוי הפסקות.
+ */
+export function isParaEntry(scheduleType: string | null | undefined): boolean {
+  return scheduleType === 'פרא' || scheduleType === 'הוראה - לוח פרא';
+}
+
+/**
+ * קטגוריית מחשבון אופק חדש הנגזרת מסוג מערכת השעות, או null כשהתקן אינו נדרש לאופק.
+ * "הוראה - לוח פרא" מוזן כמו פרא אך מחושב באופק כמו הוראה.
+ */
+export function ofekCategoryFor(scheduleType: string | null | undefined): 'פרא' | 'הוראה' | null {
+  if (scheduleType === 'פרא') return 'פרא';
+  if (scheduleType === 'הוראה' || scheduleType === 'הוראה - לוח פרא') return 'הוראה';
+  return null;
+}

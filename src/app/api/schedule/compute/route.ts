@@ -9,6 +9,7 @@ import {
   buildOfekKey,
   severeDisabilityBonus,
   paraStaySplit,
+  ofekCategoryFor,
 } from '@/lib/schedule/ofek';
 import { roundToHalf } from '@/lib/schedule/time';
 import { logger } from '@/lib/logger';
@@ -30,7 +31,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const category: string = body.category ?? '';
-    const ofekCategory = category === 'פרא רפואי' ? 'פרא' : category === 'הוראה' ? 'הוראה' : category;
+    const scheduleType: string = body.scheduleType ?? '';
+    // קטגוריית האופק נגזרת מסוג מערכת השעות ולא מהקטגוריה: תקן בקטגוריית "פרא רפואי"
+    // שסוג מערכת השעות שלו "רגיל" אינו נמדד באופק כלל. הקטגוריה משמשת רק לאיתור
+    // תפקידים קיימים ולהשוואה לשנה קודמת, שם ההצלבה היא ברמת הקטגוריה.
+    const ofekCategory = ofekCategoryFor(scheduleType);
+    if (!ofekCategory) {
+      return NextResponse.json({
+        ok: false,
+        reason: 'ofek_not_applicable',
+        message: 'סוג מערכת השעות של התקן אינו נמדד במחשבון אופק חדש',
+      });
+    }
     const layer: string = body.layer ?? '';
     const fatherPosition = Boolean(body.fatherPosition);
     const enteredHours = Number(body.enteredHours ?? 0) + (fatherPosition ? 2 : 0);
@@ -155,10 +167,10 @@ export async function POST(req: NextRequest) {
     const split = paraStaySplit({
       paraBoard: Boolean(body.paraBoard),
       layer,
-      category,
+      category: ofekCategory,
       isBehaviorAnalyst: Boolean(body.isBehaviorAnalyst),
     });
-    const teaching = category === 'הוראה';
+    const teaching = ofekCategory === 'הוראה';
     const stayInstitution = teaching || split === 'institution' ? stay : 0;
     const stayHome = !teaching && split === 'home' ? stay : 0;
 

@@ -6,6 +6,8 @@ import {
   severeDisabilityBonus,
   paraStaySplit,
   paraDailyUnits,
+  isParaEntry,
+  ofekCategoryFor,
 } from './ofek';
 
 describe('jobPercent', () => {
@@ -83,5 +85,37 @@ describe('paraDailyUnits', () => {
   it('divides minutes by 45', () => {
     expect(paraDailyUnits(450)).toBe(10);
     expect(paraDailyUnits(45)).toBe(1);
+  });
+});
+
+describe('isParaEntry', () => {
+  it('true for פרא and הוראה - לוח פרא', () => {
+    expect(isParaEntry('פרא')).toBe(true);
+    expect(isParaEntry('הוראה - לוח פרא')).toBe(true);
+  });
+  it('false for רגיל — including a פרא רפואי role whose schedule type is רגיל', () => {
+    expect(isParaEntry('רגיל')).toBe(false);
+  });
+  it('false for the remaining schedule types and for a missing value', () => {
+    expect(isParaEntry('הוראה')).toBe(false);
+    expect(isParaEntry('סגן ראשון')).toBe(false);
+    expect(isParaEntry('מנהל/ת')).toBe(false);
+    expect(isParaEntry(null)).toBe(false);
+  });
+});
+
+describe('ofekCategoryFor', () => {
+  it('maps פרא to the פרא ofek table', () => {
+    expect(ofekCategoryFor('פרא')).toBe('פרא');
+  });
+  it('maps both teaching types to the הוראה ofek table', () => {
+    expect(ofekCategoryFor('הוראה')).toBe('הוראה');
+    expect(ofekCategoryFor('הוראה - לוח פרא')).toBe('הוראה');
+  });
+  it('returns null when the role is not measured by ofek', () => {
+    expect(ofekCategoryFor('רגיל')).toBeNull();
+    expect(ofekCategoryFor('סגן ראשון')).toBeNull();
+    expect(ofekCategoryFor('מילוי מקום')).toBeNull();
+    expect(ofekCategoryFor(null)).toBeNull();
   });
 });
