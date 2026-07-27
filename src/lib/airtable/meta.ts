@@ -1,6 +1,7 @@
 import 'server-only';
 import { BASE_ID } from './schema';
 import { logger } from '@/lib/logger';
+import { CACHE_TAGS } from '@/lib/cacheTags';
 
 /**
  * Airtable Meta API helpers. Read-only schema access — used to pull select-field
@@ -22,7 +23,7 @@ export async function getFieldChoices(
 
   const res = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
     headers: { Authorization: `Bearer ${airtableToken}` },
-    next: { revalidate: 60 },
+    next: { revalidate: 60, tags: [CACHE_TAGS.fieldChoices] },
   });
 
   if (!res.ok) {

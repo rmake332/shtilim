@@ -2,6 +2,7 @@ import 'server-only';
 import { unstable_cache } from 'next/cache';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, BUDGET_FIELDS, SYMBOL_FIELDS } from '@/lib/airtable/schema';
+import { CACHE_TAGS } from '@/lib/cacheTags';
 
 export interface SymbolOption {
   id: string;
@@ -22,7 +23,8 @@ function text(v: unknown): string {
 
 /**
  * Symbols available for an institution. Cached per mosadId for 30 minutes —
- * symbol lists rarely change during a working session.
+ * symbol lists rarely change during a working session. Edits to תקציב / סמלי מוסד
+ * drop the tag immediately via /api/revalidate.
  */
 export const getSymbolsForInstitution = unstable_cache(
   async (mosadId: string): Promise<SymbolOption[]> => {
@@ -58,5 +60,5 @@ export const getSymbolsForInstitution = unstable_cache(
     });
   },
   ['symbols-for-institution'],
-  { revalidate: 1800 },
+  { revalidate: 1800, tags: [CACHE_TAGS.symbols] },
 );

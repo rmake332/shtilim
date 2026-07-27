@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, PREV_YEAR_FIELDS } from '@/lib/airtable/schema';
+import { CACHE_TAGS } from '@/lib/cacheTags';
 import { durationToHHMM } from '@/lib/schedule/time';
 import type { ShiftData } from '@/lib/formTypes';
 
@@ -86,7 +87,7 @@ export const fetchPrevYearRowsByTz = unstable_cache(
   },
   // v2: added שכבה + שעות שבועיות to the fetched fields (getPreviousYearHours).
   ['prev-year-positions-by-tz-v2'],
-  { revalidate: 1800 },
+  { revalidate: 1800, tags: [CACHE_TAGS.prevYear] },
 );
 
 /**

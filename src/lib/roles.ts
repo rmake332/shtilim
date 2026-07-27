@@ -2,6 +2,7 @@ import 'server-only';
 import { unstable_cache } from 'next/cache';
 import { listRecords, escapeFormulaValue, type AirtableRecord } from '@/lib/airtable/client';
 import { TABLES, BUDGET_FIELDS, CATEGORY } from '@/lib/airtable/schema';
+import { CACHE_TAGS } from '@/lib/cacheTags';
 
 /** A role (תקן) from תקציב התחלתי, shaped for the UI. */
 export interface RoleOption {
@@ -104,9 +105,10 @@ function mapRole(r: AirtableRecord): MappedBudget {
  *  institution, so ARRAYJOIN yields exactly that name) — this returns only the dozens
  *  of rows for this institution instead of scanning all ~1450 rows across ~15 pages.
  *  A defensive in-memory check on institutionLink still guards against any row that
- *  links to multiple institutions. Cached per (mosadId, mosadName) for 10 minutes:
- *  budget figures (remainingHours) don't change minute-to-minute, and the longer TTL
- *  keeps repeated role/symbol lookups within a session instant. */
+ *  links to multiple institutions. Cached per (mosadId, mosadName) so repeated
+ *  role/symbol lookups within a session stay instant; the Airtable automation behind
+ *  /api/revalidate drops the tag on every budget edit, so the 2-minute TTL is only a
+ *  fallback for when that automation is off or fails. */
 const fetchBudgetForInstitution = unstable_cache(
   async (mosadId: string, mosadName: string): Promise<AirtableRecord[]> => {
     const filterByFormula = mosadName
@@ -145,7 +147,7 @@ const fetchBudgetForInstitution = unstable_cache(
     });
   },
   ['budget-for-institution-v5'], // bump when the fields[] list changes — cached rows are field-filtered
-  { revalidate: 600 },
+  { revalidate: 120, tags: [CACHE_TAGS.budget] },
 );
 
 /**
