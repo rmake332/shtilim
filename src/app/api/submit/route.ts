@@ -3,6 +3,7 @@ import { gateByToken } from '@/lib/apiGate';
 import { submitForm } from '@/lib/submit';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
+import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { logger } from '@/lib/logger';
 
 /**
@@ -28,6 +29,24 @@ export async function POST(req: NextRequest) {
   }
   if (!role.roleId) {
     return NextResponse.json({ ok: false, message: 'לא נבחר תפקיד.' }, { status: 400 });
+  }
+
+  // תקרת 42 ש"ש לעובד בכל תקניו - נאכפת גם כאן ולא רק בטופס, כדי שלא ניתן לעקוף אותה.
+  try {
+    const weeklyTotal = await checkWeeklyTotal(
+      { tz: employee.tz ?? '', newHours: Number(schedule.weeklyHours) || 0, layer: role.layer ?? '' },
+      gate.requestId,
+    );
+    if (!weeklyTotal.ok) {
+      logger.info({ requestId: gate.requestId, total: weeklyTotal.total }, 'submit blocked - weekly cap');
+      return NextResponse.json({ ok: false, message: weeklyTotal.message }, { status: 400 });
+    }
+  } catch (e) {
+    logger.error({ requestId: gate.requestId, err: String(e) }, 'weekly cap check failed');
+    return NextResponse.json(
+      { ok: false, message: 'שגיאה בבדיקת סה"כ השעות השבועיות של העובד. נסו שוב.' },
+      { status: 503 },
+    );
   }
 
   try {

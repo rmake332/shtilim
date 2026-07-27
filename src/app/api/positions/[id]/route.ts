@@ -14,6 +14,7 @@ import { logger } from '@/lib/logger';
 import { submitForm } from '@/lib/submit';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
+import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
 // מוצ"ש included — regular schedules round-trip; other types simply have no shifts there.
@@ -218,6 +219,29 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { employee, role, schedule } = body as { employee: EmployeeData; role: RoleData; schedule: ScheduleData };
   if (!employee || !role || !schedule) {
     return NextResponse.json({ ok: false, message: 'חסרים נתונים.' }, { status: 400 });
+  }
+
+  // תקרת 42 ש"ש לעובד בכל תקניו. התקן הנערך מוחרג מהסכום - שעותיו החדשות מחליפות אותו.
+  try {
+    const weeklyTotal = await checkWeeklyTotal(
+      {
+        tz: employee.tz ?? '',
+        newHours: Number(schedule.weeklyHours) || 0,
+        layer: role.layer ?? '',
+        excludePositionId: positionId,
+      },
+      gate.requestId,
+    );
+    if (!weeklyTotal.ok) {
+      logger.info({ requestId: gate.requestId, positionId, total: weeklyTotal.total }, 'update blocked - weekly cap');
+      return NextResponse.json({ ok: false, message: weeklyTotal.message }, { status: 400 });
+    }
+  } catch (e) {
+    logger.error({ requestId: gate.requestId, err: String(e) }, 'weekly cap check failed');
+    return NextResponse.json(
+      { ok: false, message: 'שגיאה בבדיקת סה"כ השעות השבועיות של העובד. נסו שוב.' },
+      { status: 503 },
+    );
   }
 
   try {

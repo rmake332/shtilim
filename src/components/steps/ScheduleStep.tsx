@@ -127,6 +127,63 @@ function OverlapBanner({ overlaps }: { overlaps: OverlapItem[] }) {
   );
 }
 
+// ── Weekly-total (42h across all positions) types & helper ───────────────────
+
+interface WeeklyTotalResult {
+  ok: boolean;
+  exempt: boolean;
+  cap: number;
+  newHours: number;
+  existingHours: number;
+  total: number;
+  positions: { id: string; name: string; hours: number }[];
+  message: string | null;
+}
+
+/**
+ * תקרת 42 ש"ש לעובד בכל תקניו. `hours` הן השעות שייכתבו לתקן הזה, ולכן הבדיקה
+ * מתבצעת רק אחרי שהן חושבו סופית (אופק / הזנה ידנית).
+ */
+async function checkWeeklyTotal(
+  token: string,
+  tz: string,
+  hours: number,
+  layer: string,
+  excludePositionId?: string,
+): Promise<WeeklyTotalResult> {
+  const params = new URLSearchParams({ token, tz, hours: String(hours), layer });
+  if (excludePositionId) params.set('excludePositionId', excludePositionId);
+  const res = await fetch(`/api/schedule/weekly-total?${params.toString()}`);
+  if (!res.ok) throw new Error('weekly_total_check_failed');
+  return res.json();
+}
+
+/** Banner shown when the employee's combined weekly hours exceed the cap. */
+function WeeklyTotalBanner({ result }: { result: WeeklyTotalResult | null }) {
+  if (!result || result.ok) return null;
+  return (
+    <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-md">
+      <div className="flex items-center gap-2 font-bold mb-2">
+        <Icon name="schedule" className="text-[20px]" />
+        חריגה מתקרת {result.cap} השעות השבועיות לעובד - לא ניתן להמשיך
+      </div>
+      <p className="mb-2">{result.message}</p>
+      {result.positions.length > 0 && (
+        <>
+          <p className="font-semibold mb-1">תקנים קיימים של העובד:</p>
+          <ul className="list-disc pr-6 space-y-0.5 text-label-sm">
+            {result.positions.map((p) => (
+              <li key={p.id}>
+                {p.name}: {formatNum(p.hours)} שעות
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Unified over-budget message, shared across all schedule types. */
 function overBudgetMessage(hours: number, remaining: number): string {
   return `מספר השעות שהוזן (${hours}) חורג מיתרת התקציב לתפקיד (${remaining})`;
@@ -334,43 +391,19 @@ export function ScheduleStep({
   }
 
   if (type === SCHEDULE_TYPE.manager || type === SCHEDULE_TYPE.deputy2) {
-    const isManager = type === SCHEDULE_TYPE.manager;
-    const label = isManager ? 'מס׳ שעות שבועיות' : 'מס׳ תקנים';
-    const value = data.manualWeeklyHours ?? role.remainingHours;
     return (
-      <>
-        <section className="bg-white p-8 rounded-xl shadow-card border border-outline-variant max-w-md">
-          <label className="text-label-lg text-on-surface block mb-2">{label}</label>
-          {isManager ? (
-            <div className="w-full bg-surface-container rounded-lg py-3 px-3 text-body-md font-bold text-primary">
-              {value}
-            </div>
-          ) : (
-            <input
-              type="number"
-              step="0.5"
-              className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
-              value={value}
-              onChange={(e) => setData((d) => ({ ...d, manualWeeklyHours: Number(e.target.value) }))}
-            />
-          )}
-          {isManager && (
-            <p className="text-label-sm text-on-surface-variant mt-2 flex items-center gap-1">
-              <Icon name="lock" className="text-[15px]" /> השעות נקבעות לפי יתרת התקציב ואינן ניתנות לשינוי
-            </p>
-          )}
-        </section>
-        <ActionBar
-          title="המשך לסיכום"
-          onBack={onBack}
-          showBack={!!onBack}
-          onEditEmployee={onEditEmployee}
-          onNext={() => {
-            const wh = data.manualWeeklyHours ?? role.remainingHours;
-            onNext({ ...emptySchedule(), weeklyHours: wh });
-          }}
-        />
-      </>
+      <ManualHoursSchedule
+        token={token}
+        employee={employee}
+        role={role}
+        isManager={type === SCHEDULE_TYPE.manager}
+        data={data}
+        setData={setData}
+        positionId={positionId}
+        onBack={onBack}
+        onEditEmployee={onEditEmployee}
+        onNext={onNext}
+      />
     );
   }
 
@@ -418,6 +451,100 @@ export function ScheduleStep({
   );
 }
 
+/**
+ * מנהל/ת וסגן שני: אין מערכת שעות, רק מספר שעות/תקנים. אין מה לבדוק חפיפה מולו,
+ * אבל השעות כן נספרות לתקרת ה-42 של העובד בכל תקניו.
+ */
+function ManualHoursSchedule({
+  token,
+  employee,
+  role,
+  isManager,
+  data,
+  setData,
+  positionId,
+  onBack,
+  onEditEmployee,
+  onNext,
+}: {
+  token: string;
+  employee: EmployeeData;
+  role: RoleData;
+  isManager: boolean;
+  data: ScheduleData;
+  setData: React.Dispatch<React.SetStateAction<ScheduleData>>;
+  positionId?: string;
+  onBack?: () => void;
+  onEditEmployee?: () => void;
+  onNext: (d: ScheduleData) => void;
+}) {
+  const [errors, setErrors] = useState<string[]>([]);
+  const [checking, setChecking] = useState(false);
+  const [weeklyTotal, setWeeklyTotal] = useState<WeeklyTotalResult | null>(null);
+
+  const label = isManager ? 'מס׳ שעות שבועיות' : 'מס׳ תקנים';
+  const value = data.manualWeeklyHours ?? role.remainingHours;
+
+  async function validateAndNext() {
+    setErrors([]);
+    setWeeklyTotal(null);
+    setChecking(true);
+    try {
+      const result = await checkWeeklyTotal(token, employee.tz, value, role.layer, positionId);
+      setWeeklyTotal(result);
+      if (!result.ok) return;
+    } catch {
+      setErrors(['שגיאה בבדיקת סה״כ השעות השבועיות של העובד']);
+      return;
+    } finally {
+      setChecking(false);
+    }
+    onNext({ ...emptySchedule(), weeklyHours: value });
+  }
+
+  return (
+    <>
+      <section className="bg-white p-8 rounded-xl shadow-card border border-outline-variant max-w-md">
+        <label className="text-label-lg text-on-surface block mb-2">{label}</label>
+        {isManager ? (
+          <div className="w-full bg-surface-container rounded-lg py-3 px-3 text-body-md font-bold text-primary">
+            {value}
+          </div>
+        ) : (
+          <input
+            type="number"
+            step="0.5"
+            className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+            value={value}
+            onChange={(e) => {
+              setWeeklyTotal(null);
+              setData((d) => ({ ...d, manualWeeklyHours: Number(e.target.value) }));
+            }}
+          />
+        )}
+        {isManager && (
+          <p className="text-label-sm text-on-surface-variant mt-2 flex items-center gap-1">
+            <Icon name="lock" className="text-[15px]" /> השעות נקבעות לפי יתרת התקציב ואינן ניתנות לשינוי
+          </p>
+        )}
+      </section>
+      <div className="mt-6 space-y-3">
+        <WeeklyTotalBanner result={weeklyTotal} />
+        <AlertBanners errors={errors} warnings={[]} />
+      </div>
+      <ActionBar
+        title="המשך לסיכום"
+        nextLabel={checking ? 'בודק…' : 'המשך לשלב הבא'}
+        onBack={onBack}
+        showBack={!!onBack}
+        onEditEmployee={onEditEmployee}
+        nextDisabled={checking}
+        onNext={validateAndNext}
+      />
+    </>
+  );
+}
+
 function GridSchedule({
   token,
   employee,
@@ -458,6 +585,9 @@ function GridSchedule({
   // Track the week snapshot at which the last successful overlap check was run,
   // so we can detect changes and invalidate the result without re-running on every keystroke.
   const checkedWeekRef = useRef<string | null>(null);
+  const [weeklyTotalResult, setWeeklyTotalResult] = useState<WeeklyTotalResult | null>(null);
+  // תקרת ה-42 נבדקת מול השעות הסופיות של התקן, ולכן די לזכור באילו שעות היא נבדקה.
+  const checkedTotalHoursRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetch(
@@ -585,14 +715,17 @@ function GridSchedule({
   }
   const hasDayError = Object.keys(dayErrors).length > 0;
 
-  function invalidateOverlap() {
+  /** כל שינוי בשעות מבטל את הבדיקות שנעשות מול תקניו האחרים של העובד. */
+  function invalidateCrossChecks() {
     setOverlapResult(null);
     checkedWeekRef.current = null;
+    setWeeklyTotalResult(null);
+    checkedTotalHoursRef.current = null;
   }
 
   function updateShift(day: Day, idx: number, field: 'in' | 'out', val: string) {
     setOfek(null);
-    invalidateOverlap();
+    invalidateCrossChecks();
     setData((prev) => {
       const w = { ...(prev.week as Record<Day, Shift[]>) };
       const shifts = [...(w[day] ?? [])];
@@ -603,7 +736,7 @@ function GridSchedule({
   }
   function addShift(day: Day) {
     setOfek(null);
-    invalidateOverlap();
+    invalidateCrossChecks();
     setData((prev) => {
       const w = { ...(prev.week as Record<Day, Shift[]>) };
       const shifts = [...(w[day] ?? [])];
@@ -615,7 +748,7 @@ function GridSchedule({
   }
   function removeShift(day: Day, idx: number) {
     setOfek(null);
-    invalidateOverlap();
+    invalidateCrossChecks();
     setData((prev) => {
       const w = { ...(prev.week as Record<Day, Shift[]>) };
       w[day] = (w[day] ?? []).filter((_, i) => i !== idx);
@@ -625,7 +758,7 @@ function GridSchedule({
   /** ההפסקה משנה את השעות הנספרות — לכן מאפסת את בדיקת האופק ואת בדיקת החפיפה. */
   function updateBreak(day: Day, field: 'in' | 'out', val: string) {
     setOfek(null);
-    invalidateOverlap();
+    invalidateCrossChecks();
     setData((prev) => {
       const b = { ...(prev.breaks ?? {}) };
       b[day] = { ...(b[day] ?? { in: '', out: '' }), [field]: val };
@@ -741,6 +874,7 @@ function GridSchedule({
       // Overlap check for deputy-1 before proceeding.
       const overlapOk = await runOverlapCheckIfNeeded(week);
       if (!overlapOk) return;
+      if (!(await runWeeklyTotalCheckIfNeeded(deputyWeekly))) return;
       onNext({ ...data, breaks: prunedBreaks, weeklyHours: deputyWeekly });
       return;
     }
@@ -755,6 +889,7 @@ function GridSchedule({
       // Overlap check for regular roles before proceeding.
       const overlapOk = await runOverlapCheckIfNeeded(week);
       if (!overlapOk) return;
+      if (!(await runWeeklyTotalCheckIfNeeded(hours))) return;
       onNext({
         ...data,
         breaks: prunedBreaks,
@@ -798,6 +933,7 @@ function GridSchedule({
     // Overlap check — runs last, after all other validations pass.
     const overlapOk = await runOverlapCheckIfNeeded(week);
     if (!overlapOk) return;
+    if (!(await runWeeklyTotalCheckIfNeeded(j.finalHours))) return;
 
     setWarnings(warns);
     onNext({
@@ -837,6 +973,26 @@ function GridSchedule({
       return true;
     } catch {
       setErrors((prev) => [...prev, 'שגיאה בבדיקת חפיפת שעות עם תקנים פעילים']);
+      return false;
+    } finally {
+      setComputing(false);
+    }
+  }
+
+  /**
+   * תקרת 42 ש"ש לעובד בכל תקניו. נבדקת מול השעות הסופיות של התקן (`hours`),
+   * אותן שעות שייכתבו ל"שעות שבועיות", ולכן רצה אחרי חישוב האופק ולא בכל הזנה.
+   */
+  async function runWeeklyTotalCheckIfNeeded(hours: number): Promise<boolean> {
+    if (weeklyTotalResult && checkedTotalHoursRef.current === hours) return weeklyTotalResult.ok;
+    setComputing(true);
+    try {
+      const result = await checkWeeklyTotal(token, employee.tz, hours, role.layer, positionId);
+      setWeeklyTotalResult(result);
+      checkedTotalHoursRef.current = hours;
+      return result.ok;
+    } catch {
+      setErrors((prev) => [...prev, 'שגיאה בבדיקת סה״כ השעות השבועיות של העובד']);
       return false;
     } finally {
       setComputing(false);
@@ -1143,6 +1299,8 @@ function GridSchedule({
           <OverlapBanner overlaps={overlapResult.overlaps} />
         )}
 
+        <WeeklyTotalBanner result={weeklyTotalResult} />
+
         <AlertBanners errors={errors} warnings={warnings} />
 
         <ActionBar
@@ -1326,6 +1484,8 @@ function BellScheduleGrid({
   const [reductionChoices, setReductionChoices] = useState<string[]>([]);
   const [overlapResult, setOverlapResult] = useState<OverlapResult | null>(null);
   const checkedWeekRef = useRef<string | null>(null);
+  const [weeklyTotalResult, setWeeklyTotalResult] = useState<WeeklyTotalResult | null>(null);
+  const checkedTotalHoursRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetch(
@@ -1414,7 +1574,7 @@ function BellScheduleGrid({
     const replacing = chosenType !== '';
     setOfek1(null); setHoursAtOfek1(null); setExisting(null); setOfek(null);
     setErrors([]); setWarnings([]);
-    bellInvalidateOverlap();
+    bellInvalidateCrossChecks();
     if (replacing) {
       const cleared = {} as Record<Day, (BellSlot | null)[]>;
       for (const d of DAYS) cleared[d] = [];
@@ -1463,14 +1623,17 @@ function BellScheduleGrid({
     0,
   );
 
-  function bellInvalidateOverlap() {
+  /** כל שינוי ברצועות מבטל את הבדיקות שנעשות מול תקניו האחרים של העובד. */
+  function bellInvalidateCrossChecks() {
     setOverlapResult(null);
     checkedWeekRef.current = null;
+    setWeeklyTotalResult(null);
+    checkedTotalHoursRef.current = null;
   }
 
   function pickSlot(day: Day, idx: number, slot: BellSlot) {
     setOfek(null);
-    bellInvalidateOverlap();
+    bellInvalidateCrossChecks();
     setPicks((prev) => {
       const arr = [...prev[day]];
       arr[idx] = slot;
@@ -1487,7 +1650,7 @@ function BellScheduleGrid({
 
   function clearSlot(day: Day, idx: number) {
     setOfek(null);
-    bellInvalidateOverlap();
+    bellInvalidateCrossChecks();
     setPicks((prev) => {
       const arr = prev[day].filter((_, i) => i !== idx);
       return { ...prev, [day]: arr };
@@ -1500,7 +1663,7 @@ function BellScheduleGrid({
   }
 
   function updateBreak(day: Day, field: 'in' | 'out', val: string) {
-    bellInvalidateOverlap();
+    bellInvalidateCrossChecks();
     setData((prev) => {
       const b = { ...(prev.breaks ?? {}) };
       b[day] = { ...(b[day] ?? { in: '', out: '' }), [field]: val };
@@ -1676,6 +1839,23 @@ function BellScheduleGrid({
     }
   }
 
+  /** תקרת 42 ש"ש לעובד בכל תקניו, מול השעות הסופיות שיוצאות מהאופק. */
+  async function runBellWeeklyTotalCheckIfNeeded(hours: number): Promise<boolean> {
+    if (weeklyTotalResult && checkedTotalHoursRef.current === hours) return weeklyTotalResult.ok;
+    setComputing(true);
+    try {
+      const result = await checkWeeklyTotal(token, employee.tz, hours, role.layer, positionId);
+      setWeeklyTotalResult(result);
+      checkedTotalHoursRef.current = hours;
+      return result.ok;
+    } catch {
+      setErrors((prev) => [...prev, 'שגיאה בבדיקת סה״כ השעות השבועיות של העובד']);
+      return false;
+    } finally {
+      setComputing(false);
+    }
+  }
+
   async function validateAndNext() {
     const preErrs = bellPreCheck();
     if (preErrs.length) { setErrors(preErrs); return; }
@@ -1701,6 +1881,7 @@ function BellScheduleGrid({
     // Overlap check — runs after all other validations.
     const overlapOk = await runBellOverlapCheckIfNeeded();
     if (!overlapOk) return;
+    if (!(await runBellWeeklyTotalCheckIfNeeded(j.finalHours))) return;
     onNext({
       ...data,
       breaks: prunedBreaks,
@@ -2046,6 +2227,8 @@ function BellScheduleGrid({
         {overlapResult && !overlapResult.ok && (
           <OverlapBanner overlaps={overlapResult.overlaps} />
         )}
+
+        <WeeklyTotalBanner result={weeklyTotalResult} />
 
         <AlertBanners errors={errors} warnings={warnings} />
 
