@@ -154,6 +154,8 @@ export const POSITION_FIELDS = {
  * doesn't need to be chosen first. When shown, every field is mandatory.
  * `menoExcluded`: never requested for institutions whose layer is מעון, regardless
  * of the base condition (age/gender).
+ * `adultOnly`: never requested below age 18 (the police / violence certificates are
+ * issued only for adults), on top of the base condition.
  */
 export const DOC_FIELDS = [
   {
@@ -163,6 +165,7 @@ export const DOC_FIELDS = [
       'אישור לימודים: אישור ממקום לימודו של הנער המופיע בו שעות לימוד הנער.\nחל איסור חוקי להעסיק בזמן שעות לימוד הנער.',
     condition: 'youth', // age 15–17 (>=15, <18)
     menoExcluded: false,
+    adultOnly: false,
   },
   {
     key: 'docMedical',
@@ -170,6 +173,7 @@ export const DOC_FIELDS = [
     label: 'צרוף אישור רפואי המאשר העסקתו של הנער',
     condition: 'youth', // age 15–17 (>=15, <18)
     menoExcluded: false,
+    adultOnly: false,
   },
   {
     key: 'docPoliceNoSexOffense',
@@ -177,6 +181,7 @@ export const DOC_FIELDS = [
     label: 'אישור משטרה - העדר עבירות מין',
     condition: 'male', // gender = זכר
     menoExcluded: true, // לא נדרש במוסדות מסוג מעון
+    adultOnly: true, // רק מגיל 18 ומעלה
   },
   {
     key: 'docNoViolence',
@@ -184,6 +189,7 @@ export const DOC_FIELDS = [
     label: 'אישור העדר עבירות אלימות',
     condition: 'kindergartenLayer', // institution layer = גנים
     menoExcluded: true, // לא נדרש במוסדות מסוג מעון
+    adultOnly: true, // רק מגיל 18 ומעלה
   },
   {
     key: 'docEmployment',
@@ -191,6 +197,7 @@ export const DOC_FIELDS = [
     label: 'נתוני העסקה',
     condition: 'newEmployeeParaOrTeaching', // עובד חדש + קטגוריה פרא/הוראה
     menoExcluded: false,
+    adultOnly: false,
   },
 ] as const;
 

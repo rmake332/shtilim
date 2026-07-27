@@ -56,15 +56,21 @@ const PARA_OR_TEACHING_CATEGORIES = new Set(['פרא רפואי', 'הוראה'])
  * Whether a document field should be shown, given its condition + current form data.
  * Pure so it can run on the employee step and server-side. `layer` here is the
  * INSTITUTION's layer (from the token), not the role's.
- * `menoExcluded`: when true, never shown for institutions whose layer is מעון
+ * `flags.menoExcluded`: when true, never shown for institutions whose layer is מעון
  * (police / no-sex-offense and no-violence certs are not requested there).
+ * `flags.adultOnly`: when true, shown only from age 18 up (hidden while the birth
+ * date is missing/invalid — it is a mandatory field, so the age is known by then).
  */
 export function isDocVisible(
   condition: 'youth' | 'male' | 'kindergartenLayer' | 'newEmployeeParaOrTeaching',
   ctx: { birthDate?: string; gender?: GenderUnset; layer?: string; isNewEmployee?: boolean; category?: string },
-  menoExcluded = false,
+  flags: { menoExcluded?: boolean; adultOnly?: boolean } = {},
 ): boolean {
-  if (menoExcluded && ctx.layer === 'מעון') return false;
+  if (flags.menoExcluded && ctx.layer === 'מעון') return false;
+  if (flags.adultOnly) {
+    const age = ageFromBirthDate(ctx.birthDate ?? '');
+    if (age == null || age < 18) return false;
+  }
   switch (condition) {
     case 'youth': {
       const age = ageFromBirthDate(ctx.birthDate ?? '');

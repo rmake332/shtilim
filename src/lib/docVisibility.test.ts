@@ -101,15 +101,49 @@ describe("isDocVisible — 'kindergartenLayer'", () => {
 
 describe('isDocVisible — menoExcluded (מעון institutions)', () => {
   it('hides a male-conditioned doc for מעון when menoExcluded is true', () => {
-    expect(isDocVisible('male', { gender: 'זכר', layer: 'מעון' }, true)).toBe(false);
+    expect(isDocVisible('male', { gender: 'זכר', layer: 'מעון' }, { menoExcluded: true })).toBe(false);
   });
 
   it('still shows a male-conditioned doc for non-מעון institutions when menoExcluded is true', () => {
-    expect(isDocVisible('male', { gender: 'זכר', layer: 'יסודי' }, true)).toBe(true);
+    expect(isDocVisible('male', { gender: 'זכר', layer: 'יסודי' }, { menoExcluded: true })).toBe(true);
   });
 
   it('does not affect docs where menoExcluded is false/omitted', () => {
     expect(isDocVisible('male', { gender: 'זכר', layer: 'מעון' })).toBe(true);
-    expect(isDocVisible('male', { gender: 'זכר', layer: 'מעון' }, false)).toBe(true);
+    expect(isDocVisible('male', { gender: 'זכר', layer: 'מעון' }, { menoExcluded: false })).toBe(true);
+  });
+});
+
+describe('isDocVisible — adultOnly (העדר עבירות מין / אלימות, מגיל 18)', () => {
+  const adult = { adultOnly: true };
+
+  it('hides the male-conditioned doc below 18', () => {
+    expect(isDocVisible('male', { gender: 'זכר', birthDate: birthForAge(17) }, adult)).toBe(false);
+    expect(isDocVisible('male', { gender: 'זכר', birthDate: birthForAge(15) }, adult)).toBe(false);
+  });
+
+  it('shows the male-conditioned doc from 18 up', () => {
+    expect(isDocVisible('male', { gender: 'זכר', birthDate: birthForAge(18) }, adult)).toBe(true);
+    expect(isDocVisible('male', { gender: 'זכר', birthDate: birthForAge(40) }, adult)).toBe(true);
+  });
+
+  it('hides the גנים-conditioned doc below 18 and shows it from 18 up', () => {
+    expect(isDocVisible('kindergartenLayer', { layer: 'גנים', birthDate: birthForAge(17) }, adult)).toBe(false);
+    expect(isDocVisible('kindergartenLayer', { layer: 'גנים', birthDate: birthForAge(18) }, adult)).toBe(true);
+  });
+
+  it('hides when the birth date is missing or invalid', () => {
+    expect(isDocVisible('male', { gender: 'זכר' }, adult)).toBe(false);
+    expect(isDocVisible('male', { gender: 'זכר', birthDate: 'לא תאריך' }, adult)).toBe(false);
+  });
+
+  it('does not affect docs where adultOnly is false/omitted', () => {
+    expect(isDocVisible('male', { gender: 'זכר', birthDate: birthForAge(16) })).toBe(true);
+    expect(isDocVisible('male', { gender: 'זכר', birthDate: birthForAge(16) }, { adultOnly: false })).toBe(true);
+  });
+
+  it('still respects the base condition for adults', () => {
+    expect(isDocVisible('male', { gender: 'נקבה', birthDate: birthForAge(30) }, adult)).toBe(false);
+    expect(isDocVisible('kindergartenLayer', { layer: 'יסודי', birthDate: birthForAge(30) }, adult)).toBe(false);
   });
 });

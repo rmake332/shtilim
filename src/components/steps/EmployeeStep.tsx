@@ -242,13 +242,13 @@ export function EmployeeStep({
   // ילדים מתחת לגיל 14 is only relevant for a woman who is not single.
   const showChildrenField = data.gender === 'נקבה' && Boolean(data.maritalStatus) && !data.maritalStatus.includes('רווק');
 
-  // Documents applicable right now: youth (age 15–17) + male + גנים (institution layer),
-  // excluding מעון for the two docs flagged menoExcluded.
+  // Documents applicable right now: youth (age 15-17) + male + גנים (institution layer),
+  // excluding מעון for the docs flagged menoExcluded and minors for those flagged adultOnly.
   const visibleDocs = DOC_FIELDS.filter((doc) =>
     isDocVisible(
       doc.condition,
       { birthDate: data.birthDate, gender: data.gender, layer: institutionLayer },
-      doc.menoExcluded,
+      doc,
     ),
   );
   // Docs already on file for this employee (from a previous position/year) aren't
