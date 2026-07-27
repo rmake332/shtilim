@@ -8,6 +8,8 @@ import {
   paraDailyUnits,
   isParaEntry,
   ofekCategoryFor,
+  ofekRowHoursSum,
+  motherPositionFromOfekRow,
 } from './ofek';
 
 describe('jobPercent', () => {
@@ -36,6 +38,35 @@ describe('isMotherPosition', () => {
   });
 });
 
+// הבדיקה השנייה בפרא: אחוז המשרה נגזר מהפלט של המחשבון ולא מהשעות שהוזנו.
+describe('motherPositionFromOfekRow', () => {
+  const eligible = { gender: 'נקבה', maritalStatus: 'נשוי/ה', hasChildrenUnder14: true };
+
+  it('sums frontal + individual + stay', () => {
+    expect(ofekRowHoursSum({ frontalHours: 24, individualHours: 3, stayHours: 7 })).toBe(34);
+  });
+
+  it('כן למרות שהשעות שהוזנו מתחת לסף — 27 שעות שהוזנו, 34 שעות בפלט', () => {
+    // יסודי0לאפרא27 → אחוז לפי הזנה 75%, אחוז לפי פלט 94%
+    expect(isMotherPosition({ ...eligible, jobPercent: jobPercent(27) })).toBe(false);
+    const res = motherPositionFromOfekRow({ frontalHours: 24, individualHours: 3, stayHours: 7 }, eligible);
+    expect(res.jobPercent).toBeCloseTo(94.44, 2);
+    expect(res.motherPosition).toBe(true);
+  });
+
+  it('לא כשגם סכום הפלט מתחת לסף', () => {
+    const res = motherPositionFromOfekRow({ frontalHours: 15, individualHours: 2, stayHours: 4 }, eligible);
+    expect(res.motherPosition).toBe(false);
+  });
+
+  it('שאר תנאי משרת אם ממשיכים לחסום גם כשהאחוז גבוה', () => {
+    const row = { frontalHours: 24, individualHours: 3, stayHours: 7 };
+    expect(motherPositionFromOfekRow(row, { ...eligible, gender: 'זכר' }).motherPosition).toBe(false);
+    expect(motherPositionFromOfekRow(row, { ...eligible, maritalStatus: 'רווק/ה' }).motherPosition).toBe(false);
+    expect(motherPositionFromOfekRow(row, { ...eligible, hasChildrenUnder14: false }).motherPosition).toBe(false);
+  });
+});
+
 describe('buildOfekKey', () => {
   it('concatenates in correct order', () => {
     expect(
@@ -47,6 +78,7 @@ describe('buildOfekKey', () => {
   });
 });
 
+// התוספת מחושבת לתצוגה בלבד - אינה מתווספת ל-finalHours ואינה מנוצלת מהתקן.
 describe('severeDisabilityBonus', () => {
   const base = { severeDisabilityFlag: true, enteredHours: 10 };
   it('0 when flag off', () => {

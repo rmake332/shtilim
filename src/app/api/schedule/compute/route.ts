@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
-import { lookupOfek } from '@/lib/ofekCalc';
+import { lookupOfek, type OfekResult } from '@/lib/ofekCalc';
 import { getPreviousYearHours } from '@/lib/previousYear';
 import { sumExistingPositions, type ExistingHoursSum } from '@/lib/existingPositions';
 import {
@@ -10,9 +10,53 @@ import {
   severeDisabilityBonus,
   paraStaySplit,
   ofekCategoryFor,
+  motherPositionFromOfekRow,
+  ofekRowHoursSum,
+  type MotherPositionInput,
 } from '@/lib/schedule/ofek';
 import { roundToHalf } from '@/lib/schedule/time';
 import { logger } from '@/lib/logger';
+
+type MotherInput = Omit<MotherPositionInput, 'jobPercent'>;
+
+type ResolvedOfek =
+  | { ok: true; row: OfekResult; key: string; motherPosition: boolean; jobPercent: number }
+  /** השליפה השנייה לא מצאה שורה — נחסם בדיוק כמו חוסר התאמה בשליפה הראשונה. */
+  | { ok: false; key: string };
+
+/**
+ * בדיקה כפולה של משרת אם בתקני פרא.
+ *
+ * השליפה הראשונה (`row`) שקטה ואינה מוצגת: היא רק מספקת את סכום השעות שהמחשבון
+ * מחזיר בפועל (פרונטלי+פרטני+שהייה), שממנו נגזר אחוז המשרה האמיתי. לפיו נקבע
+ * משרת אם הסופי, ואם הוא התהפך מול הבדיקה הראשונה נשלפת שורה חדשה עם אותן שעות
+ * ומשרת אם המעודכן. התוצאה השנייה היא הקובעת לתצוגה, לשמירה ולקישור לרשומת האופק.
+ */
+async function resolveByOfekOutput(params: {
+  row: OfekResult;
+  key: string;
+  motherPosition: boolean;
+  keyParams: { layer: string; ageHours: number | string; category: string; totalHours: number };
+  motherInput: MotherInput;
+  requestId?: string;
+}): Promise<ResolvedOfek> {
+  const { row, key, motherPosition, keyParams, motherInput, requestId } = params;
+  const recheck = motherPositionFromOfekRow(row, motherInput);
+  if (recheck.motherPosition === motherPosition) {
+    return { ok: true, row, key, motherPosition, jobPercent: recheck.jobPercent };
+  }
+  const finalKey = buildOfekKey({ ...keyParams, motherPosition: recheck.motherPosition });
+  const finalRow = await lookupOfek(finalKey, requestId);
+  if (!finalRow) return { ok: false, key: finalKey };
+  return {
+    ok: true,
+    row: finalRow,
+    key: finalKey,
+    motherPosition: recheck.motherPosition,
+    // אחוז המשרה המוצג נגזר מהשורה הסופית, זו שהשעות שלה נשמרות לתקן.
+    jobPercent: jobPercent(ofekRowHoursSum(finalRow)),
+  };
+}
 
 /**
  * POST /api/schedule/compute
@@ -47,39 +91,67 @@ export async function POST(req: NextRequest) {
     const fatherPosition = Boolean(body.fatherPosition);
     const enteredHours = Number(body.enteredHours ?? 0) + (fatherPosition ? 2 : 0);
 
-    // Para: per-day ÷45 already done client-side; apply severe-disability bonus + half rounding.
+    // Para: per-day ÷45 already done client-side; only half rounding here.
+    // תוספת לקות קשה היא נתון סטטי לידיעת המשתמש בלבד: היא אינה נכנסת למחשבון
+    // אופק חדש ואינה מנצלת מהתקן, ולכן אינה מתווספת ל-finalHours.
     const bonus = severeDisabilityBonus({
       severeDisabilityFlag: Boolean(body.severeDisabilityFlag),
       enteredHours,
     });
-    const finalHours = roundToHalf(enteredHours + bonus);
+    const finalHours = roundToHalf(enteredHours);
 
-    const pct = jobPercent(finalHours);
-    const mother = isMotherPosition({
+    const motherInput: MotherInput = {
       gender: body.gender ?? '',
       maritalStatus: body.maritalStatus ?? '',
       hasChildrenUnder14: Boolean(body.hasChildrenUnder14),
-      jobPercent: pct,
-    });
+    };
+    const ageHours = body.ageHours ?? 0;
+    // פרא בלבד: משרת אם נקבע בבדיקה שנייה לפי הפלט של המחשבון (ראו resolveByOfekOutput).
+    const recheckMother = ofekCategory === 'פרא';
 
-    const key = buildOfekKey({
+    const notFoundResponse = (k: string) =>
+      NextResponse.json({
+        ok: false,
+        reason: 'ofek_not_found',
+        message: 'אין מבנה שבוע עבודה בהתאם למערכת השעות שהוזנה',
+        key: k,
+        finalHours,
+        bonus,
+      });
+
+    // בדיקה ראשונה — שקטה: משרת אם לפי השעות שהוזנו, רק כדי לקבל שורה מהמחשבון.
+    const preliminaryPct = jobPercent(finalHours);
+    const preliminaryMother = isMotherPosition({ ...motherInput, jobPercent: preliminaryPct });
+    const preliminaryKey = buildOfekKey({
       layer,
-      ageHours: body.ageHours ?? 0,
-      motherPosition: mother,
+      ageHours,
+      motherPosition: preliminaryMother,
       category: ofekCategory,
       totalHours: finalHours,
     });
 
-    const ofek = await lookupOfek(key, gate.requestId);
-    if (!ofek) {
-      return NextResponse.json({
-        ok: false,
-        reason: 'ofek_not_found',
-        message: 'אין מבנה שבוע עבודה בהתאם למערכת השעות שהוזנה',
-        key,
-        finalHours,
-        bonus,
+    const preliminaryRow = await lookupOfek(preliminaryKey, gate.requestId);
+    if (!preliminaryRow) return notFoundResponse(preliminaryKey);
+
+    // בדיקה שנייה — הקובעת: משרת אם מחושב מחדש לפי סכום השעות שחזר מהמחשבון.
+    let ofek = preliminaryRow;
+    let key = preliminaryKey;
+    let mother = preliminaryMother;
+    let pct = preliminaryPct;
+    if (recheckMother) {
+      const resolved = await resolveByOfekOutput({
+        row: preliminaryRow,
+        key: preliminaryKey,
+        motherPosition: preliminaryMother,
+        keyParams: { layer, ageHours, category: ofekCategory, totalHours: finalHours },
+        motherInput,
+        requestId: gate.requestId,
       });
+      if (!resolved.ok) return notFoundResponse(resolved.key);
+      ofek = resolved.row;
+      key = resolved.key;
+      mother = resolved.motherPosition;
+      pct = resolved.jobPercent;
     }
 
     // ----- additional existing positions (7ו / 8ד) -----
@@ -97,6 +169,7 @@ export async function POST(req: NextRequest) {
     // Debug-only fields (surfaced in the UI while validating, hidden later).
     let existingDebug: ExistingHoursSum | null = null;
     let combinedKeyDebug: string | undefined;
+    let preliminaryCombinedKeyDebug: string | undefined;
 
     if (body.tz && !body.skipExisting) {
       const existing = await sumExistingPositions(
@@ -116,37 +189,60 @@ export async function POST(req: NextRequest) {
         const isGanim = layer === 'גנים';
         const existingStayForCombined = isGanim ? existing.stayHours : 0;
         const combinedHours = finalHours + existing.frontalHours + existing.individualHours + existingStayForCombined;
-        const combinedPct = jobPercent(combinedHours);
-        const combinedMother = isMotherPosition({
-          gender: body.gender ?? '',
-          maritalStatus: body.maritalStatus ?? '',
-          hasChildrenUnder14: Boolean(body.hasChildrenUnder14),
-          jobPercent: combinedPct,
+        const preliminaryCombinedPct = jobPercent(combinedHours);
+        const preliminaryCombinedMother = isMotherPosition({
+          ...motherInput,
+          jobPercent: preliminaryCombinedPct,
         });
-        const combinedKey = buildOfekKey({
+        const preliminaryCombinedKey = buildOfekKey({
           layer,
-          ageHours: body.ageHours ?? 0,
-          motherPosition: combinedMother,
+          ageHours,
+          motherPosition: preliminaryCombinedMother,
           category: ofekCategory,
           totalHours: combinedHours,
         });
-        combinedKeyDebug = combinedKey;
-        const combined = await lookupOfek(combinedKey, gate.requestId);
-        if (!combined) {
-          return NextResponse.json({
+        combinedKeyDebug = preliminaryCombinedKey;
+        preliminaryCombinedKeyDebug = preliminaryCombinedKey;
+        const combinedNotFound = (k: string) =>
+          NextResponse.json({
             ok: false,
             reason: 'ofek_combined_not_found',
             message: 'סכום השעות בכל המוסדות אינו עומד בתנאי מבנה עבודה שבועי של אופק חדש',
-            effectiveKey: combinedKey,
-            combinedKey,
+            effectiveKey: k,
+            combinedKey: k,
             debug: {
               ofekKey: key,
               existingPositions: existing,
-              combinedKey,
+              combinedKey: k,
               motherPosition: mother,
               jobPercent: pct,
             },
           });
+
+        // בדיקה ראשונה שקטה על סכום כל התפקידים.
+        const preliminaryCombined = await lookupOfek(preliminaryCombinedKey, gate.requestId);
+        if (!preliminaryCombined) return combinedNotFound(preliminaryCombinedKey);
+
+        // בדיקה שנייה הקובעת — גם כאן משרת אם נגזר מהפלט של המחשבון.
+        let combined = preliminaryCombined;
+        let combinedKey = preliminaryCombinedKey;
+        let combinedMother = preliminaryCombinedMother;
+        let combinedPct = preliminaryCombinedPct;
+        if (recheckMother) {
+          const resolved = await resolveByOfekOutput({
+            row: preliminaryCombined,
+            key: preliminaryCombinedKey,
+            motherPosition: preliminaryCombinedMother,
+            keyParams: { layer, ageHours, category: ofekCategory, totalHours: combinedHours },
+            motherInput,
+            requestId: gate.requestId,
+          });
+          if (!resolved.ok) return combinedNotFound(resolved.key);
+          combined = resolved.row;
+          combinedKey = resolved.key;
+          combinedMother = resolved.motherPosition;
+          combinedPct = resolved.jobPercent;
+          combinedKeyDebug = resolved.key;
         }
         ofekAllRecordId = combined.recordId;
         ofekRowForDisplay = combined;
@@ -222,7 +318,8 @@ export async function POST(req: NextRequest) {
         individualHours: ofekRowForDisplay.individualHours,
         stayHours: ofekRowForDisplay.stayHours,
         totalHours: ofekRowForDisplay.totalHours,
-        jobPercent: ofekRowForDisplay.jobPercent,
+        // שורות פרא בטבלת המחשבון מגיעות בלי אחוז משרה, ואז מוצג האחוז המחושב.
+        jobPercent: ofekRowForDisplay.jobPercent || effectivePct,
       },
       // ----- debug-only (for validation; hide later) -----
       debug: {
@@ -231,6 +328,11 @@ export async function POST(req: NextRequest) {
         combinedKey: combinedKeyDebug, // combination checked for ALL positions together
         motherPosition: mother,
         jobPercent: pct,
+        // הבדיקה הראשונה השקטה — לא מוצגת, נשמרת לצורכי אימות בלבד.
+        preliminaryKey,
+        preliminaryMotherPosition: preliminaryMother,
+        preliminaryJobPercent: preliminaryPct,
+        preliminaryCombinedKey: preliminaryCombinedKeyDebug,
       },
     });
   } catch (e) {

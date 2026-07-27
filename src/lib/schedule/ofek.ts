@@ -28,6 +28,33 @@ export function jobPercent(finalHours: number): number {
   return (finalHours / 36) * 100;
 }
 
+/** השעות שמחשבון אופק חדש מחזיר לשורה. */
+export interface OfekRowHours {
+  frontalHours: number;
+  individualHours: number;
+  stayHours: number;
+}
+
+/** סכום השעות שחזרו מהמחשבון: פרונטלי + פרטני + שהייה. */
+export function ofekRowHoursSum(row: OfekRowHours): number {
+  return row.frontalHours + row.individualHours + row.stayHours;
+}
+
+/**
+ * חישוב מחדש של משרת אם לפי הפלט של מחשבון אופק חדש (תקני פרא בלבד).
+ *
+ * בפרא השעות שבמפתח הן פרונטלי+פרטני בלבד והשהייה נוספת מעליהן, ולכן אחוז
+ * המשרה האמיתי נגזר מסכום השעות שחזר מהמחשבון ולא מהשעות שהוזנו. השליפה
+ * הראשונה היא מעבר ביניים בלבד; הערך שמתקבל כאן הוא הקובע.
+ */
+export function motherPositionFromOfekRow(
+  row: OfekRowHours,
+  input: Omit<MotherPositionInput, 'jobPercent'>,
+): { jobPercent: number; motherPosition: boolean } {
+  const pct = jobPercent(ofekRowHoursSum(row));
+  return { jobPercent: pct, motherPosition: isMotherPosition({ ...input, jobPercent: pct }) };
+}
+
 /**
  * Ofek lookup key = שכבה + שעות_גיל + משרת_אם + קטגוריה + סך_שעות_סופי
  * Example: "חטיבה0כןהוראה5"
@@ -53,6 +80,9 @@ export interface SevereDisabilityInput {
  *  - 0 if flag off
  *  - +1 if enteredHours < 15
  *  - +2 if enteredHours >= 15
+ *
+ * נתון סטטי לידיעת המשתמש בלבד: התוספת אינה נכנסת לחישוב מחשבון אופק חדש
+ * ואינה מנוצלת מ"סה״כ שעות לניצול" של התקן. היא רק מוצגת ונשמרת לתקן.
  */
 export function severeDisabilityBonus({
   severeDisabilityFlag,
