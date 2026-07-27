@@ -7,6 +7,7 @@ import {
   roundToHalf,
   snapToHalf,
   paraDayHours,
+  SAME_DAY_OTHER_ROLE_DEDUCTION,
   durationToHHMM,
   DAYS,
   type Shift,
@@ -109,6 +110,31 @@ describe('paraDayHours', () => {
   it('deducts 40 for 100+ minutes', () => {
     expect(paraDayHours(100)).toMatchObject({ ok: true, hours: (100 - 40) / 45 });
     expect(paraDayHours(135)).toMatchObject({ ok: true, hours: (135 - 40) / 45 });
+  });
+
+  // ניכוי נוסף ביום שהעובד כבר מועסק בו במוסד בתקן אחר: יורד לפני הנוסחה.
+  describe('extra same-day deduction', () => {
+    it('subtracts the extra minutes before the formula', () => {
+      expect(paraDayHours(300, SAME_DAY_OTHER_ROLE_DEDUCTION)).toMatchObject({
+        ok: true,
+        hours: (300 - 40 - 40) / 45,
+      });
+    });
+    it('lets the net minutes decide the 35/40 threshold', () => {
+      // 120 − 40 = 80 → below 100, so the standard deduction is 35 (not 40).
+      expect(paraDayHours(120, 40)).toMatchObject({ ok: true, hours: (80 - 35) / 45 });
+    });
+    it('checks the 80-minute minimum against the entered minutes, not the net', () => {
+      // 85 entered minutes is a legal day even though only 45 remain after the extra deduction.
+      expect(paraDayHours(85, 40)).toMatchObject({ ok: true, hours: (45 - 35) / 45 });
+      expect(paraDayHours(79, 40)).toMatchObject({ ok: false, error: expect.any(String) });
+    });
+    it('never returns negative hours', () => {
+      expect(paraDayHours(80, 200)).toMatchObject({ ok: true, hours: 0 });
+    });
+    it('behaves exactly as before when no extra deduction applies', () => {
+      expect(paraDayHours(300, 0)).toEqual(paraDayHours(300));
+    });
   });
 });
 

@@ -90,6 +90,12 @@ export function roundToHalf(n: number): number {
 export const PARA_MIN_DAY_MINUTES = 80;
 
 /**
+ * ניכוי נוסף ליום שבו העובד כבר מועסק באותו מוסד בתקן אחר: ביום כזה מוחסרות
+ * 40 דקות מהמערכת הנוכחית, לפני נוסחת הפרא הרגילה.
+ */
+export const SAME_DAY_OTHER_ROLE_DEDUCTION = 40;
+
+/**
  * Convert a single para day's total minutes to academic hours (שעות אקדמיות).
  * Returns null if the day has no work (0 minutes — skip the day).
  * Returns { error } if minutes < 80 (below the minimum — block the whole form).
@@ -97,15 +103,20 @@ export const PARA_MIN_DAY_MINUTES = 80;
  * Rules (per day total minutes):
  *  80 ≤ min < 100 → (min − 35) ÷ 45
  *  min ≥ 100      → (min − 40) ÷ 45
+ *
+ * `extraDeductionMinutes` (ברירת מחדל 0) יורדות לפני הנוסחה, ולכן הן קובעות גם
+ * לאיזה סף (35/40) נופל היום. מכסת ה-80 דקות נבדקת מול הדקות שהוזנו בפועל,
+ * כדי שהודעת השגיאה תשקף את מה שהמשתמש הקליד.
  */
 export type ParaDayResult = { ok: true; hours: number } | { ok: false; error: string };
 
-export function paraDayHours(dayMinutes: number): ParaDayResult | null {
+export function paraDayHours(dayMinutes: number, extraDeductionMinutes = 0): ParaDayResult | null {
   if (dayMinutes === 0) return null;
   if (dayMinutes < PARA_MIN_DAY_MINUTES)
     return { ok: false, error: `${dayMinutes} דקות עבודה — לא ניתן להגיש פחות מ-80 דקות ביום` };
-  const deduct = dayMinutes < 100 ? 35 : 40;
-  return { ok: true, hours: (dayMinutes - deduct) / 45 };
+  const net = Math.max(0, dayMinutes - extraDeductionMinutes);
+  const deduct = net < 100 ? 35 : 40;
+  return { ok: true, hours: Math.max(0, (net - deduct) / 45) };
 }
 
 /**
