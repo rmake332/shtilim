@@ -19,6 +19,7 @@ import {
   WEEKLY_CAP_HOURS,
   snapToHalf,
   paraDayHours,
+  SAME_DAY_OTHER_ROLE_DEDUCTION,
   type Shift,
   type Day,
 } from '@/lib/schedule/time';
@@ -127,6 +128,62 @@ function OverlapBanner({ overlaps }: { overlaps: OverlapItem[] }) {
   );
 }
 
+// ── ימים שבהם העובד כבר מועסק במוסד בתקן אחר (ניכוי 40 דק' בפרא) ─────────────
+
+interface SameDayPosition {
+  positionId: string;
+  positionName: string;
+  shifts: string[];
+}
+
+type SameInstitutionDays = Partial<Record<Day, SameDayPosition[]>>;
+
+/**
+ * הימים שבהם לעובד כבר יש תקן פעיל אחר במוסד הנוכחי. המוסד נגזר מהטוקן בשרת.
+ * נטען פעם אחת בכניסה לשלב - התוצאה אינה תלויה במה שמוזן במערכת.
+ */
+async function fetchSameInstitutionDays(
+  token: string,
+  tz: string,
+  excludePositionId?: string,
+): Promise<SameInstitutionDays> {
+  const params = new URLSearchParams({ token, tz });
+  if (excludePositionId) params.set('excludePositionId', excludePositionId);
+  const res = await fetch(`/api/schedule/same-institution-days?${params.toString()}`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error('same_institution_days_failed');
+  const j = await res.json();
+  return (j.days ?? {}) as SameInstitutionDays;
+}
+
+/** הערה למשתמש: באילו ימים מוחסרות 40 הדקות ובגלל איזה תקן. */
+function SameDayDeductionNotice({ days }: { days: SameInstitutionDays }) {
+  const occupied = DAYS.filter((d) => (days[d]?.length ?? 0) > 0);
+  if (occupied.length === 0) return null;
+  return (
+    <div className="p-4 rounded-xl bg-secondary-container/40 text-on-secondary-container text-body-md flex items-start gap-2">
+      <Icon name="event_repeat" className="text-[20px] mt-0.5 shrink-0" />
+      <div>
+        <p className="font-bold">
+          העובד כבר מועסק במוסד בתקן אחר - מוחסרות {SAME_DAY_OTHER_ROLE_DEDUCTION} דקות בכל אחד מהימים הבאים:
+        </p>
+        <ul className="list-disc pr-5 mt-1 space-y-0.5 text-label-md">
+          {occupied.map((d) => (
+            <li key={d}>
+              יום {DAY_LABELS[d]}:{' '}
+              {days[d]!
+                .map((p) => (p.shifts.length ? `${p.positionName} (${p.shifts.join(', ')})` : p.positionName))
+                .join(' | ')}
+            </li>
+          ))}
+        </ul>
+        <p className="text-label-sm mt-1">ההחסרה מבוצעת לפני חישוב השעות האקדמיות של אותו יום.</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Weekly-total (42h across all positions) types & helper ───────────────────
 
 interface WeeklyTotalResult {
@@ -136,6 +193,8 @@ interface WeeklyTotalResult {
   newHours: number;
   existingHours: number;
   total: number;
+  /** העמותה שלפיה סוננו התקנים (נגזרת בשרת מהטוקן). */
+  association: string;
   positions: { id: string; name: string; hours: number }[];
   message: string | null;
 }
@@ -170,7 +229,9 @@ function WeeklyTotalBanner({ result }: { result: WeeklyTotalResult | null }) {
       <p className="mb-2">{result.message}</p>
       {result.positions.length > 0 && (
         <>
-          <p className="font-semibold mb-1">תקנים קיימים של העובד:</p>
+          <p className="font-semibold mb-1">
+            תקנים קיימים של העובד{result.association ? ` בעמותת ${result.association}` : ''}:
+          </p>
           <ul className="list-disc pr-6 space-y-0.5 text-label-sm">
             {result.positions.map((p) => (
               <li key={p.id}>
@@ -588,6 +649,8 @@ function GridSchedule({
   const [weeklyTotalResult, setWeeklyTotalResult] = useState<WeeklyTotalResult | null>(null);
   // תקרת ה-42 נבדקת מול השעות הסופיות של התקן, ולכן די לזכור באילו שעות היא נבדקה.
   const checkedTotalHoursRef = useRef<number | null>(null);
+  // ימים שבהם העובד כבר מועסק במוסד בתקן אחר - בהזנת פרא מוחסרות בהם 40 דקות.
+  const [sameDays, setSameDays] = useState<SameInstitutionDays>({});
 
   useEffect(() => {
     fetch(
@@ -634,13 +697,34 @@ function GridSchedule({
   // הקובע הוא סוג מערכת השעות ולא הקטגוריה: תקן בקטגוריית "פרא רפואי" שסוג מערכת
   // השעות שלו "רגיל" נספר בשעות שעון (ועם ניכוי הפסקות) ולא בשעות אקדמיות.
   const isPara = isParaEntry(type);
+
+  // הזנת פרא: יום שבו העובד כבר מועסק במוסד בתקן אחר מקבל ניכוי נוסף של 40 דקות.
+  // הנתון נשלף פעם אחת - הוא תלוי בתקניו הקיימים של העובד ולא במה שמוזן עכשיו.
+  useEffect(() => {
+    if (!isPara || !employee.tz) { setSameDays({}); return; }
+    let cancelled = false;
+    fetchSameInstitutionDays(token, employee.tz, positionId)
+      .then((days) => { if (!cancelled) setSameDays(days); })
+      .catch(() => { if (!cancelled) setSameDays({}); });
+    return () => { cancelled = true; };
+  }, [token, employee.tz, positionId, isPara]);
+
+  /** דקות הניכוי הנוסף ליום - 40 ביום שכבר מועסק בו במוסד בתקן אחר, אחרת 0. */
+  function sameDayDeduction(day: Day): number {
+    if (!isPara) return 0;
+    return (sameDays[day]?.length ?? 0) > 0 ? SAME_DAY_OTHER_ROLE_DEDUCTION : 0;
+  }
+
   // פרא: per-day academic hours using the deduction formula; accumulate errors for days < 80 min.
   let paraHours = 0;
+  // סך הדקות שהוחסרו בגין ימים שהעובד כבר מועסק בהם במוסד בתקן אחר, לתצוגה בסיכום.
+  let sameDayDeductedMin = 0;
   const paraDayErrors: string[] = [];
   for (const d of DAYS) {
     const dayMin = (week[d] ?? []).reduce((s, sh) => s + shiftMinutes(sh), 0);
-    const result = paraDayHours(dayMin);
+    const result = paraDayHours(dayMin, sameDayDeduction(d));
     if (result === null) continue; // rest day
+    sameDayDeductedMin += sameDayDeduction(d);
     if (!result.ok) { paraDayErrors.push(`יום ${DAY_LABELS[d]}: ${result.error}`); continue; }
     paraHours += result.hours;
   }
@@ -653,7 +737,7 @@ function GridSchedule({
     const dayMin = (week[d] ?? []).reduce((s, sh) => s + shiftMinutes(sh), 0);
     let dayHours = dayMin / 60;
     if (breakPolicy.metric === 'academic') {
-      const r = paraDayHours(dayMin);
+      const r = paraDayHours(dayMin, sameDayDeduction(d));
       dayHours = r?.ok ? r.hours : 0;
     }
     breakDayHours[d] = dayHours;
@@ -1084,6 +1168,12 @@ function GridSchedule({
             const diff = snapped !== null ? snapped - paraHours : null;
             return (
               <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
+                {sameDayDeductedMin > 0 && (
+                  <div className="flex justify-between text-on-surface-variant">
+                    <span>החסרה בגין תקן אחר במוסד:</span>
+                    <span className="font-bold text-error">−{sameDayDeductedMin} דק׳</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-on-surface-variant">
                   <span>שעות בפועל:</span>
                   <span className="font-bold">{formatNum(paraHours)}</span>
@@ -1121,6 +1211,7 @@ function GridSchedule({
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
         {breakPolicy.twelveHour && <TwelveHourNotice />}
+        {isPara && <SameDayDeductionNotice days={sameDays} />}
         {(type === 'סגן ראשון') && (
           <div className="bg-white p-4 rounded-lg border border-outline-variant max-w-xs">
             <label className="text-label-lg text-on-surface block mb-2">מס׳ שעות שבועיות</label>
@@ -1187,7 +1278,8 @@ function GridSchedule({
           // מוצ"ש is a single-shift day regardless of the role's maxShifts.
           const dayMaxShifts = day === MOTZASH ? 1 : maxShifts;
           const dayMin = shifts.reduce((s, sh) => s + shiftMinutes(sh), 0);
-          const paraDayResult = isPara ? paraDayHours(dayMin) : null;
+          const dayDeduction = sameDayDeduction(day);
+          const paraDayResult = isPara ? paraDayHours(dayMin, dayDeduction) : null;
           const dayLabel = isPara
             ? paraDayResult?.ok ? `${formatNum(paraDayResult.hours)} שע׳` : null
             : dayMin > 0 ? `${formatNum(dayMin / 60)} שעות` : null;
@@ -1243,6 +1335,18 @@ function GridSchedule({
                   requiredMinutes={requiredBreak[day]}
                   onChange={(field, v) => updateBreak(day, field, v)}
                 />
+              )}
+              {dayDeduction > 0 && (
+                <p className="mt-2 text-label-sm text-on-surface-variant flex items-start gap-1">
+                  <Icon name="event_repeat" className="text-[15px] shrink-0 mt-0.5" />
+                  <span>
+                    העובד מועסק ביום זה במוסד בתקן אחר
+                    {sameDays[day]?.length ? ` (${sameDays[day]!.map((p) => p.positionName).join(', ')})` : ''}
+                    {dayMin > 0
+                      ? ` - הוחסרו ${dayDeduction} דקות: ${dayMin} דק׳ שהוזנו, ${dayMin - dayDeduction} דק׳ לחישוב`
+                      : ` - יוחסרו ${dayDeduction} דקות מהשעות שיוזנו ביום זה`}
+                  </span>
+                </p>
               )}
               {err && <p className="text-error text-label-sm mt-2">{err}</p>}
             </div>
@@ -2300,7 +2404,6 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                   </p>
                 )}
                 <Line label="סה״כ שעות לניצול" value={ofek1.finalHours} />
-                {ofek1.bonus > 0 && <Line label="תוספת לקות קשה" value={ofek1.bonus} />}
                 <Line label="פרונטלי" value={ofek1.frontalHours} />
                 <Line label="פרטני" value={ofek1.individualHours} />
                 <Line label="שהייה מהמוסד" value={ofek1.stayHoursInstitution} />
@@ -2311,6 +2414,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                 />
                 <Line label="אחוז משרה" value={`${formatNum(ofek1.jobPercent)}%`} />
                 <Line label="משרת אם" value={ofek1.motherPosition ? 'כן' : 'לא'} />
+                <SevereDisabilityNote bonus={ofek1.bonus} />
               </div>
             )}
           </>
@@ -2404,7 +2508,6 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                   <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 space-y-0.5">
                     <p className="font-bold text-primary mb-1">שעות לניצול — תפקיד נוכחי</p>
                     <Line label="סה״כ שעות לניצול" value={ofek3.finalHours} />
-                    {ofek3.bonus > 0 && <Line label="תוספת לקות קשה" value={ofek3.bonus} />}
                     <Line label="פרונטלי" value={ofek3.frontalHours} />
                     <Line label="פרטני" value={ofek3.individualHours} />
                     <Line label="שהייה מהמוסד" value={ofek3.stayHoursInstitution} />
@@ -2414,6 +2517,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                       value={ofek3.frontalHours + ofek3.individualHours + ofek3.stayHoursInstitution + ofek3.stayHoursHome}
                     />
                     <Line label="משרת אם" value={ofek3.motherPosition ? 'כן' : 'לא'} />
+                    <SevereDisabilityNote bonus={ofek3.bonus} />
                   </div>
                 </div>
               )}
@@ -2443,7 +2547,6 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
       <div className="space-y-0.5">
         <p className="font-bold text-primary mb-1">שעות לניצול — תפקיד נוכחי</p>
         <Line label="סה״כ שעות לניצול" value={ofek.finalHours} />
-        {ofek.bonus > 0 && <Line label="תוספת לקות קשה" value={ofek.bonus} />}
         <Line label="פרונטלי" value={ofek.frontalHours} />
         <Line label="פרטני" value={ofek.individualHours} />
         <Line label="שהייה מהמוסד" value={ofek.stayHoursInstitution} />
@@ -2453,8 +2556,23 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
           value={ofek.frontalHours + ofek.individualHours + ofek.stayHoursInstitution + ofek.stayHoursHome}
         />
         <Line label="משרת אם" value={ofek.motherPosition ? 'כן' : 'לא'} />
+        <SevereDisabilityNote bonus={ofek.bonus} />
       </div>
     </div>
+  );
+}
+
+/**
+ * תוספת לקות קשה - נתון סטטי לידיעת המשתמש בלבד. אינה נכנסת למחשבון אופק חדש
+ * ואינה מנוצלת מ"סה״כ שעות לניצול", ולכן מוצגת כהערה נפרדת ולא כשורה בפירוט.
+ */
+function SevereDisabilityNote({ bonus }: { bonus: number }) {
+  if (!bonus) return null;
+  return (
+    <p className="mt-2 pt-2 border-t border-outline-variant flex items-start gap-1 text-on-surface-variant">
+      <Icon name="info" className="text-[14px] shrink-0 mt-0.5" />
+      <span>תוספת לקות קשה: {formatNum(bonus)} שעות</span>
+    </p>
   );
 }
 

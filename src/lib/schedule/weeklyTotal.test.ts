@@ -4,12 +4,16 @@ import {
   combinedCapError,
   isCombinedCapExempt,
   isOverCombinedCap,
+  positionsInAssociation,
   sumPositionHours,
   type PositionHours,
 } from './weeklyTotal';
 
-function pos(hours: number, layer = 'יסודי', name = 'תפקיד'): PositionHours {
-  return { id: `rec${hours}${layer}`, name, hours, layer };
+const ASSOC = 'שתילים רשת חינוך';
+const OTHER_ASSOC = 'דרכי הלל';
+
+function pos(hours: number, layer = 'יסודי', association = ASSOC): PositionHours {
+  return { id: `rec${hours}${layer}${association}`, name: 'תפקיד', hours, layer, association };
 }
 
 describe('COMBINED_WEEKLY_CAP_HOURS', () => {
@@ -24,7 +28,9 @@ describe('sumPositionHours', () => {
   });
 
   it('מתעלם מערכים לא מספריים', () => {
-    expect(sumPositionHours([{ id: 'r', name: 'x', hours: NaN, layer: '' }, pos(8)])).toBe(8);
+    expect(
+      sumPositionHours([{ id: 'r', name: 'x', hours: NaN, layer: '', association: ASSOC }, pos(8)]),
+    ).toBe(8);
   });
 
   it('ללא תקנים - 0', () => {
@@ -44,6 +50,27 @@ describe('isOverCombinedCap', () => {
   it('סובלנות לשגיאות עיגול בשעות אקדמיות', () => {
     // 42 שהצטבר מחילוקים ב-45 עלול לצאת 42.0000000001
     expect(isOverCombinedCap(42.000000000001, 0)).toBe(false);
+  });
+});
+
+describe('positionsInAssociation', () => {
+  it('מחזיר רק תקנים באותה עמותה', () => {
+    const list = [pos(10), pos(20, 'יסודי', OTHER_ASSOC), pos(5)];
+    const result = positionsInAssociation(list, ASSOC);
+    expect(result).toHaveLength(2);
+    expect(sumPositionHours(result)).toBe(15);
+  });
+
+  it('מתעלם מרווחים מיותרים בשמות העמותה', () => {
+    expect(positionsInAssociation([pos(10, 'יסודי', ` ${ASSOC} `)], ASSOC)).toHaveLength(1);
+  });
+
+  it('עמותה ריקה במוסד הנוכחי - אין תקנים בהיקף', () => {
+    expect(positionsInAssociation([pos(10), pos(20)], '')).toEqual([]);
+  });
+
+  it('תקן ללא עמותה אינו נספר', () => {
+    expect(positionsInAssociation([pos(10, 'יסודי', '')], ASSOC)).toEqual([]);
   });
 });
 

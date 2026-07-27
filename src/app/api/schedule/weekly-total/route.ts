@@ -5,9 +5,12 @@ import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 /**
  * GET /api/schedule/weekly-total?token=&tz=&hours=&layer=&excludePositionId=
  *
- * תקרת 42 שעות שבועיות לעובד - סה"כ כל תקניו לפי ת.ז. `hours` הן השעות
- * השבועיות של התקן שמוזן עכשיו. מוחרגים עובדי פנימייה ועובדים שמסומן להם
- * "העסקה 12 שעות".
+ * תקרת 42 שעות שבועיות לעובד - סה"כ תקניו לפי ת.ז., רק במוסדות של עמותת המוסד
+ * הנוכחי. `hours` הן השעות השבועיות של התקן שמוזן עכשיו. מוחרגים עובדי פנימייה
+ * ועובדים שמסומן להם "העסקה 12 שעות".
+ *
+ * העמותה נגזרת מהטוקן ואינה נקראת מה-query - אחרת אפשר היה להרחיב את היקף
+ * הבדיקה מהלקוח.
  */
 export async function GET(req: NextRequest) {
   const gate = await gateByToken(req);
@@ -23,7 +26,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await checkWeeklyTotal(
-      { tz, newHours: Number.isFinite(newHours) ? newHours : 0, layer, excludePositionId },
+      {
+        tz,
+        newHours: Number.isFinite(newHours) ? newHours : 0,
+        layer,
+        association: gate.institution.association ?? '',
+        excludePositionId,
+      },
       gate.requestId,
     );
     return NextResponse.json(result);

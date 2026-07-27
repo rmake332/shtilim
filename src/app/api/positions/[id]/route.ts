@@ -221,13 +221,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ ok: false, message: 'חסרים נתונים.' }, { status: 400 });
   }
 
-  // תקרת 42 ש"ש לעובד בכל תקניו. התקן הנערך מוחרג מהסכום - שעותיו החדשות מחליפות אותו.
+  // תקרת 42 ש"ש לעובד בכל תקניו בעמותה. התקן הנערך מוחרג מהסכום - שעותיו החדשות מחליפות אותו.
   try {
     const weeklyTotal = await checkWeeklyTotal(
       {
         tz: employee.tz ?? '',
         newHours: Number(schedule.weeklyHours) || 0,
         layer: role.layer ?? '',
+        association: gate.institution.association ?? '',
         excludePositionId: positionId,
       },
       gate.requestId,

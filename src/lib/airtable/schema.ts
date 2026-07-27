@@ -109,6 +109,9 @@ export const POSITION_FIELDS = {
   roleTitleText: 'fldj0mMBrS5n5QxlL',   // lookup text → שם התפקיד
   mosadNameText: 'fldFdcjyhrWoo6Pg9',   // multipleLookupValues → שם מוסד (for filtering)
   mosadLookup: 'fldrV4iBdzmxdy76T',     // multipleLookupValues → מוסד, holds מוסדות record IDs
+  // עמותה: lookup through the תקציב link, same singleSelect choices as מוסדות.עמותה.
+  // תקן ללא קישור לתקציב יחזיר ערך ריק, בדיוק כמו mosadLookup.
+  association: 'fldnmowRehqBC4xj7',
   category: 'fldh649jMlkn1ipqR', // קטגוריה (lookup)
   tzLookup: 'fldkPFYk5eyckkMf3', // ת.ז. (lookup)
   roleLink: 'fldelhbayZ5YBxIqw', // → תקציב התחלתי

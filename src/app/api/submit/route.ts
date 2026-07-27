@@ -31,10 +31,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, message: 'לא נבחר תפקיד.' }, { status: 400 });
   }
 
-  // תקרת 42 ש"ש לעובד בכל תקניו - נאכפת גם כאן ולא רק בטופס, כדי שלא ניתן לעקוף אותה.
+  // תקרת 42 ש"ש לעובד בכל תקניו בעמותה - נאכפת גם כאן ולא רק בטופס, כדי שלא ניתן לעקוף אותה.
   try {
     const weeklyTotal = await checkWeeklyTotal(
-      { tz: employee.tz ?? '', newHours: Number(schedule.weeklyHours) || 0, layer: role.layer ?? '' },
+      {
+        tz: employee.tz ?? '',
+        newHours: Number(schedule.weeklyHours) || 0,
+        layer: role.layer ?? '',
+        association: gate.institution.association ?? '',
+      },
       gate.requestId,
     );
     if (!weeklyTotal.ok) {
