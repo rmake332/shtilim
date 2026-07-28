@@ -10,6 +10,15 @@ export interface MotherPositionInput {
   jobPercent: number;
 }
 
+/** נתוני העובד הקובעים משרת אם, למעט אחוז המשרה שנגזר מהשעות. */
+export interface MotherEmployeeInput {
+  gender: string;
+  maritalStatus: string;
+  hasChildrenUnder14: boolean;
+  /** שעות גיל - מופחתות מ-36 לקבלת בסיס אחוז המשרה. */
+  ageHours: number | string;
+}
+
 /** משרת אם = כן only if: female, not single, has children <14, job% >= 79. */
 export function isMotherPosition({
   gender,
@@ -23,9 +32,24 @@ export function isMotherPosition({
   return jobPercent >= 79;
 }
 
-/** Job percent = (total final hours / 36) * 100. */
-export function jobPercent(finalHours: number): number {
-  return (finalHours / 36) * 100;
+/** שבוע משרה מלאה, לפני הפחתת שעות גיל. */
+export const FULL_TIME_WEEK_HOURS = 36;
+
+/**
+ * בסיס אחוז המשרה: 36 בניכוי שעות הגיל של העובד. עובדת עם 2 שעות גיל נמדדת
+ * מול 34, עם 4 שעות גיל מול 32, וללא שעות גיל מול 36.
+ *
+ * שעות גיל שאינן קטנות מ-36 הן נתון בלתי אפשרי; במקרה כזה נשמר בסיס 36 כדי
+ * לא לחלק באפס או במספר שלילי.
+ */
+export function jobPercentBase(ageHours: number | string): number {
+  const base = FULL_TIME_WEEK_HOURS - (Number(ageHours) || 0);
+  return base > 0 ? base : FULL_TIME_WEEK_HOURS;
+}
+
+/** Job percent = (total final hours / (36 - שעות גיל)) * 100. */
+export function jobPercent(finalHours: number, ageHours: number | string): number {
+  return (finalHours / jobPercentBase(ageHours)) * 100;
 }
 
 /** השעות שמחשבון אופק חדש מחזיר לשורה. */
@@ -41,17 +65,23 @@ export function ofekRowHoursSum(row: OfekRowHours): number {
 }
 
 /**
- * חישוב מחדש של משרת אם לפי הפלט של מחשבון אופק חדש (תקני פרא בלבד).
+ * חישוב מחדש של משרת אם לפי הפלט של מחשבון אופק חדש.
  *
- * בפרא השעות שבמפתח הן פרונטלי+פרטני בלבד והשהייה נוספת מעליהן, ולכן אחוז
- * המשרה האמיתי נגזר מסכום השעות שחזר מהמחשבון ולא מהשעות שהוזנו. השליפה
- * הראשונה היא מעבר ביניים בלבד; הערך שמתקבל כאן הוא הקובע.
+ * שני תיקונים לאחוז המשרה שנגזר מהשעות שהוזנו:
+ *
+ * 1. בפרא השעות שבמפתח הן פרונטלי+פרטני בלבד והשהייה נוספת מעליהן, ולכן היקף
+ *    המשרה האמיתי של התקן הוא סכום השעות שחזר מהמחשבון ולא השעות שהוזנו.
+ * 2. משרת אם נקבעת לפי היקף ההעסקה הכולל של העובד, ולכן `otherScopeHours` -
+ *    סכום פרונטלי+פרטני+שהייה של יתר תקני העובד במערכת - נוסף לחישוב.
+ *
+ * השליפה הראשונה מהמחשבון היא מעבר ביניים בלבד; הערך שמתקבל כאן הוא הקובע.
  */
 export function motherPositionFromOfekRow(
   row: OfekRowHours,
-  input: Omit<MotherPositionInput, 'jobPercent'>,
+  input: MotherEmployeeInput,
+  otherScopeHours = 0,
 ): { jobPercent: number; motherPosition: boolean } {
-  const pct = jobPercent(ofekRowHoursSum(row));
+  const pct = jobPercent(ofekRowHoursSum(row) + otherScopeHours, input.ageHours);
   return { jobPercent: pct, motherPosition: isMotherPosition({ ...input, jobPercent: pct }) };
 }
 

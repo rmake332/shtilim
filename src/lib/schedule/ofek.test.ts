@@ -10,12 +10,38 @@ import {
   ofekCategoryFor,
   ofekRowHoursSum,
   motherPositionFromOfekRow,
+  jobPercentBase,
 } from './ofek';
 
 describe('jobPercent', () => {
-  it('computes (hours/36)*100', () => {
-    expect(jobPercent(36)).toBe(100);
-    expect(jobPercent(18)).toBe(50);
+  it('computes (hours/36)*100 when there are no age hours', () => {
+    expect(jobPercent(36, 0)).toBe(100);
+    expect(jobPercent(18, 0)).toBe(50);
+  });
+
+  // בסיס אחוז המשרה הוא 36 בניכוי שעות הגיל.
+  it('שעות גיל מקטינות את הבסיס', () => {
+    expect(jobPercentBase(0)).toBe(36);
+    expect(jobPercentBase(2)).toBe(34);
+    expect(jobPercentBase(4)).toBe(32);
+    expect(jobPercent(34, 2)).toBe(100);
+    expect(jobPercent(32, 4)).toBe(100);
+  });
+
+  it('שעות גיל כמחרוזת ובלי ערך', () => {
+    expect(jobPercentBase('4')).toBe(32);
+    expect(jobPercentBase('')).toBe(36);
+  });
+
+  it('שעות גיל בלתי אפשריות אינן מחלקות באפס או בשלילי', () => {
+    expect(jobPercentBase(36)).toBe(36);
+    expect(jobPercentBase(40)).toBe(36);
+  });
+
+  // 28.44 שעות הן 79% מ-36, אבל רק 79% מ-32 הן 25.28 שעות.
+  it('שעות גיל מורידות את סף משרת אם', () => {
+    expect(jobPercent(26, 0)).toBeCloseTo(72.22, 2);
+    expect(jobPercent(26, 4)).toBeCloseTo(81.25, 2);
   });
 });
 
@@ -40,7 +66,7 @@ describe('isMotherPosition', () => {
 
 // הבדיקה השנייה בפרא: אחוז המשרה נגזר מהפלט של המחשבון ולא מהשעות שהוזנו.
 describe('motherPositionFromOfekRow', () => {
-  const eligible = { gender: 'נקבה', maritalStatus: 'נשוי/ה', hasChildrenUnder14: true };
+  const eligible = { gender: 'נקבה', maritalStatus: 'נשוי/ה', hasChildrenUnder14: true, ageHours: 0 };
 
   it('sums frontal + individual + stay', () => {
     expect(ofekRowHoursSum({ frontalHours: 24, individualHours: 3, stayHours: 7 })).toBe(34);
@@ -48,7 +74,7 @@ describe('motherPositionFromOfekRow', () => {
 
   it('כן למרות שהשעות שהוזנו מתחת לסף — 27 שעות שהוזנו, 34 שעות בפלט', () => {
     // יסודי0לאפרא27 → אחוז לפי הזנה 75%, אחוז לפי פלט 94%
-    expect(isMotherPosition({ ...eligible, jobPercent: jobPercent(27) })).toBe(false);
+    expect(isMotherPosition({ ...eligible, jobPercent: jobPercent(27, 0) })).toBe(false);
     const res = motherPositionFromOfekRow({ frontalHours: 24, individualHours: 3, stayHours: 7 }, eligible);
     expect(res.jobPercent).toBeCloseTo(94.44, 2);
     expect(res.motherPosition).toBe(true);
@@ -64,6 +90,31 @@ describe('motherPositionFromOfekRow', () => {
     expect(motherPositionFromOfekRow(row, { ...eligible, gender: 'זכר' }).motherPosition).toBe(false);
     expect(motherPositionFromOfekRow(row, { ...eligible, maritalStatus: 'רווק/ה' }).motherPosition).toBe(false);
     expect(motherPositionFromOfekRow(row, { ...eligible, hasChildrenUnder14: false }).motherPosition).toBe(false);
+  });
+
+  // משרת אם נקבעת לפי היקף ההעסקה הכולל של העובד בכל תקניו, ולא לפי תקן בודד.
+  it('שעות יתר התקנים מצטרפות לאחוז המשרה', () => {
+    const row = { frontalHours: 8, individualHours: 1, stayHours: 3 }; // 12 שעות בתקן הנוכחי
+    expect(motherPositionFromOfekRow(row, eligible).motherPosition).toBe(false);
+
+    const res = motherPositionFromOfekRow(row, eligible, 17);
+    expect(res.jobPercent).toBeCloseTo(80.56, 2); // (12 + 17) / 36
+    expect(res.motherPosition).toBe(true);
+  });
+
+  it('היקף אפס ביתר התקנים זהה לחישוב ללא הפרמטר', () => {
+    const row = { frontalHours: 24, individualHours: 3, stayHours: 7 };
+    expect(motherPositionFromOfekRow(row, eligible, 0)).toEqual(motherPositionFromOfekRow(row, eligible));
+  });
+
+  // הבסיס קטן, ולכן אותן שעות בדיוק הופכות למשרת אם.
+  it('שעות גיל מצטרפות לחישוב דרך בסיס אחוז המשרה', () => {
+    const row = { frontalHours: 18, individualHours: 3, stayHours: 5 }; // 26 שעות
+    expect(motherPositionFromOfekRow(row, eligible).motherPosition).toBe(false);
+
+    const res = motherPositionFromOfekRow(row, { ...eligible, ageHours: 4 });
+    expect(res.jobPercent).toBeCloseTo(81.25, 2); // 26 / 32
+    expect(res.motherPosition).toBe(true);
   });
 });
 

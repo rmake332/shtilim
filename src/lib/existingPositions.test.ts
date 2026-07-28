@@ -117,4 +117,74 @@ describe('sumExistingPositions', () => {
     expect(sum.count).toBe(1);
     expect(sum.sameInstitution.frontalHours).toBe(10);
   });
+
+  // allRoles = הבסיס למשרת אם: כל תקני העובד, בלי סינון קטגוריה / שכבה / מוסד.
+  describe('allRoles', () => {
+    it('סופר כל קטגוריה, שכבה ומוסד', async () => {
+      listRecords.mockResolvedValue([
+        position({ id: 'rec1', mosadId: MOSAD_A, frontal: 10, individual: 2, stay: 3 }),
+        position({ id: 'rec2', mosadId: MOSAD_B, category: 'סיוע', layer: 'חטיבה', frontal: 5, stay: 1 }),
+      ]);
+
+      const sum = await sumExistingPositions({ ...params, mosadId: MOSAD_A });
+
+      expect(sum.count).toBe(1); // המפתח המשולב עדיין מצומצם לקטגוריה+שכבה
+      expect(sum.allRoles).toEqual({
+        count: 2,
+        frontalHours: 15,
+        individualHours: 2,
+        stayHours: 4,
+      });
+    });
+
+    // תקן שאינו פרא / הוראה / הוראה - לוח פרא נשמר בלי פירוט אופק, ולכן נופל מאליו.
+    it('מדלג על תקן ללא פירוט אופק (מערכת שעות רגיל)', async () => {
+      listRecords.mockResolvedValue([
+        position({ id: 'recPara', mosadId: MOSAD_A, frontal: 10, individual: 2, stay: 3 }),
+        position({ id: 'recRegular', mosadId: MOSAD_A, category: 'סיוע' }),
+      ]);
+
+      const sum = await sumExistingPositions(params);
+
+      expect(sum.allRoles.count).toBe(1);
+      expect(sum.allRoles.frontalHours).toBe(10);
+    });
+
+    it('מדלג על תקן שנה קודמת ועל התקן הנערך', async () => {
+      listRecords.mockResolvedValue([
+        position({ id: 'rec1', mosadId: MOSAD_A, frontal: 10 }),
+        position({ id: 'recPrevYear', mosadId: MOSAD_A, category: 'סיוע', frontal: 20, prevYear: true }),
+        position({ id: 'recEdited', mosadId: MOSAD_B, layer: 'גנים', frontal: 40 }),
+      ]);
+
+      const sum = await sumExistingPositions({ ...params, excludePositionId: 'recEdited' });
+
+      expect(sum.allRoles).toEqual({
+        count: 1,
+        frontalHours: 10,
+        individualHours: 0,
+        stayHours: 0,
+      });
+    });
+
+    it('מסכם גם שהייה מהבית ושהייה מהבית פרא גנים', async () => {
+      listRecords.mockResolvedValue([
+        {
+          id: 'recParaYesodi',
+          fields: {
+            [POSITION_FIELDS.mosadLookup]: [MOSAD_A],
+            [POSITION_FIELDS.category]: ['פרא רפואי'],
+            [POSITION_FIELDS.layer]: 'יסודי',
+            [POSITION_FIELDS.frontalHours]: 20,
+            [POSITION_FIELDS.stayHoursHome]: 4,
+            [POSITION_FIELDS.stayHoursHomeParaGanim]: 2,
+          },
+        },
+      ]);
+
+      const sum = await sumExistingPositions(params);
+
+      expect(sum.allRoles.stayHours).toBe(6);
+    });
+  });
 });

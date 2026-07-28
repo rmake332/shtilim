@@ -1435,6 +1435,11 @@ interface OfekResult {
   stayHoursInstitution: number;
   stayHoursHome: number;
   additionalRoles: number;
+  /** היקף יתר תקני העובד במערכת (פרונטלי+פרטני+שהייה), הבסיס למשרת אם. */
+  otherPositionsHours?: number;
+  otherPositionsCount?: number;
+  /** היקף כל התקנים יחד, לרבות התקן המוזן כעת. */
+  totalScopeHours?: number;
   overBudget?: boolean;
   reducedVsLastYear?: boolean;
   previousYear?: number | null;
@@ -1511,6 +1516,9 @@ async function computeOfek(
     stayHoursInstitution: j.stayHoursInstitution,
     stayHoursHome: j.stayHoursHome,
     additionalRoles: j.additionalRoles ?? 0,
+    otherPositionsHours: j.otherPositionsHours ?? 0,
+    otherPositionsCount: j.otherPositionsCount ?? 0,
+    totalScopeHours: j.totalScopeHours,
     overBudget: j.overBudget,
     reducedVsLastYear: j.reducedVsLastYear,
     previousYear: j.previousYear,
@@ -2412,7 +2420,17 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                   label="סה״כ שעות שבועיות"
                   value={ofek1.frontalHours + ofek1.individualHours + ofek1.stayHoursInstitution + ofek1.stayHoursHome}
                 />
-                <Line label="אחוז משרה" value={`${formatNum(ofek1.jobPercent)}%`} />
+                {/* משרת אם נקבעת לפי היקף ההעסקה הכולל, ולכן מוצג ממה הורכב האחוז. */}
+                {(ofek1.otherPositionsHours ?? 0) > 0 && (
+                  <>
+                    <Line
+                      label={`שעות ב-${ofek1.otherPositionsCount} תקנים אחרים במערכת`}
+                      value={ofek1.otherPositionsHours!}
+                    />
+                    <Line label="סה״כ בכל התקנים" value={ofek1.totalScopeHours ?? 0} />
+                  </>
+                )}
+                <Line label="אחוז משרה בכל התקנים" value={`${Math.round(ofek1.jobPercent)}%`} />
                 <Line label="משרת אם" value={ofek1.motherPosition ? 'כן' : 'לא'} />
                 <SevereDisabilityNote bonus={ofek1.bonus} />
               </div>
@@ -2492,7 +2510,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                         <Line label="פרונטלי" value={ofek3.ofekRow.frontalHours} />
                         <Line label="פרטני" value={ofek3.ofekRow.individualHours} />
                         <Line label="שהייה" value={ofek3.ofekRow.stayHours} />
-                        <Line label="אחוז משרה" value={`${formatNum(ofek3.ofekRow.jobPercent)}%`} />
+                        <Line label="אחוז משרה" value={`${Math.round(ofek3.ofekRow.jobPercent)}%`} />
                       </>
                     ) : (
                       <>
@@ -2501,7 +2519,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                         <Line label="פרטני" value={ofek3.individualHours} />
                         <Line label="שהייה מהמוסד" value={ofek3.stayHoursInstitution} />
                         <Line label="שהייה מהבית" value={ofek3.stayHoursHome} />
-                        <Line label="אחוז משרה" value={`${formatNum(ofek3.jobPercent)}%`} />
+                        <Line label="אחוז משרה" value={`${Math.round(ofek3.jobPercent)}%`} />
                       </>
                     )}
                   </div>
@@ -2541,7 +2559,7 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
           <Line label="פרונטלי" value={ofek.ofekRow.frontalHours} />
           <Line label="פרטני" value={ofek.ofekRow.individualHours} />
           <Line label="שהייה" value={ofek.ofekRow.stayHours} />
-          <Line label="אחוז משרה" value={`${formatNum(ofek.ofekRow.jobPercent)}%`} />
+          <Line label="אחוז משרה" value={`${Math.round(ofek.ofekRow.jobPercent)}%`} />
         </div>
       )}
       <div className="space-y-0.5">

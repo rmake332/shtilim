@@ -382,7 +382,7 @@ export function SummaryStep({
                   value={schedule.frontalHours + schedule.individualHours + schedule.stayHoursInstitution + schedule.stayHoursHome}
                 />
                 {schedule.jobPercent > 0 && (
-                  <Row label="אחוז משרה" value={`${formatNum(schedule.jobPercent)}%`} />
+                  <Row label="אחוז משרה" value={`${Math.round(schedule.jobPercent)}%`} />
                 )}
               </>
             )}

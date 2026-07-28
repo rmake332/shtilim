@@ -30,6 +30,21 @@ export interface ExistingHoursSum extends HoursTotals {
    * Empty totals when no mosadId is passed.
    */
   sameInstitution: HoursTotals;
+  /**
+   * כל תקני העובד במערכת, ללא סינון קטגוריה / שכבה / מוסד. זהו הבסיס לקביעת
+   * "משרת אם", שנקבעת לפי היקף ההעסקה הכולל של העובד ולא לפי תקן בודד.
+   *
+   * נספרים רק תקנים שסוג מערכת השעות שלהם פרא / הוראה / הוראה - לוח פרא: בכל
+   * תקן אחר שדות פרונטלי / פרטני / שהייה נשארים ריקים (submit.ts כותב אותם
+   * עם `|| undefined`), ולכן סכימת הפירוט מסננת אותם מאליה ואין צורך לשלוף את
+   * סוג מערכת השעות מטבלת התקציב.
+   */
+  allRoles: HoursTotals;
+}
+
+/** סכום שלוש קבוצות השעות - היקף המשרה של התקן כפי שהמחשבון החזיר אותו. */
+export function totalHours(t: HoursTotals): number {
+  return t.frontalHours + t.individualHours + t.stayHours;
 }
 
 /**
@@ -39,6 +54,9 @@ export interface ExistingHoursSum extends HoursTotals {
  * Pass excludePositionId when editing an existing position so its old hours
  * are not double-counted alongside the newly entered hours.
  * Pass mosadId (a מוסדות record ID) to also get the same-institution subtotal.
+ *
+ * שליפה אחת מחזירה שלושה סכומים: הקטגוריה+שכבה (למפתח המשולב של המחשבון),
+ * המוסד הנוכחי (להשוואה לשנה קודמת) ו-allRoles (כל התקנים, למשרת אם).
  */
 export async function sumExistingPositions(
   params: { tz: string; category: string; layer: string; mosadId?: string; excludePositionId?: string },
@@ -53,24 +71,29 @@ export async function sumExistingPositions(
     requestId,
   );
 
-  const matched = records.filter((r) => {
-    if (params.excludePositionId && r.id === params.excludePositionId) return false;
-    // תפקיד שנה קודמת (prevYearStatus = "כן") לא נספר כתפקיד נוסף
-    if (text(r.fields[POSITION_FIELDS.prevYearStatus]) === 'כן') return false;
-    const cat = text(r.fields[POSITION_FIELDS.category]);
-    const layer = text(r.fields[POSITION_FIELDS.layer]);
-    return cat.includes(params.category) && (params.layer === '' || layer.includes(params.layer));
-  });
-
   const all = emptyTotals();
   const sameInstitution = emptyTotals();
-  for (const r of matched) {
+  const allRoles = emptyTotals();
+
+  for (const r of records) {
+    if (params.excludePositionId && r.id === params.excludePositionId) continue;
+    // תפקיד שנה קודמת (prevYearStatus = "כן") לא נספר כתפקיד נוסף
+    if (text(r.fields[POSITION_FIELDS.prevYearStatus]) === 'כן') continue;
+
     const frontal = num(r.fields[POSITION_FIELDS.frontalHours]);
     const individual = num(r.fields[POSITION_FIELDS.individualHours]);
     const stay =
       num(r.fields[POSITION_FIELDS.stayHours]) +
       num(r.fields[POSITION_FIELDS.stayHoursHome]) +
       num(r.fields[POSITION_FIELDS.stayHoursHomeParaGanim]);
+
+    // כלל המערכת, לקביעת משרת אם. תקן ללא פירוט אופק אינו תקן פרא/הוראה ואינו נספר.
+    if (frontal + individual + stay > 0) add(allRoles, frontal, individual, stay);
+
+    const cat = text(r.fields[POSITION_FIELDS.category]);
+    const layer = text(r.fields[POSITION_FIELDS.layer]);
+    if (!cat.includes(params.category)) continue;
+    if (params.layer !== '' && !layer.includes(params.layer)) continue;
 
     add(all, frontal, individual, stay);
     // The מוסד lookup carries מוסדות record IDs — exact match, no name juggling.
@@ -79,7 +102,7 @@ export async function sumExistingPositions(
     }
   }
 
-  return { ...all, sameInstitution };
+  return { ...all, sameInstitution, allRoles };
 }
 
 function emptyTotals(): HoursTotals {
