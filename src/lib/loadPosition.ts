@@ -121,6 +121,7 @@ export async function loadPosition(
   // Add back the hours this position currently holds so the schedule step can validate
   // against the correct effective budget (remaining + what this position will release).
   const currentHours = Number(pf[POSITION_FIELDS.totalUtilizedHours]) || Number(pf[POSITION_FIELDS.weeklyHours]) || 0;
+  const budgetRemaining = Number(budgetFields[BUDGET_FIELDS.remainingHours]) || 0;
 
   const role: RoleData = {
     symbolId: symbolIds[0] ?? '',
@@ -129,7 +130,7 @@ export async function loadPosition(
     roleTitle: strField(pf[POSITION_FIELDS.roleTitleText]),
     category,
     scheduleType: strField(budgetFields[BUDGET_FIELDS.scheduleType]) || null,
-    remainingHours: currentHours,
+    remainingHours: budgetRemaining + currentHours,
     layer: strField(pf[POSITION_FIELDS.layer]),
     subRole: strField(pf[POSITION_FIELDS.subRole]),
     landbergApproval: strField(pf[POSITION_FIELDS.subRole]) ? 'כן' : '',
