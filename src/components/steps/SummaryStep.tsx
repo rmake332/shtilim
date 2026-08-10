@@ -7,7 +7,7 @@ import { formatNum } from '@/lib/formatNum';
 import { EmployeeData, RoleData, ScheduleData, YouthDocs } from '@/lib/formTypes';
 import { maskTzClient } from '@/lib/maskClient';
 import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
-import { ofekCategoryFor } from '@/lib/schedule/ofek';
+import { ofekCategoryFor, computeUtilizedHours } from '@/lib/schedule/ofek';
 import { DOC_FIELDS, UPDATE_REASON_OPTIONS } from '@/lib/airtable/schema';
 import { subRoleDocsFor } from '@/lib/formTypes';
 
@@ -190,6 +190,9 @@ export function SummaryStep({
   // לפי סוג מערכת השעות: "פרא" / "הוראה" / "הוראה - לוח פרא". "רגיל" and the rest have no
   // breakdown, גם כשהקטגוריה היא פרא רפואי.
   const hasBreakdown = ofekCategoryFor(role.scheduleType) !== null;
+  // מערכות עם מחשבון אופק חדש: "סה"כ שעות לניצול" הוא הפלט של האופק (frontal+individual+שהייה
+  // בגנים), לא שעות המערכת הגולמיות שהוזנו לפני החישוב. ראו computeUtilizedHours ב-submit.ts.
+  const utilizedHours = computeUtilizedHours(role.layer, schedule);
 
   if (result?.ok) {
     return (
@@ -368,7 +371,7 @@ export function SummaryStep({
             <div className="flex justify-between items-end mb-6">
               <span className="opacity-80">סה״כ שעות לניצול</span>
               <span className="text-display-lg-mobile font-bold text-on-tertiary-container">
-                {formatNum(schedule.weeklyHours)}
+                {formatNum(utilizedHours)}
               </span>
             </div>
             {hasBreakdown && (

@@ -15,6 +15,7 @@ import { submitForm } from '@/lib/submit';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
+import { computeUtilizedHours } from '@/lib/schedule/ofek';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
 // מוצ"ש included — regular schedules round-trip; other types simply have no shifts there.
@@ -360,14 +361,6 @@ function buildScheduleFields(schedule: ScheduleData): Record<string, number> {
   return out;
 }
 
-function computeUtilizedHours(role: RoleData, schedule: ScheduleData): number {
-  const { frontalHours = 0, individualHours = 0, stayHoursInstitution = 0, stayHoursHome = 0 } = schedule;
-  const isGanim = role.layer === 'גנים';
-  const stay = isGanim ? stayHoursInstitution + stayHoursHome : 0;
-  const total = frontalHours + individualHours + stay;
-  return total > 0 ? total : (schedule.weeklyHours ?? 0);
-}
-
 async function updatePosition(
   positionId: string,
   institutionMosadId: string,
@@ -409,7 +402,7 @@ async function updatePosition(
     [POSITION_FIELDS.layer]: role.layer || undefined,
     [POSITION_FIELDS.subRole]: role.subRole || undefined,
     [POSITION_FIELDS.weeklyHours]: schedule.weeklyHours || undefined,
-    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role, schedule) || undefined,
+    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role.layer, schedule) || undefined,
     [POSITION_FIELDS.motherPosition]: schedule.motherPosition ? 'כן' : 'לא',
     [POSITION_FIELDS.frontalHours]: schedule.frontalHours || undefined,
     [POSITION_FIELDS.individualHours]: schedule.individualHours || undefined,

@@ -11,6 +11,7 @@ import {
 } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { findEmployeeByExactId } from '@/lib/employees';
+import { computeUtilizedHours } from '@/lib/schedule/ofek';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
 // Includes מוצ"ש — only populated for regular-type schedules; other types never set week.motzash.
@@ -46,20 +47,6 @@ function scheduleFields(schedule: ScheduleData): Record<string, number> {
     if (outSec != null) out[BREAK_FIELDS[day].out] = outSec;
   }
   return out;
-}
-
-/**
- * סה"כ שעות לניצול = frontal + individual + stay.
- * גנים (הוראה ופרא): כולל שהייה.
- * יסודי / חטיבה: ללא שהייה → frontal + individual בלבד.
- */
-function computeUtilizedHours(role: RoleData, schedule: ScheduleData): number {
-  const { frontalHours = 0, individualHours = 0, stayHoursInstitution = 0, stayHoursHome = 0 } = schedule;
-  const isGanim = role.layer === 'גנים';
-  const stay = isGanim ? stayHoursInstitution + stayHoursHome : 0;
-  const total = frontalHours + individualHours + stay;
-  // Fall back to weeklyHours when the ofek breakdown hasn't been computed yet.
-  return total > 0 ? total : (schedule.weeklyHours ?? 0);
 }
 
 /**
@@ -147,7 +134,7 @@ export async function submitForm(
     [POSITION_FIELDS.layer]: role.layer || undefined,
     [POSITION_FIELDS.subRole]: role.subRole || undefined,
     [POSITION_FIELDS.weeklyHours]: schedule.weeklyHours || undefined,
-    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role, schedule) || undefined,
+    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role.layer, schedule) || undefined,
     [POSITION_FIELDS.motherPosition]: schedule.motherPosition ? 'כן' : 'לא',
     [POSITION_FIELDS.frontalHours]: schedule.frontalHours || undefined,
     [POSITION_FIELDS.individualHours]: schedule.individualHours || undefined,

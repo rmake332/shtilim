@@ -168,3 +168,25 @@ export function ofekCategoryFor(scheduleType: string | null | undefined): 'פר�
   if (scheduleType === 'הוראה' || scheduleType === 'הוראה - לוח פרא') return 'הוראה';
   return null;
 }
+
+/**
+ * סה"כ שעות לניצול = frontal + individual + stay.
+ * גנים (הוראה ופרא): כולל שהייה. יסודי / חטיבה: ללא שהייה → frontal + individual בלבד.
+ * נופל חזרה ל-weeklyHours כשהאופק עדיין לא חושב (למשל מערכת שעות "רגיל").
+ */
+export function computeUtilizedHours(
+  layer: string | null | undefined,
+  hours: {
+    weeklyHours?: number;
+    frontalHours?: number;
+    individualHours?: number;
+    stayHoursInstitution?: number;
+    stayHoursHome?: number;
+  },
+): number {
+  const { frontalHours = 0, individualHours = 0, stayHoursInstitution = 0, stayHoursHome = 0 } = hours;
+  const isGanim = layer === 'גנים';
+  const stay = isGanim ? stayHoursInstitution + stayHoursHome : 0;
+  const total = frontalHours + individualHours + stay;
+  return total > 0 ? total : (hours.weeklyHours ?? 0);
+}
