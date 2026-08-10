@@ -249,9 +249,13 @@ export async function POST(req: NextRequest) {
     const stayInstitution = teaching || split === 'institution' ? stay : 0;
     const stayHome = !teaching && split === 'home' ? stay : 0;
 
-    // Budget over-limit check (final > remaining → block).
+    // סה"כ שעות לניצול: גנים כולל שהייה, יסודי/חטיבה בלעדיה - כמו computeUtilizedHours בסאבמיט.
+    const isGanimLayer = layer === 'גנים';
+    const utilizedHours = frontal + individual + (isGanimLayer ? stayInstitution + stayHome : 0);
+
+    // Budget over-limit check against סה"כ שעות לניצול, לא מול השעות שהוזנו במערכת השעות.
     const budgetRemaining = Number(body.budgetRemaining ?? Infinity);
-    const overBudget = finalHours > budgetRemaining;
+    const overBudget = utilizedHours > budgetRemaining;
 
     // Previous-year reduction check (warning + reason required).
     // Both sides are scoped to קטגוריה + מוסד + שכבה: current hours = this role plus the
@@ -287,6 +291,7 @@ export async function POST(req: NextRequest) {
       individualHours: individual,
       stayHoursInstitution: stayInstitution,
       stayHoursHome: stayHome,
+      utilizedHours,
       ofekRecordId: ofek.recordId,
       ofekAllRolesRecordId: ofekAllRecordId,
       additionalRoles,

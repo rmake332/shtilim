@@ -1003,7 +1003,7 @@ function GridSchedule({
     }
     // Use step-3 result when it exists, otherwise step-1 result.
     const j = (existing.count > 0 ? ofek : ofek1)!;
-    if (j.overBudget) errs.push(overBudgetMessage(j.finalHours, role.remainingHours));
+    if (j.overBudget) errs.push(overBudgetMessage(j.utilizedHours, role.remainingHours));
     if (j.reducedVsLastYear && !data.reductionReason) {
       warns.push('מספר השעות שהוזן קטן ממספר השעות בשנה הקודמת — יש לבחור סיבה להמשך.');
     }
@@ -1434,6 +1434,8 @@ interface OfekResult {
   individualHours: number;
   stayHoursInstitution: number;
   stayHoursHome: number;
+  /** סה"כ שעות לניצול מהתקציב: פרונטלי+פרטני, ובגנים בתוספת שהייה. */
+  utilizedHours: number;
   additionalRoles: number;
   /** היקף יתר תקני העובד במערכת (פרונטלי+פרטני+שהייה), הבסיס למשרת אם. */
   otherPositionsHours?: number;
@@ -1515,6 +1517,7 @@ async function computeOfek(
     individualHours: j.individualHours,
     stayHoursInstitution: j.stayHoursInstitution,
     stayHoursHome: j.stayHoursHome,
+    utilizedHours: j.utilizedHours,
     additionalRoles: j.additionalRoles ?? 0,
     otherPositionsHours: j.otherPositionsHours ?? 0,
     otherPositionsCount: j.otherPositionsCount ?? 0,
@@ -1982,7 +1985,7 @@ function BellScheduleGrid({
     const j = (existing.count > 0 ? ofek : ofek1)!;
     // Collect all blocking alerts together.
     const errs: string[] = [];
-    if (j.overBudget) errs.push(overBudgetMessage(j.finalHours, role.remainingHours));
+    if (j.overBudget) errs.push(overBudgetMessage(j.utilizedHours, role.remainingHours));
     if (j.reducedVsLastYear && !data.reductionReason) {
       errs.push('מספר השעות שהוזן קטן ממספר השעות בשנה הקודמת — יש לבחור סיבה להמשך.');
     }
@@ -2411,7 +2414,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                     🔍 {ofek1.key}
                   </p>
                 )}
-                <Line label="סה״כ שעות לניצול" value={ofek1.finalHours} />
+                <Line label="סה״כ שעות לניצול" value={ofek1.utilizedHours} />
                 <Line label="פרונטלי" value={ofek1.frontalHours} />
                 <Line label="פרטני" value={ofek1.individualHours} />
                 <Line label="שהייה מהמוסד" value={ofek1.stayHoursInstitution} />
@@ -2525,7 +2528,7 @@ function OfekChecks({ computing, disabled, ofek1, existing, ofek3, category, lay
                   </div>
                   <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 space-y-0.5">
                     <p className="font-bold text-primary mb-1">שעות לניצול — תפקיד נוכחי</p>
-                    <Line label="סה״כ שעות לניצול" value={ofek3.finalHours} />
+                    <Line label="סה״כ שעות לניצול" value={ofek3.utilizedHours} />
                     <Line label="פרונטלי" value={ofek3.frontalHours} />
                     <Line label="פרטני" value={ofek3.individualHours} />
                     <Line label="שהייה מהמוסד" value={ofek3.stayHoursInstitution} />
@@ -2564,7 +2567,7 @@ function OfekBreakdown({ ofek }: { ofek: OfekResult }) {
       )}
       <div className="space-y-0.5">
         <p className="font-bold text-primary mb-1">שעות לניצול — תפקיד נוכחי</p>
-        <Line label="סה״כ שעות לניצול" value={ofek.finalHours} />
+        <Line label="סה״כ שעות לניצול" value={ofek.utilizedHours} />
         <Line label="פרונטלי" value={ofek.frontalHours} />
         <Line label="פרטני" value={ofek.individualHours} />
         <Line label="שהייה מהמוסד" value={ofek.stayHoursInstitution} />
