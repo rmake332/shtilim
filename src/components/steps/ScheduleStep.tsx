@@ -408,6 +408,7 @@ export function ScheduleStep({
   onNext,
   onBack,
   onEditEmployee,
+  onEditRole,
 }: {
   token: string;
   employee: EmployeeData;
@@ -418,6 +419,7 @@ export function ScheduleStep({
   onNext: (data: ScheduleData) => void;
   onBack?: () => void;
   onEditEmployee?: () => void;
+  onEditRole?: () => void;
 }) {
   const type = role.scheduleType;
   const [data, setData] = useState<ScheduleData>(initial ?? emptySchedule());
@@ -445,6 +447,7 @@ export function ScheduleStep({
           onBack={onBack}
           showBack={!!onBack}
           onEditEmployee={onEditEmployee}
+          onEditRole={onEditRole}
           onNext={() => onNext({ ...emptySchedule(), weeklyHours: 0 })}
         />
       </>
@@ -463,6 +466,7 @@ export function ScheduleStep({
         positionId={positionId}
         onBack={onBack}
         onEditEmployee={onEditEmployee}
+        onEditRole={onEditRole}
         onNext={onNext}
       />
     );
@@ -487,6 +491,7 @@ export function ScheduleStep({
         prevYear={prevYear}
         onBack={onBack}
         onEditEmployee={onEditEmployee}
+        onEditRole={onEditRole}
         onNext={onNext}
       />
     );
@@ -507,6 +512,7 @@ export function ScheduleStep({
       prevYear={prevYear}
       onBack={onBack}
       onEditEmployee={onEditEmployee}
+      onEditRole={onEditRole}
       onNext={onNext}
     />
   );
@@ -526,6 +532,7 @@ function ManualHoursSchedule({
   positionId,
   onBack,
   onEditEmployee,
+  onEditRole,
   onNext,
 }: {
   token: string;
@@ -537,6 +544,7 @@ function ManualHoursSchedule({
   positionId?: string;
   onBack?: () => void;
   onEditEmployee?: () => void;
+  onEditRole?: () => void;
   onNext: (d: ScheduleData) => void;
 }) {
   const [errors, setErrors] = useState<string[]>([]);
@@ -599,6 +607,7 @@ function ManualHoursSchedule({
         onBack={onBack}
         showBack={!!onBack}
         onEditEmployee={onEditEmployee}
+        onEditRole={onEditRole}
         nextDisabled={checking}
         onNext={validateAndNext}
       />
@@ -618,6 +627,7 @@ function GridSchedule({
   prevYear,
   onBack,
   onEditEmployee,
+  onEditRole,
   onNext,
 }: {
   token: string;
@@ -631,6 +641,7 @@ function GridSchedule({
   prevYear?: PrevYearPosition;
   onBack?: () => void;
   onEditEmployee?: () => void;
+  onEditRole?: () => void;
   onNext: (d: ScheduleData) => void;
 }) {
   const deputyWeekly = (employee.gender === 'נקבה' && employee.childrenUnder14 === 'כן') ? 37.5 : 40;
@@ -1412,6 +1423,7 @@ function GridSchedule({
           onBack={onBack}
           showBack={!!onBack}
           onEditEmployee={onEditEmployee}
+          onEditRole={onEditRole}
           onNext={validateAndNext}
           nextDisabled={computing || (needsOfek && (!ofek1?.ok || existing === null || (existing.count > 0 && !ofek?.ok)))}
         />
@@ -1549,6 +1561,7 @@ function BellScheduleGrid({
   prevYear,
   onBack,
   onEditEmployee,
+  onEditRole,
   onNext,
 }: {
   token: string;
@@ -1560,6 +1573,7 @@ function BellScheduleGrid({
   prevYear?: PrevYearPosition;
   onBack?: () => void;
   onEditEmployee?: () => void;
+  onEditRole?: () => void;
   onNext: (d: ScheduleData) => void;
 }) {
   // The timetable is always entered by ONE bell schedule. A role that offers exactly one
@@ -2352,6 +2366,7 @@ function BellScheduleGrid({
           onBack={onBack}
           showBack={!!onBack}
           onEditEmployee={onEditEmployee}
+          onEditRole={onEditRole}
           onNext={validateAndNext}
           nextDisabled={slotsLoading || computing || !ofek1?.ok || existing === null || (existing.count > 0 && !ofek?.ok)}
         />

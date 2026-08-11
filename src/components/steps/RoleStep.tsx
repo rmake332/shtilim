@@ -64,6 +64,7 @@ export function RoleStep({
   isNewEmployee,
   lockedRole = false,
   restrictedSymbols,
+  mode = 'new',
   docs,
   onDocsChange,
   onNext,
@@ -79,6 +80,9 @@ export function RoleStep({
   isNewEmployee?: boolean;
   /** from-prev-year flow: the role is preloaded and cannot be changed (no symbol/search/table). */
   lockedRole?: boolean;
+  /** edit mode: the underlying role/symbol are locked (already committed on the position) —
+   *  only sub-role, גמולים and תפקידים נוספים below stay editable. */
+  mode?: 'new' | 'edit';
   /**
    * from-prev-year flow, ambiguous case: same role+category matched several סמלי מוסד in
    * תקציב התחלתי (the תשפ"ו row carries no סמל to disambiguate). Restricts the symbol
@@ -110,6 +114,7 @@ export function RoleStep({
   const [loadedPrevYear, setLoadedPrevYear] = useState<PrevYearPosition | undefined>(undefined);
   const prevYearAbort = useRef<AbortController | null>(null);
   const [subRoleChoices, setSubRoleChoices] = useState<string[]>([]);
+  const isEditMode = mode === 'edit';
 
   // Load symbols once. Auto-select if only one exists.
   // Ambiguous prev-year case: skip the fetch and use the restricted candidate list instead.
@@ -135,8 +140,21 @@ export function RoleStep({
   }, [token, restrictedSymbols]);
 
   // Load roles when a symbol is picked.
+  // Edit mode fallback: the position doesn't always carry a symbol link (see getRoleById
+  // in roles.ts — the same gap already worked around for the bell-schedule lookup).
+  // Resolve the single role directly by its budget-row id in that case, so the locked-role
+  // card and the גמולים/תפקידים נוספים section still render.
   useEffect(() => {
     if (!data.symbolId) {
+      if (isEditMode && data.roleId) {
+        setRolesLoading(true);
+        fetch(`/api/roles?token=${encodeURIComponent(token)}&roleId=${encodeURIComponent(data.roleId)}`)
+          .then((r) => r.json())
+          .then((j) => setRoles(j.roles ?? []))
+          .catch(() => setRoles([]))
+          .finally(() => setRolesLoading(false));
+        return;
+      }
       setRoles([]);
       setRolesLoading(false);
       return;
@@ -147,7 +165,7 @@ export function RoleStep({
       .then((j) => setRoles(j.roles ?? []))
       .catch(() => setRoles([]))
       .finally(() => setRolesLoading(false));
-  }, [token, data.symbolId]);
+  }, [token, data.symbolId, isEditMode, data.roleId]);
 
   // Restore gemul/extra-role lists when returning from a later step.
   useEffect(() => {
@@ -176,7 +194,7 @@ export function RoleStep({
   // Check for a prior-year position whenever a role is selected.
   // Skipped entirely when the role is locked (from-prev-year flow already loaded it).
   useEffect(() => {
-    if (lockedRole && data.roleId) return;
+    if ((lockedRole || isEditMode) && data.roleId) return;
     if (prevYearAbort.current) prevYearAbort.current.abort();
     setPrevYear(null);
     setPrevYearChecked(false);
@@ -315,7 +333,8 @@ export function RoleStep({
   }
   const needsLayer = Boolean(selectedRole && selectedRole.layer.length === 0 && !institutionLayer);
   // גנים + מוסד עם כמה סמלים: יש להזין מערכת שעות (וטופס) נפרד לכל סמל מוסד בנפרד.
-  const showGanimMultiSymbolNotice = Boolean(selectedRole) && data.layer === 'גנים' && symbols.length > 1;
+  // לא רלוונטי בעריכת תקן קיים — הסמל כבר קבוע.
+  const showGanimMultiSymbolNotice = !isEditMode && Boolean(selectedRole) && data.layer === 'גנים' && symbols.length > 1;
   const canAddGemul = GEMUL_ALLOWED_CATEGORIES.has(data.category);
   // תת-תפקיד מוצג לפי שדה "רשימה נפתחת לתפקידי פרא" (checkbox) בשורת התקציב של התפקיד.
   // selectedRole קודם ל-data כדי שבמצב עריכה/טעינה הדגל יתעדכן ברגע שרשימת התפקידים נטענת.
@@ -415,20 +434,26 @@ export function RoleStep({
     onNext(finalData, withPrevYear);
   }
 
-  // Lock the role only when one was actually resolved from the prior year. If the budget row
-  // is gone (role retired this year), fall back to the normal picker so the secretary can choose.
-  const effectiveLocked = lockedRole && Boolean(data.roleId);
+  // Lock the role when one was actually resolved from the prior year, or in edit mode
+  // (the position's role/symbol are already committed and can't be swapped here). If the
+  // budget row is gone (role retired this year), fall back to the normal picker so the
+  // secretary can choose.
+  const effectiveLocked = (lockedRole || isEditMode) && Boolean(data.roleId);
 
   return (
     <>
-      {/* Locked role card (from-prev-year): the role is fixed; only gemulim/extra-roles below. */}
+      {/* Locked role card (from-prev-year or edit mode): the role is fixed; only sub-role/gemulim/extra-roles below. */}
       {effectiveLocked && (
         <div className="mb-4 bg-white rounded-xl shadow-card border border-outline-variant p-5 flex items-center gap-4">
           <div className="w-6 h-6 rounded-full border-2 border-primary bg-primary flex items-center justify-center shrink-0">
             <Icon name="check" className="text-white text-[16px]" fill />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-label-md text-on-surface-variant mb-0.5">התפקיד נטען מהשנה הקודמת ואינו ניתן לשינוי</p>
+            <p className="text-label-md text-on-surface-variant mb-0.5">
+              {isEditMode
+                ? 'פרטי התפקיד קבועים בתקן זה. ניתן לעדכן גמולים ותפקידים נוספים למטה.'
+                : 'התפקיד נטען מהשנה הקודמת ואינו ניתן לשינוי'}
+            </p>
             <p className="text-headline-md text-primary truncate">{data.roleTitle || '—'}</p>
             <p className="text-body-sm text-on-surface-variant">
               {data.category}{data.layer ? ` · ${data.layer}` : ''}

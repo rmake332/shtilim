@@ -72,7 +72,7 @@ export function Wizard({
     role: {
       title: isEdit ? 'עריכת תפקיד' : 'בחירת תפקיד',
       subtitle: isEdit
-        ? 'ערכו את פרטי התפקיד. כל החישובים יבוצעו מחדש.'
+        ? 'פרטי התפקיד עצמו קבועים. ניתן לעדכן גמולים ותפקידים נוספים לתקן.'
         : 'נא לבחור את התפקיד המתאים עבור העובד החדש מתוך הרשימה.',
     },
     schedule: { title: 'מערכת שעות' },
@@ -117,11 +117,18 @@ export function Wizard({
           isNewEmployee={!isEdit && employee?.recordId === null}
           lockedRole={fromPrevYear && !hasAmbiguousSymbols}
           restrictedSymbols={fromPrevYear && hasAmbiguousSymbols ? ambiguousSymbols : undefined}
+          mode={isEdit ? 'edit' : 'new'}
           docs={docs}
           onDocsChange={setDocs}
-          onBack={() => setStep('employee')}
+          onBack={isEdit ? () => setStep('schedule') : () => setStep('employee')}
           onNext={(data, loadedPrevYear) => {
             setRole(data);
+            // Edit mode: only גמולים/תפקידים נוספים (and similar extras) changed — the
+            // schedule already entered stays as-is, just return to it.
+            if (isEdit) {
+              setStep('schedule');
+              return;
+            }
             // From-prev-year: keep the schedule + prev-year data already loaded from תשפ"ו.
             // Otherwise a fresh role choice resets the schedule (and adopts the role's prev-year).
             if (!fromPrevYear) {
@@ -145,6 +152,7 @@ export function Wizard({
           prevYear={prevYear}
           onBack={isEdit ? undefined : () => setStep('role')}
           onEditEmployee={isEdit ? () => setStep('employee') : undefined}
+          onEditRole={isEdit ? () => setStep('role') : undefined}
           onNext={(data) => {
             // Preserve prior-year tracking across the schedule step's many onNext paths
             // (some rebuild the schedule from scratch and would drop these fields).

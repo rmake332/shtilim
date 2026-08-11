@@ -10,6 +10,7 @@ export function ActionBar({
   onNext,
   onBack,
   onEditEmployee,
+  onEditRole,
   nextDisabled = false,
   showBack = true,
   // accepted for backwards-compat but no longer rendered
@@ -21,12 +22,13 @@ export function ActionBar({
   onNext?: () => void;
   onBack?: () => void;
   onEditEmployee?: () => void;
+  onEditRole?: () => void;
   nextDisabled?: boolean;
   showBack?: boolean;
   title?: string;
   subtitle?: string;
 }) {
-  const hasLeft = showBack || !!onEditEmployee;
+  const hasLeft = showBack || !!onEditEmployee || !!onEditRole;
   return (
     <div className="mt-8 flex justify-between items-center p-4 bg-primary rounded-2xl shadow-xl shadow-primary/10">
       {/* RIGHT in RTL (first child = start = right): Back + optional edit-employee */}
@@ -49,6 +51,16 @@ export function ActionBar({
             >
               <span className="material-symbols-outlined text-[18px]">manage_accounts</span>
               עריכת פרטי עובד
+            </button>
+          )}
+          {onEditRole && (
+            <button
+              type="button"
+              onClick={onEditRole}
+              className="px-6 py-2.5 border border-white/30 text-white font-bold rounded-xl hover:bg-white/10 transition-all active:scale-95 flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[18px]">badge</span>
+              עדכון גמולים ותפקידים
             </button>
           )}
         </div>
