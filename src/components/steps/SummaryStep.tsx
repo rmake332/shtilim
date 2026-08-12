@@ -439,6 +439,23 @@ export function SummaryStep({
         </div>
       )}
 
+      {/* Notes — optional, all form types (new / edit / from-prev-year) */}
+      <div className="mt-8 bg-white rounded-xl shadow-card border border-outline-variant/30 p-8">
+        <h3 className="text-headline-md text-primary flex items-center gap-2 mb-4">
+          <Icon name="sticky_note_2" className="text-primary-container" /> הערות
+        </h3>
+        <label className="space-y-1.5 block">
+          <span className="text-label-md text-on-surface-variant block">הערות נוספות (רשות)</span>
+          <textarea
+            value={schedule.notes ?? ''}
+            onChange={(e) => onScheduleChange?.({ ...schedule, notes: e.target.value })}
+            rows={3}
+            className="w-full rounded-lg border border-outline-variant px-3 py-2.5 text-body-md focus:border-primary focus:outline-none"
+            placeholder="הערות שרוצים להוסיף לתקן..."
+          />
+        </label>
+      </div>
+
       {/* Privacy consent — shown only for new submissions */}
       {!isEdit && (
         <div className="mt-8 p-6 bg-secondary-container/20 border border-secondary/20 rounded-xl">

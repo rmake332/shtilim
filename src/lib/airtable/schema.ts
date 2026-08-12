@@ -143,6 +143,7 @@ export const POSITION_FIELDS = {
   systemUpdateDate: 'fldgoevjfnIveWkp4', // תאריך עדכון מערכת (date) — edit mode
   updateReason: 'fldbAkB0EJBSnbyg6', // סיבת עדכון (singleSelect) — edit mode
   hasMinistryFile: 'fld4RpO0teYLfUQ8C', // קיים תיק במשרד החינוך (כן/לא)
+  notes: 'fld4P9sOC5xsW6I8o', // הערות — שדה רשות בעמוד הסיכום, כל סוגי הטפסים
   // Youth-employee document attachment — uploaded post-create.
   docEmployment: 'fldhzxp5c6BM6EREa', // נתוני העסקה — חובה לעובד חדש בפרא/הוראה
   // weekly schedule durations (3 shifts/day) — keyed [day][shift]

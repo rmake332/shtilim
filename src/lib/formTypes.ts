@@ -259,6 +259,8 @@ export interface ScheduleData {
   ofekAllRolesRecordId?: string;
   /** Reason for hours reduction vs. previous year (if applicable). */
   reductionReason?: string;
+  /** הערות — שדה רשות בעמוד הסיכום, בכל סוגי הטפסים. */
+  notes?: string;
   /** תאריך עדכון מערכת — edit mode only (YYYY-MM-DD). */
   systemUpdateDate?: string;
   /** סיבת עדכון — edit mode only (one of UPDATE_REASON_OPTIONS). */

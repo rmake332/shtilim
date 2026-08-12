@@ -193,6 +193,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       reductionReason: strField(pf[POSITION_FIELDS.conditionsWorseningReason]),
       systemUpdateDate: strField(pf[POSITION_FIELDS.systemUpdateDate]),
       updateReason: strField(pf[POSITION_FIELDS.updateReason]),
+      notes: strField(pf[POSITION_FIELDS.notes]),
     };
 
     return NextResponse.json({ employee, role, schedule, positionId });
@@ -419,6 +420,7 @@ async function updatePosition(
     ...(schedule.reductionReason ? { [POSITION_FIELDS.conditionsWorseningReason]: schedule.reductionReason } : { [POSITION_FIELDS.conditionsWorseningReason]: null }),
     [POSITION_FIELDS.systemUpdateDate]: schedule.systemUpdateDate || undefined,
     [POSITION_FIELDS.updateReason]: schedule.updateReason || undefined,
+    [POSITION_FIELDS.notes]: schedule.notes || null,
     ...buildScheduleFields(schedule),
   };
 

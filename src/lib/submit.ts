@@ -152,6 +152,7 @@ export async function submitForm(
       : {}),
     ...(schedule.reductionReason ? { [POSITION_FIELDS.conditionsWorseningReason]: schedule.reductionReason } : {}),
     ...(role.hasMinistryFile ? { [POSITION_FIELDS.hasMinistryFile]: role.hasMinistryFile } : {}),
+    ...(schedule.notes ? { [POSITION_FIELDS.notes]: schedule.notes } : {}),
     ...scheduleFields(schedule),
   };
 
