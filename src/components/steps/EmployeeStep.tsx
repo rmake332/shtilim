@@ -17,6 +17,7 @@ import {
   type Gender,
 } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
+import { isValidForeignId } from '@/lib/validation/foreignId';
 import { isValidIsraeliPhone } from '@/lib/validation/phone';
 import { DOC_FIELDS } from '@/lib/airtable/schema';
 import { DocUpload } from '@/components/steps/DocUpload';
@@ -106,6 +107,8 @@ export function EmployeeStep({
           recordId,
           name: e.name ?? fallbackName,
           tz: e.tz ?? '',
+          // אין שדה מאוחסן לכך - נגזר מחדש מפורמט ה-tz בכל טעינה.
+          noIsraeliId: !isValidIsraeliId(e.tz ?? ''),
           address: e.address ?? '',
           email: e.email ?? '',
           phone: e.phone ?? '',
@@ -140,7 +143,8 @@ export function EmployeeStep({
    * employee instead of creating a new one. Returns true if a duplicate was found & selected.
    */
   async function checkDuplicate(tz: string): Promise<boolean> {
-    if (!isValidIsraeliId(tz)) return false;
+    const tzOk = data.noIsraeliId ? isValidForeignId(tz) : isValidIsraeliId(tz);
+    if (!tzOk) return false;
     try {
       const res = await fetch(
         `/api/employees/check-id?tz=${encodeURIComponent(tz)}&token=${encodeURIComponent(token)}`,
@@ -195,8 +199,9 @@ export function EmployeeStep({
   }
 
   async function validateAndNext() {
+    const tzOk = data.noIsraeliId ? isValidForeignId(data.tz) : isValidIsraeliId(data.tz);
     // For a new employee, block duplicates first — if the ID exists, auto-select instead.
-    if (!data.recordId && isValidIsraeliId(data.tz)) {
+    if (!data.recordId && tzOk) {
       const dup = await checkDuplicate(data.tz);
       if (dup) return; // existing employee selected; secretary continues from the notice
     }
@@ -205,7 +210,7 @@ export function EmployeeStep({
     // Validate employee fields whenever the detail form is shown (new OR editable existing).
     if (showNewForm || selectedExisting) {
       if (!data.name.trim()) e.name = 'שדה חובה';
-      if (!isValidIsraeliId(data.tz)) e.tz = 'ת.ז. לא תקינה';
+      if (!tzOk) e.tz = data.noIsraeliId ? 'מספר זיהוי לא תקין' : 'ת.ז. לא תקינה';
       if (!data.address.trim()) e.address = 'שדה חובה';
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) e.email = 'מייל לא תקין';
       if (!data.phone.trim()) e.phone = 'שדה חובה';
@@ -449,9 +454,21 @@ export function EmployeeStep({
                     onBlur={() => {
                       if (!selectedExisting) checkDuplicate(data.tz);
                     }}
-                    placeholder="9 ספרות"
+                    placeholder={data.noIsraeliId ? 'מספר דרכון / מספר זיהוי זר' : '9 ספרות'}
                     disabled={locked}
                   />
+                  <label className="flex items-center gap-2 mt-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-primary"
+                      checked={data.noIsraeliId}
+                      disabled={locked}
+                      onChange={(e) => set('noIsraeliId', e.target.checked)}
+                    />
+                    <span className="text-body-sm text-on-surface-variant">
+                      עובד/ת ללא תעודת זהות ישראלית
+                    </span>
+                  </label>
                 </Field>
                 <Field label="מייל" error={errors.email} locked={locked}>
                   <Input

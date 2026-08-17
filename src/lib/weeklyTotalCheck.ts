@@ -1,7 +1,7 @@
 import 'server-only';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, POSITION_FIELDS, EMPLOYEE_FIELDS } from '@/lib/airtable/schema';
-import { normalizeIsraeliId } from '@/lib/validation/israeliId';
+import { buildTzExactMatchFormula } from '@/lib/airtable/tzMatch';
 import {
   COMBINED_WEEKLY_CAP_HOURS,
   combinedCapError,
@@ -55,13 +55,8 @@ function text(v: unknown): string {
  * התאמה מדויקת (ולא FIND) כדי שת.ז. אחת לא תיקח את הדגל של עובד אחר שמכיל אותה.
  */
 async function twelveHourEmploymentByTz(tz: string, requestId?: string): Promise<boolean> {
-  const normalized = normalizeIsraeliId(tz);
-  if (!normalized) return false;
-  // ת.ז. שמורות גם ללא ריפוד אפסים - משווים לשתי הצורות, כמו ב-findEmployeeByExactId.
-  const raw = String(tz).replace(/\D/g, '');
-  const f = EMPLOYEE_FIELDS.tz;
-  const formula =
-    `OR({${f}}="${escapeFormulaValue(normalized)}", {${f}}="${escapeFormulaValue(raw)}")`;
+  const formula = buildTzExactMatchFormula(tz, EMPLOYEE_FIELDS.tz);
+  if (!formula) return false;
   const records = await listRecords(
     TABLES.employees,
     { filterByFormula: formula, maxRecords: 1, fields: [EMPLOYEE_FIELDS.twelveHourEmployment] },

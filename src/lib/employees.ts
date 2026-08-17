@@ -2,7 +2,7 @@ import 'server-only';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, EMPLOYEE_FIELDS, SUB_ROLE_DOC_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
 import { maskTz } from '@/lib/logger';
-import { normalizeIsraeliId } from '@/lib/validation/israeliId';
+import { buildTzExactMatchFormula } from '@/lib/airtable/tzMatch';
 
 /** Public, safe-to-return employee search result. ID is masked; no address/birthdate/full email leak. */
 export interface EmployeeSearchResult {
@@ -135,22 +135,16 @@ export async function getEmployeeById(
 }
 
 /**
- * Find an existing employee by EXACT ת.ז. (normalized, 9 digits).
+ * Find an existing employee by EXACT ת.ז. (Israeli, normalized to 9 digits) or foreign
+ * ID (passport/זיהוי זר, normalized without stripping letters — see buildTzExactMatchFormula).
  * Used to block creating a duplicate — if found, the existing employee is auto-selected.
  */
 export async function findEmployeeByExactId(
   tz: string,
   requestId?: string,
 ): Promise<EmployeeSearchResult | null> {
-  const normalized = normalizeIsraeliId(tz);
-  if (!normalized) return null;
-
-  // Match on the normalized ID and also on the raw digits, since stored IDs may be un-padded.
-  const raw = String(tz).replace(/\D/g, '');
-  const safeNorm = escapeFormulaValue(normalized);
-  const safeRaw = escapeFormulaValue(raw);
-  const f = EMPLOYEE_FIELDS.tz;
-  const formula = `OR({${f}}="${safeNorm}", {${f}}="${safeRaw}")`;
+  const formula = buildTzExactMatchFormula(tz, EMPLOYEE_FIELDS.tz);
+  if (!formula) return null;
 
   const records = await listRecords(
     TABLES.employees,

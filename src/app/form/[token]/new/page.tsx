@@ -3,6 +3,7 @@ import { resolveInstitutionByToken } from '@/lib/institution';
 import { getEmployeeById } from '@/lib/employees';
 import { Wizard } from '@/components/Wizard';
 import { DEFAULT_CONTRACT_START_DATE, type EmployeeData } from '@/lib/formTypes';
+import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 /**
  * /form/[token]/new — הוספת תקן חדש (הטופס המקורי).
@@ -28,6 +29,7 @@ export default async function NewPositionPage({
         recordId: details.id,
         name: details.name,
         tz: details.tz,
+        noIsraeliId: !isValidIsraeliId(details.tz),
         address: details.address,
         email: details.email,
         phone: details.phone,

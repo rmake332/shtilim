@@ -22,3 +22,13 @@ export function normalizeIsraeliId(input: string): string | null {
   if (digits.length === 0 || digits.length > 9) return null;
   return digits.padStart(9, '0');
 }
+
+/**
+ * True when the trimmed input has the Israeli-ID shape (1-9 plain digits, no letters).
+ * Used to decide whether tz-matching should go through the Israeli (digit-padded) path
+ * or the foreign-ID path (see src/lib/validation/foreignId.ts) - the single source of
+ * truth for that branch, so it isn't re-derived differently in different call sites.
+ */
+export function isIsraeliIdShaped(input: string): boolean {
+  return /^\d{1,9}$/.test(String(input).trim());
+}

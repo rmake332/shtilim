@@ -17,6 +17,7 @@ import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
+import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 // מוצ"ש included — regular schedules round-trip; other types simply have no shifts there.
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'] as const;
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       recordId: employeeIds[0] ?? null,
       name: strField(empFields[EMPLOYEE_FIELDS.name]),
       tz: strField(empFields[EMPLOYEE_FIELDS.tz]),
+      noIsraeliId: !isValidIsraeliId(strField(empFields[EMPLOYEE_FIELDS.tz])),
       address: strField(empFields[EMPLOYEE_FIELDS.address]),
       email: strField(empFields[EMPLOYEE_FIELDS.email]),
       phone: strField(empFields[EMPLOYEE_FIELDS.phone]),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
 import { submitForm } from '@/lib/submit';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
+import { isValidForeignId } from '@/lib/validation/foreignId';
 import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { logger } from '@/lib/logger';
@@ -24,8 +25,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, message: 'חסרים נתונים.' }, { status: 400 });
   }
   // Re-validate ID server-side for new employees.
-  if (!employee.recordId && !isValidIsraeliId(employee.tz ?? '')) {
-    return NextResponse.json({ ok: false, message: 'ת.ז. לא תקינה.' }, { status: 400 });
+  if (!employee.recordId) {
+    const tzOk = employee.noIsraeliId
+      ? isValidForeignId(employee.tz ?? '')
+      : isValidIsraeliId(employee.tz ?? '');
+    if (!tzOk) {
+      return NextResponse.json(
+        { ok: false, message: employee.noIsraeliId ? 'מספר זיהוי לא תקין.' : 'ת.ז. לא תקינה.' },
+        { status: 400 },
+      );
+    }
   }
   if (!role.roleId) {
     return NextResponse.json({ ok: false, message: 'לא נבחר תפקיד.' }, { status: 400 });

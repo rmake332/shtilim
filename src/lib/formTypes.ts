@@ -116,6 +116,12 @@ export interface EmployeeData {
   recordId: string | null;
   name: string;
   tz: string;
+  /**
+   * "עובד/ת ללא תעודת זהות ישראלית" - כשמסומן, tz מוולד כמספר זיהוי/דרכון חופשי
+   * (isValidForeignId) במקום ת.ז. ישראלית. דגל UI - לא נשמר לאיירטייבל, נגזר
+   * מחדש מפורמט ה-tz בכל טעינת עובד קיים (ראה EmployeeStep.loadAndSelect).
+   */
+  noIsraeliId: boolean;
   address: string;
   email: string;
   /** טלפון — required; must pass Israeli phone validation. */
@@ -307,6 +313,7 @@ export function emptyEmployee(): EmployeeData {
     recordId: null,
     name: '',
     tz: '',
+    noIsraeliId: false,
     address: '',
     email: '',
     phone: '',

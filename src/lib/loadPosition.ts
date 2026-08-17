@@ -12,6 +12,7 @@ import {
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { bellScheduleNumsFrom } from '@/lib/roles';
 import { DEFAULT_CONTRACT_START_DATE, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
+import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 // מוצ"ש included so regular-type schedules round-trip in edit mode.
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'] as const;
@@ -82,6 +83,7 @@ export async function loadPosition(
     recordId: employeeIds[0] ?? null,
     name: strField(empFields[EMPLOYEE_FIELDS.name]),
     tz: strField(empFields[EMPLOYEE_FIELDS.tz]),
+    noIsraeliId: !isValidIsraeliId(strField(empFields[EMPLOYEE_FIELDS.tz])),
     address: strField(empFields[EMPLOYEE_FIELDS.address]),
     email: strField(empFields[EMPLOYEE_FIELDS.email]),
     phone: strField(empFields[EMPLOYEE_FIELDS.phone]),

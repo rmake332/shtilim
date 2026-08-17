@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidIsraeliId, normalizeIsraeliId } from './israeliId';
+import { isValidIsraeliId, normalizeIsraeliId, isIsraeliIdShaped } from './israeliId';
 
 describe('isValidIsraeliId', () => {
   it('accepts valid IDs (with checksum)', () => {
@@ -37,5 +37,18 @@ describe('normalizeIsraeliId', () => {
   it('returns null for empty or too long', () => {
     expect(normalizeIsraeliId('')).toBeNull();
     expect(normalizeIsraeliId('1234567890')).toBeNull();
+  });
+});
+
+describe('isIsraeliIdShaped', () => {
+  it('accepts 1-9 plain digits', () => {
+    expect(isIsraeliIdShaped('18')).toBe(true);
+    expect(isIsraeliIdShaped('123456782')).toBe(true);
+  });
+
+  it('rejects letters, empty, or more than 9 digits', () => {
+    expect(isIsraeliIdShaped('AB1234567')).toBe(false);
+    expect(isIsraeliIdShaped('')).toBe(false);
+    expect(isIsraeliIdShaped('1234567890')).toBe(false);
   });
 });

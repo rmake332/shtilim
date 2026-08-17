@@ -13,6 +13,7 @@ import { emptyRole, emptyEmployee, emptySchedule } from '@/lib/formTypes';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { bellScheduleNumsFrom } from '@/lib/roles';
+import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 export interface PrevYearFull {
   /** Resolved institution token (derived server-side from the prior-year row's mosad name). */
@@ -126,6 +127,7 @@ export async function loadPrevYearFull(
         recordId: e.id,
         name: str(ef[EMPLOYEE_FIELDS.name]),
         tz: str(ef[EMPLOYEE_FIELDS.tz]),
+        noIsraeliId: !isValidIsraeliId(str(ef[EMPLOYEE_FIELDS.tz])),
         address: str(ef[EMPLOYEE_FIELDS.address]),
         email: str(ef[EMPLOYEE_FIELDS.email]),
         phone: str(ef[EMPLOYEE_FIELDS.phone]),
