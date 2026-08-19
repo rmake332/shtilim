@@ -19,7 +19,6 @@ import {
   WEEKLY_CAP_HOURS,
   snapToHalf,
   paraDayHours,
-  SAME_DAY_OTHER_ROLE_DEDUCTION,
   type Shift,
   type Day,
 } from '@/lib/schedule/time';
@@ -157,7 +156,7 @@ async function fetchSameInstitutionDays(
   return (j.days ?? {}) as SameInstitutionDays;
 }
 
-/** הערה למשתמש: באילו ימים מוחסרות 40 הדקות ובגלל איזה תקן. */
+/** הערה למשתמש: באילו ימים מדלגים על ניכוי ההפסקה הרגיל (35/40 דק') ובגלל איזה תקן. */
 function SameDayDeductionNotice({ days }: { days: SameInstitutionDays }) {
   const occupied = DAYS.filter((d) => (days[d]?.length ?? 0) > 0);
   if (occupied.length === 0) return null;
@@ -166,7 +165,7 @@ function SameDayDeductionNotice({ days }: { days: SameInstitutionDays }) {
       <Icon name="event_repeat" className="text-[20px] mt-0.5 shrink-0" />
       <div>
         <p className="font-bold">
-          העובד כבר מועסק במוסד בתקן אחר - מוחסרות {SAME_DAY_OTHER_ROLE_DEDUCTION} דקות בכל אחד מהימים הבאים:
+          העובד כבר מועסק במוסד בתקן אחר - בכל אחד מהימים הבאים לא ינוכו דקות ההפסקה הרגילות (35/40), מכיוון שכבר נוכו בתקן הקיים:
         </p>
         <ul className="list-disc pr-5 mt-1 space-y-0.5 text-label-md">
           {occupied.map((d) => (
@@ -178,7 +177,7 @@ function SameDayDeductionNotice({ days }: { days: SameInstitutionDays }) {
             </li>
           ))}
         </ul>
-        <p className="text-label-sm mt-1">ההחסרה מבוצעת לפני חישוב השעות האקדמיות של אותו יום.</p>
+        <p className="text-label-sm mt-1">בימים אלה השעות האקדמיות מחושבות ישירות: דקות ÷ 45.</p>
       </div>
     </div>
   );
@@ -709,7 +708,8 @@ function GridSchedule({
   // השעות שלו "רגיל" נספר בשעות שעון (ועם ניכוי הפסקות) ולא בשעות אקדמיות.
   const isPara = isParaEntry(type);
 
-  // הזנת פרא: יום שבו העובד כבר מועסק במוסד בתקן אחר מקבל ניכוי נוסף של 40 דקות.
+  // הזנת פרא: יום שבו העובד כבר מועסק במוסד בתקן אחר מדלג על ניכוי ה-35/40
+  // הרגיל, כי הוא כבר נוכה בחישוב התקן הקיים.
   // הנתון נשלף פעם אחת - הוא תלוי בתקניו הקיימים של העובד ולא במה שמוזן עכשיו.
   useEffect(() => {
     if (!isPara || !employee.tz) { setSameDays({}); return; }
@@ -720,22 +720,22 @@ function GridSchedule({
     return () => { cancelled = true; };
   }, [token, employee.tz, positionId, isPara]);
 
-  /** דקות הניכוי הנוסף ליום - 40 ביום שכבר מועסק בו במוסד בתקן אחר, אחרת 0. */
-  function sameDayDeduction(day: Day): number {
-    if (!isPara) return 0;
-    return (sameDays[day]?.length ?? 0) > 0 ? SAME_DAY_OTHER_ROLE_DEDUCTION : 0;
+  /** true ביום שהעובד כבר מועסק בו באותו מוסד בתקן אחר — מדלגים על ניכוי ה-35/40 באותו יום. */
+  function skipsDeduction(day: Day): boolean {
+    return isPara && (sameDays[day]?.length ?? 0) > 0;
   }
 
   // פרא: per-day academic hours using the deduction formula; accumulate errors for days < 80 min.
   let paraHours = 0;
-  // סך הדקות שהוחסרו בגין ימים שהעובד כבר מועסק בהם במוסד בתקן אחר, לתצוגה בסיכום.
-  let sameDayDeductedMin = 0;
+  // סך דקות הניכוי הרגיל (35/40) שדולג עליו בימים שהעובד כבר מועסק בהם במוסד בתקן אחר, לתצוגה בסיכום.
+  let skippedDeductionMin = 0;
   const paraDayErrors: string[] = [];
   for (const d of DAYS) {
     const dayMin = (week[d] ?? []).reduce((s, sh) => s + shiftMinutes(sh), 0);
-    const result = paraDayHours(dayMin, sameDayDeduction(d));
+    const skip = skipsDeduction(d);
+    const result = paraDayHours(dayMin, skip);
     if (result === null) continue; // rest day
-    sameDayDeductedMin += sameDayDeduction(d);
+    if (skip) skippedDeductionMin += dayMin < 100 ? 35 : 40;
     if (!result.ok) { paraDayErrors.push(`יום ${DAY_LABELS[d]}: ${result.error}`); continue; }
     paraHours += result.hours;
   }
@@ -748,7 +748,7 @@ function GridSchedule({
     const dayMin = (week[d] ?? []).reduce((s, sh) => s + shiftMinutes(sh), 0);
     let dayHours = dayMin / 60;
     if (breakPolicy.metric === 'academic') {
-      const r = paraDayHours(dayMin, sameDayDeduction(d));
+      const r = paraDayHours(dayMin, skipsDeduction(d));
       dayHours = r?.ok ? r.hours : 0;
     }
     breakDayHours[d] = dayHours;
@@ -1179,10 +1179,10 @@ function GridSchedule({
             const diff = snapped !== null ? snapped - paraHours : null;
             return (
               <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
-                {sameDayDeductedMin > 0 && (
+                {skippedDeductionMin > 0 && (
                   <div className="flex justify-between text-on-surface-variant">
-                    <span>החסרה בגין תקן אחר במוסד:</span>
-                    <span className="font-bold text-error">−{sameDayDeductedMin} דק׳</span>
+                    <span>ללא ניכוי הפסקה (תקן אחר במוסד):</span>
+                    <span className="font-bold text-primary">+{skippedDeductionMin} דק׳</span>
                   </div>
                 )}
                 <div className="flex justify-between text-on-surface-variant">
@@ -1289,8 +1289,8 @@ function GridSchedule({
           // מוצ"ש is a single-shift day regardless of the role's maxShifts.
           const dayMaxShifts = day === MOTZASH ? 1 : maxShifts;
           const dayMin = shifts.reduce((s, sh) => s + shiftMinutes(sh), 0);
-          const dayDeduction = sameDayDeduction(day);
-          const paraDayResult = isPara ? paraDayHours(dayMin, dayDeduction) : null;
+          const skipsDayDeduction = skipsDeduction(day);
+          const paraDayResult = isPara ? paraDayHours(dayMin, skipsDayDeduction) : null;
           const dayLabel = isPara
             ? paraDayResult?.ok ? `${formatNum(paraDayResult.hours)} שע׳` : null
             : dayMin > 0 ? `${formatNum(dayMin / 60)} שעות` : null;
@@ -1347,15 +1347,13 @@ function GridSchedule({
                   onChange={(field, v) => updateBreak(day, field, v)}
                 />
               )}
-              {dayDeduction > 0 && (
+              {skipsDayDeduction && (
                 <p className="mt-2 text-label-sm text-on-surface-variant flex items-start gap-1">
                   <Icon name="event_repeat" className="text-[15px] shrink-0 mt-0.5" />
                   <span>
                     העובד מועסק ביום זה במוסד בתקן אחר
                     {sameDays[day]?.length ? ` (${sameDays[day]!.map((p) => p.positionName).join(', ')})` : ''}
-                    {dayMin > 0
-                      ? ` - הוחסרו ${dayDeduction} דקות: ${dayMin} דק׳ שהוזנו, ${dayMin - dayDeduction} דק׳ לחישוב`
-                      : ` - יוחסרו ${dayDeduction} דקות מהשעות שיוזנו ביום זה`}
+                    {' - '}לא ינוכו דקות ההפסקה הרגילות (35/40); השעות מחושבות ישירות לפי דקות ÷ 45
                   </span>
                 </p>
               )}
