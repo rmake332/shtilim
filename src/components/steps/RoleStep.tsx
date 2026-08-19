@@ -322,7 +322,7 @@ export function RoleStep({
   const filteredRoles = (q
     ? roles.filter((r) => r.title.includes(q) || r.category.includes(q))
     : roles
-  ).filter((r) => !HIDDEN_CATEGORIES.has(r.category));
+  ).filter((r) => !HIDDEN_CATEGORIES.has(r.category) && r.salaryType !== CATEGORY.invoice);
 
   // Group filtered roles by category, preserving insertion order
   const rolesByCategory: { category: string; roles: RoleOption[] }[] = [];

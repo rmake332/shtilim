@@ -152,7 +152,8 @@ const fetchBudgetForInstitution = unstable_cache(
 
 /**
  * Selectable main roles for a given institution + symbol.
- * Excludes: empty scheduleType, OR category ∈ {גמול, גמולי פרא, תפקידים}.
+ * Excludes: empty scheduleType, category ∈ {גמול, גמולי פרא, תפקידים}, OR
+ * salaryType (סוג שכר) = "חשבונית" — those roles are billed by invoice, not entered here.
  */
 export async function getRoles(
   mosadId: string,
@@ -168,6 +169,7 @@ export async function getRoles(
     .filter((role) => {
       if (!role.scheduleType) return false; // empty schedule type → hide
       if (excludedCats.has(role.category)) return false;
+      if (role.salaryType === CATEGORY.invoice) return false; // סוג שכר = חשבונית
       return true;
     });
 }
