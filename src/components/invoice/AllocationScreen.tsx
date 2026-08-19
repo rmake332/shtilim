@@ -1,0 +1,700 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { Icon } from '@/components/ui/Icon';
+import { Footer } from '@/components/shell/Footer';
+import { formatNum } from '@/lib/formatNum';
+import { subRoleDocsFor } from '@/lib/formTypes';
+import type { UploadedDoc } from '@/lib/formTypes';
+import { DocUpload } from '@/components/steps/DocUpload';
+import { BudgetStatCard } from '@/components/invoice/BudgetStatCard';
+import { INVOICE_POSITION_FIELDS, TABLES } from '@/lib/airtable/schema';
+
+interface InvoiceBudgetRow {
+  id: string;
+  title: string;
+  monthlyHoursQuota: number;
+  tariffMonthly: number;
+  maxHourlyRate: number | null;
+  totalAllocatedHours: number;
+  remainingHoursToAllocate: number;
+}
+
+interface InvoicePosition {
+  id: string;
+  budgetRowId: string;
+  employeeId: string;
+  employeeName: string;
+  subRole: string;
+  allocatedHours: number;
+  agreedHourlyRate: number;
+  allocationTransferDocGenerated: boolean;
+}
+
+interface SearchResult {
+  id: string;
+  name: string;
+  maskedTz: string;
+}
+
+const EMPTY_NEW_EMPLOYEE = {
+  name: '', tz: '', address: '', email: '', phone: '', maritalStatus: '', gender: '', birthDate: '',
+};
+
+function TopNav({
+  institution,
+  roleName,
+  onBack,
+}: {
+  institution: string;
+  roleName?: string;
+  onBack: () => void;
+}) {
+  const [now, setNow] = useState('');
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date();
+      setNow(`${d.toLocaleDateString('he-IL')} | ${d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <header className="bg-surface-bright shadow-sm flex justify-between items-center w-full px-margin-desktop py-4 sticky top-0 z-50">
+      <div className="flex items-center gap-4">
+        <Image src="/logo_meyuhadim.webp" alt="מיוחדים בחינוך" width={48} height={48} className="object-contain" />
+        <span className="text-headline-md font-bold text-primary">מיוחדים בחינוך - מערכת תקציבים</span>
+      </div>
+      <div className="flex items-center gap-4">
+        {institution && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-tertiary-fixed/40 rounded-full text-tertiary">
+            <Icon name="school" className="text-[18px]" />
+            <span className="text-label-lg font-bold">{institution}</span>
+          </div>
+        )}
+        {roleName && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary-container/50 rounded-full text-white">
+            <Icon name="work" className="text-[18px]" />
+            <span className="text-label-lg font-bold">{roleName}</span>
+          </div>
+        )}
+        <span className="text-label-lg font-bold text-primary">{now}</span>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container text-label-sm transition-colors"
+        >
+          <Icon name="arrow_forward" className="text-[18px]" />
+          <span>רשימת תקני חשבונית</span>
+        </button>
+      </div>
+    </header>
+  );
+}
+
+export function AllocationScreen({
+  token,
+  institutionName,
+  budgetRowId,
+}: {
+  token: string;
+  institutionName: string;
+  budgetRowId: string;
+}) {
+  const router = useRouter();
+  const [budgetRow, setBudgetRow] = useState<InvoiceBudgetRow | null>(null);
+  const [positions, setPositions] = useState<InvoicePosition[]>([]);
+  const [subRoleChoices, setSubRoleChoices] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [finishing, setFinishing] = useState(false);
+  const [finishMsg, setFinishMsg] = useState('');
+
+  // ── row edit state (existing positions table) ───────────────────────────
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editHours, setEditHours] = useState('');
+  const [editRate, setEditRate] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  // ── add-employee form state ──────────────────────────────────────────────
+  const [tzQuery, setTzQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const debounce = useRef<ReturnType<typeof setTimeout>>();
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [selectedEmployeeName, setSelectedEmployeeName] = useState('');
+  const [existingSubRoleDocs, setExistingSubRoleDocs] = useState<string[]>([]);
+  const [newEmployee, setNewEmployee] = useState({ ...EMPTY_NEW_EMPLOYEE });
+  const [subRole, setSubRole] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
+  const [licenseDocs, setLicenseDocs] = useState<Record<string, UploadedDoc | undefined>>({});
+  const [allocatedHours, setAllocatedHours] = useState('');
+  const [agreedHourlyRate, setAgreedHourlyRate] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  async function loadData() {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(
+        `/api/invoice/positions?token=${encodeURIComponent(token)}&budgetRowId=${encodeURIComponent(budgetRowId)}`,
+      );
+      const json = await res.json();
+      if (json.ok) {
+        setBudgetRow(json.budgetRow);
+        setPositions(json.positions);
+      } else {
+        setError(json.message || 'שגיאה בטעינת הנתונים.');
+      }
+    } catch {
+      setError('שגיאה בטעינת הנתונים.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadData(); }, [token, budgetRowId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetch(
+      `/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${INVOICE_POSITION_FIELDS.subRole}&tableId=${TABLES.invoicePositions}`,
+    )
+      .then((r) => r.json())
+      .then((j) => setSubRoleChoices(j.choices ?? []))
+      .catch(() => {});
+  }, [token]);
+
+  // debounced ת.ז. search
+  useEffect(() => {
+    if (tzQuery.replace(/\D/g, '').length < 4) { setSearchResults([]); return; }
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/employees/search?q=${encodeURIComponent(tzQuery)}&token=${encodeURIComponent(token)}`);
+        const json = await res.json();
+        setSearchResults(json.results ?? []);
+      } catch { /* ignore */ }
+      setSearching(false);
+    }, 350);
+    return () => clearTimeout(debounce.current);
+  }, [tzQuery, token]);
+
+  async function selectExisting(id: string, name: string) {
+    setSelectedEmployeeId(id);
+    setSelectedEmployeeName(name);
+    setSearchResults([]);
+    setTzQuery('');
+    try {
+      const res = await fetch(`/api/employees/${id}?token=${encodeURIComponent(token)}`);
+      const json = await res.json();
+      setExistingSubRoleDocs(json.employee?.existingSubRoleDocs ?? []);
+    } catch { setExistingSubRoleDocs([]); }
+  }
+
+  function resetForm() {
+    setSelectedEmployeeId('');
+    setSelectedEmployeeName('');
+    setExistingSubRoleDocs([]);
+    setNewEmployee({ ...EMPTY_NEW_EMPLOYEE });
+    setSubRole('');
+    setLicenseNumber('');
+    setLicenseDocs({});
+    setAllocatedHours('');
+    setAgreedHourlyRate('');
+    setFormError('');
+  }
+
+  const wantedDocs = subRoleDocsFor(subRole);
+  const pendingDocs = wantedDocs.filter((d) => !existingSubRoleDocs.includes(d.fieldId));
+  const alreadyOnFileDocs = wantedDocs.filter((d) => existingSubRoleDocs.includes(d.fieldId));
+  const needsLicenseNumber = wantedDocs.some((d) => d.requiresLicenseNumber);
+
+  async function submitAddEmployee() {
+    setFormError('');
+    if (!selectedEmployeeId && !newEmployee.tz) { setFormError('יש לבחור עובד קיים או להזין עובד חדש.'); return; }
+    if (!selectedEmployeeId && !newEmployee.name) { setFormError('יש להזין שם עובד.'); return; }
+    if (!selectedEmployeeId && !newEmployee.phone) { setFormError('יש להזין טלפון.'); return; }
+    if (!selectedEmployeeId && !newEmployee.email) { setFormError('יש להזין אימייל.'); return; }
+    if (!selectedEmployeeId && !newEmployee.gender) { setFormError('יש לבחור מין.'); return; }
+    if (!subRole) { setFormError('יש לבחור תת-תפקיד.'); return; }
+    if (needsLicenseNumber && !licenseNumber) { setFormError("יש להזין מס' רישיון."); return; }
+    for (const d of pendingDocs) {
+      if (!licenseDocs[d.fieldId]) { setFormError(`יש לצרף ${d.label}.`); return; }
+    }
+    const hoursNum = Number(allocatedHours);
+    const rateNum = Number(agreedHourlyRate);
+    if (!Number.isFinite(hoursNum) || hoursNum <= 0) { setFormError('יש להזין שעות מוקצות תקינות.'); return; }
+    if (!Number.isFinite(rateNum) || rateNum <= 0) { setFormError('יש להזין תעריף שעתי תקין.'); return; }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/invoice/positions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          budgetRowId,
+          employeeId: selectedEmployeeId || undefined,
+          employeeName: selectedEmployeeName || undefined,
+          newEmployee: selectedEmployeeId ? undefined : newEmployee,
+          subRole,
+          licenseNumber: needsLicenseNumber ? licenseNumber : undefined,
+          allocatedHours: hoursNum,
+          agreedHourlyRate: rateNum,
+        }),
+      });
+      const json = await res.json();
+      if (!json.ok) { setFormError(json.message || 'שגיאה בהקצאת העובד.'); setSubmitting(false); return; }
+
+      const employeeId = json.position.employeeId as string;
+      for (const d of pendingDocs) {
+        const doc = licenseDocs[d.fieldId];
+        if (!doc) continue;
+        await fetch('/api/upload-employee-doc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, employeeId, fieldId: d.fieldId, file: doc }),
+        });
+      }
+
+      resetForm();
+      await loadData();
+    } catch {
+      setFormError('שגיאה בהקצאת העובד.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startEditRow(p: InvoicePosition) {
+    setEditingId(p.id);
+    setEditHours(String(p.allocatedHours));
+    setEditRate(String(p.agreedHourlyRate));
+    setEditError('');
+  }
+
+  function cancelEditRow() {
+    setEditingId(null);
+    setEditError('');
+  }
+
+  async function saveEditRow(id: string) {
+    const hours = Number(editHours);
+    const rate = Number(editRate);
+    if (!Number.isFinite(hours) || hours <= 0 || !Number.isFinite(rate) || rate <= 0) {
+      setEditError('יש להזין שעות ותעריף תקינים.');
+      return;
+    }
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const res = await fetch(`/api/invoice/positions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, allocatedHours: hours, agreedHourlyRate: rate }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setPositions((prev) => prev.map((p) => (p.id === id ? json.position : p)));
+        setEditingId(null);
+      } else {
+        setEditError(json.message || 'שגיאה בעדכון ההקצאה.');
+      }
+    } catch {
+      setEditError('שגיאה בעדכון ההקצאה.');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function removePosition(id: string) {
+    if (!confirm('להסיר את העובד מהתקן?')) return;
+    const res = await fetch(`/api/invoice/positions/${id}?token=${encodeURIComponent(token)}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (json.ok) setPositions((prev) => prev.filter((p) => p.id !== id));
+    else alert(json.message || 'שגיאה בהסרת העובד.');
+  }
+
+  async function finishAllocation() {
+    setFinishing(true);
+    setFinishMsg('');
+    try {
+      const res = await fetch(`/api/invoice/budget-rows/${budgetRowId}/finish-allocation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const json = await res.json();
+      setFinishMsg(json.ok
+        ? 'ההקצאה סומנה כהושלמה. הפקת "בקשת העברות" בגוגל דוקס תתווסף בהמשך.'
+        : (json.message || 'שגיאה בסימון סיום ההקצאה.'));
+    } catch {
+      setFinishMsg('שגיאה בסימון סיום ההקצאה.');
+    } finally {
+      setFinishing(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-on-surface-variant">טוען…</div>;
+  }
+  if (error || !budgetRow) {
+    return <div className="min-h-screen flex items-center justify-center text-error">{error || 'שורת תקציב לא נמצאה.'}</div>;
+  }
+
+  const totalAllocated = positions.reduce((s, p) => s + p.allocatedHours, 0);
+  const totalPlannedSpend = positions.reduce((s, p) => s + p.allocatedHours * p.agreedHourlyRate, 0);
+
+  return (
+    <div className="min-h-screen flex flex-col bg-surface-bright" dir="rtl">
+      <TopNav
+        institution={institutionName}
+        roleName={budgetRow.title}
+        onBack={() => router.push(`/form/${encodeURIComponent(token)}/invoice`)}
+      />
+
+      <main className="flex-1 px-margin-desktop py-8">
+        <div className="max-w-container-max mx-auto space-y-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="text-right">
+              <h1 className="text-display-lg text-primary mb-1">ניהול תקציב</h1>
+              <p className="text-body-lg text-on-surface-variant">הקצאת שעות ותעריף לעובדים המקושרים לתקן.</p>
+            </div>
+            <button
+              onClick={() => router.push(`/form/${encodeURIComponent(token)}/invoice/${budgetRowId}/report`)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-secondary text-on-secondary rounded-lg font-bold text-label-lg hover:opacity-90 transition-all shrink-0"
+            >
+              <Icon name="calendar_month" className="text-[20px]" />
+              מעבר לדיווח חודשי
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <BudgetStatCard
+              icon="schedule"
+              label={`שעות מוקצות (${positions.length} עובדים)`}
+              valueLabel={`${formatNum(totalAllocated)} מתוך ${formatNum(budgetRow.monthlyHoursQuota)} שעות`}
+              current={totalAllocated}
+              max={budgetRow.monthlyHoursQuota}
+              color="primary"
+            />
+            <BudgetStatCard
+              icon="payments"
+              label="תקציב חודשי מתוכנן"
+              valueLabel={`${formatNum(totalPlannedSpend)} מתוך ${formatNum(budgetRow.tariffMonthly)} ₪`}
+              current={totalPlannedSpend}
+              max={budgetRow.tariffMonthly}
+              color="secondary"
+            />
+            <BudgetStatCard
+              icon="speed"
+              label="תעריף שעתי מקסימלי"
+              valueLabel={budgetRow.maxHourlyRate != null ? `${formatNum(budgetRow.maxHourlyRate)} ₪ לשעה` : '-'}
+              color="tertiary"
+            />
+          </div>
+
+          {/* Existing positions */}
+          <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead className="bg-surface-container-low text-label-lg font-bold text-on-surface-variant">
+                  <tr>
+                    <th className="px-5 py-3">עובד</th>
+                    <th className="px-5 py-3">תת-תפקיד</th>
+                    <th className="px-5 py-3">שעות מוקצות</th>
+                    <th className="px-5 py-3">תעריף שעתי מוסכם</th>
+                    <th className="px-5 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/30">
+                  {positions.length === 0 && (
+                    <tr><td colSpan={5} className="px-5 py-8 text-center text-on-surface-variant">אין עדיין עובדים מוקצים לתקן זה.</td></tr>
+                  )}
+                  {positions.map((p) => {
+                    const isEditing = editingId === p.id;
+                    return (
+                      <tr key={p.id}>
+                        <td className="px-5 py-3 font-bold">{p.employeeName}</td>
+                        <td className="px-5 py-3">{p.subRole}</td>
+                        <td className="px-5 py-3">
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              value={editHours}
+                              onChange={(e) => setEditHours(e.target.value)}
+                              className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                              autoFocus
+                            />
+                          ) : (
+                            formatNum(p.allocatedHours)
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              value={editRate}
+                              onChange={(e) => setEditRate(e.target.value)}
+                              className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                            />
+                          ) : (
+                            formatNum(p.agreedHourlyRate)
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          {isEditing ? (
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => void saveEditRow(p.id)}
+                                  disabled={editSaving}
+                                  className="text-primary hover:opacity-80 disabled:opacity-50"
+                                  aria-label="שמירה"
+                                >
+                                  <Icon name="check" className="text-[20px]" />
+                                </button>
+                                <button
+                                  onClick={cancelEditRow}
+                                  disabled={editSaving}
+                                  className="text-on-surface-variant hover:text-error"
+                                  aria-label="ביטול"
+                                >
+                                  <Icon name="close" className="text-[20px]" />
+                                </button>
+                              </div>
+                              {editError && <span className="text-error text-label-sm">{editError}</span>}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => startEditRow(p)}
+                                className="text-on-surface-variant hover:text-primary"
+                                aria-label="עריכה"
+                              >
+                                <Icon name="edit" className="text-[18px]" />
+                              </button>
+                              <button onClick={() => void removePosition(p.id)} className="text-on-surface-variant hover:text-error" aria-label="הסרה">
+                                <Icon name="delete" className="text-[20px]" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Add employee form */}
+          <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-6 shadow-sm space-y-5">
+            <h2 className="text-headline-sm font-bold text-on-surface">הוספת עובד לתקן</h2>
+
+            {!selectedEmployeeId && (
+              <div className="relative max-w-sm">
+                <label className="text-label-lg text-on-surface block mb-2">חיפוש עובד קיים לפי ת.ז.</label>
+                <input
+                  value={tzQuery}
+                  onChange={(e) => setTzQuery(e.target.value)}
+                  placeholder="הקלדת ת.ז…"
+                  className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+                />
+                {searching && <p className="text-label-sm text-on-surface-variant mt-1">מחפש…</p>}
+                {searchResults.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-surface-container-lowest border border-outline-variant rounded-lg shadow-md overflow-hidden">
+                    {searchResults.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => void selectExisting(r.id, r.name)}
+                        className="w-full text-right px-4 py-2.5 hover:bg-surface-container-low text-body-md"
+                      >
+                        {r.name} ({r.maskedTz})
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedEmployeeId ? (
+              <div className="flex items-center gap-3 bg-tertiary-container/30 rounded-lg px-4 py-3 max-w-sm">
+                <Icon name="person" className="text-tertiary" />
+                <span className="font-bold flex-1">{selectedEmployeeName}</span>
+                <button onClick={resetForm} className="text-on-surface-variant hover:text-error" aria-label="ביטול בחירה">
+                  <Icon name="close" className="text-[18px]" />
+                </button>
+              </div>
+            ) : (
+              <details className="max-w-2xl" open={!!newEmployee.tz && searchResults.length === 0}>
+                <summary className="cursor-pointer text-label-lg text-primary font-bold">לא נמצא? הוספת עובד חדש</summary>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">
+                      שם מלא <span className="text-error">*</span>
+                    </label>
+                    <input
+                      value={newEmployee.name}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, name: e.target.value }))}
+                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">
+                      ת.ז. <span className="text-error">*</span>
+                    </label>
+                    <input
+                      value={newEmployee.tz}
+                      onChange={(e) => { setNewEmployee((v) => ({ ...v, tz: e.target.value })); setTzQuery(e.target.value); }}
+                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">
+                      טלפון <span className="text-error">*</span>
+                    </label>
+                    <input
+                      value={newEmployee.phone}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, phone: e.target.value }))}
+                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">
+                      אימייל <span className="text-error">*</span>
+                    </label>
+                    <input
+                      value={newEmployee.email}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, email: e.target.value }))}
+                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">כתובת</label>
+                    <input
+                      value={newEmployee.address}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, address: e.target.value }))}
+                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">תאריך לידה</label>
+                    <input
+                      type="date"
+                      value={newEmployee.birthDate}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, birthDate: e.target.value }))}
+                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">
+                      מין <span className="text-error">*</span>
+                    </label>
+                    <select
+                      value={newEmployee.gender}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, gender: e.target.value }))}
+                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                    >
+                      <option value="">בחר</option>
+                      <option value="זכר">זכר</option>
+                      <option value="נקבה">נקבה</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">מצב משפחתי</label>
+                    <input
+                      value={newEmployee.maritalStatus}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, maritalStatus: e.target.value }))}
+                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                    />
+                  </div>
+                </div>
+              </details>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl">
+              <div>
+                <label className="text-label-lg text-on-surface block mb-2">תת-תפקיד <span className="text-error">*</span></label>
+                <select value={subRole} onChange={(e) => { setSubRole(e.target.value); setLicenseDocs({}); setLicenseNumber(''); }} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md">
+                  <option value="">בחר תת-תפקיד</option>
+                  {subRoleChoices.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-label-lg text-on-surface block mb-2">שעות מוקצות <span className="text-error">*</span></label>
+                <input type="number" value={allocatedHours} onChange={(e) => setAllocatedHours(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md" />
+              </div>
+              <div>
+                <label className="text-label-lg text-on-surface block mb-2">תעריף שעתי מוסכם <span className="text-error">*</span></label>
+                <input type="number" value={agreedHourlyRate} onChange={(e) => setAgreedHourlyRate(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md" />
+              </div>
+            </div>
+
+            {needsLicenseNumber && (
+              <div className="max-w-xs">
+                <label className="text-label-lg text-on-surface block mb-2">מס&apos; רישיון <span className="text-error">*</span></label>
+                <input type="text" inputMode="numeric" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md" />
+              </div>
+            )}
+
+            {alreadyOnFileDocs.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {alreadyOnFileDocs.map((d) => (
+                  <span key={d.fieldId} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-tertiary-container/30 text-on-surface text-label-sm">
+                    <Icon name="check_circle" className="text-tertiary text-[16px]" fill />
+                    {d.label} - קיים בתיק העובד
+                  </span>
+                ))}
+              </div>
+            )}
+            {pendingDocs.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 max-w-2xl">
+                {pendingDocs.map((d) => (
+                  <DocUpload
+                    key={d.fieldId}
+                    label={d.label}
+                    required
+                    value={licenseDocs[d.fieldId]}
+                    onChange={(doc) => setLicenseDocs((v) => ({ ...v, [d.fieldId]: doc }))}
+                  />
+                ))}
+              </div>
+            )}
+
+            {formError && <p className="text-error text-body-md">{formError}</p>}
+
+            <button
+              onClick={() => void submitAddEmployee()}
+              disabled={submitting}
+              className="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-xl font-bold text-label-lg hover:opacity-90 disabled:opacity-50 transition-all"
+            >
+              <Icon name="add" className="text-[18px]" />
+              {submitting ? 'מוסיף…' : 'הוספת עובד לתקן'}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => void finishAllocation()}
+              disabled={finishing || positions.length === 0}
+              className="flex items-center gap-2 px-6 py-3 bg-tertiary text-on-tertiary rounded-xl font-bold text-label-lg hover:opacity-90 disabled:opacity-50 transition-all"
+            >
+              <Icon name="task_alt" className="text-[20px]" />
+              {finishing ? 'מסמן…' : 'סיום הקצאה שנתית'}
+            </button>
+            {finishMsg && <span className="text-body-md text-on-surface-variant">{finishMsg}</span>}
+          </div>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}

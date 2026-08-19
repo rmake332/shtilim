@@ -60,9 +60,11 @@ export function DocUpload({
     // space and the upload control is pinned to the bottom → buttons align across
     // items regardless of how many lines each label wraps to.
     <div className="flex flex-col gap-1 h-full">
-      <label className="text-label-lg text-on-surface flex-1 whitespace-pre-line">
-        {label} {required && <span className="text-error">*</span>}
-      </label>
+      {label && (
+        <label className="text-label-lg text-on-surface flex-1 whitespace-pre-line">
+          {label} {required && <span className="text-error">*</span>}
+        </label>
+      )}
       <input
         ref={inputRef}
         type="file"

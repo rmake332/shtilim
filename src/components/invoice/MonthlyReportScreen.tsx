@@ -1,0 +1,375 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { Icon } from '@/components/ui/Icon';
+import { Footer } from '@/components/shell/Footer';
+import { formatNum } from '@/lib/formatNum';
+import { DocUpload } from '@/components/steps/DocUpload';
+import type { UploadedDoc } from '@/lib/formTypes';
+import { BudgetStatCard } from '@/components/invoice/BudgetStatCard';
+
+interface InvoiceBudgetRow {
+  id: string;
+  title: string;
+  monthlyHoursQuota: number;
+  tariffMonthly: number;
+}
+
+interface InvoicePosition {
+  id: string;
+  employeeName: string;
+  subRole: string;
+  allocatedHours: number;
+  agreedHourlyRate: number;
+}
+
+interface InvoiceMonthlyReport {
+  id: string;
+  positionId: string;
+  reportedHours: number;
+  reportedRate: number;
+  totalPay: number;
+  hasInvoiceDoc: boolean;
+  monthlyTransferDocGenerated: boolean;
+}
+
+interface RowState {
+  hours: string;
+  rate: string;
+  doc?: UploadedDoc;
+  saving: boolean;
+  error: string;
+}
+
+/** ברירת המחדל היא החודש הקודם - הדיווח החודשי בפועל מוגש בדרך כלל אחרי סיום החודש. */
+function defaultReportMonth(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function TopNav({
+  institution,
+  roleName,
+  onBack,
+}: {
+  institution: string;
+  roleName?: string;
+  onBack: () => void;
+}) {
+  const [now, setNow] = useState('');
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date();
+      setNow(`${d.toLocaleDateString('he-IL')} | ${d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <header className="bg-surface-bright shadow-sm flex justify-between items-center w-full px-margin-desktop py-4 sticky top-0 z-50">
+      <div className="flex items-center gap-4">
+        <Image src="/logo_meyuhadim.webp" alt="מיוחדים בחינוך" width={48} height={48} className="object-contain" />
+        <span className="text-headline-md font-bold text-primary">מיוחדים בחינוך - מערכת תקציבים</span>
+      </div>
+      <div className="flex items-center gap-4">
+        {institution && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-tertiary-fixed/40 rounded-full text-tertiary">
+            <Icon name="school" className="text-[18px]" />
+            <span className="text-label-lg font-bold">{institution}</span>
+          </div>
+        )}
+        {roleName && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary-container/50 rounded-full text-white">
+            <Icon name="work" className="text-[18px]" />
+            <span className="text-label-lg font-bold">{roleName}</span>
+          </div>
+        )}
+        <span className="text-label-lg font-bold text-primary">{now}</span>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container text-label-sm transition-colors"
+        >
+          <Icon name="arrow_forward" className="text-[18px]" />
+          <span>חזרה להקצאה</span>
+        </button>
+      </div>
+    </header>
+  );
+}
+
+export function MonthlyReportScreen({
+  token,
+  institutionName,
+  budgetRowId,
+}: {
+  token: string;
+  institutionName: string;
+  budgetRowId: string;
+}) {
+  const router = useRouter();
+  const [month, setMonth] = useState(defaultReportMonth());
+  const [budgetRow, setBudgetRow] = useState<InvoiceBudgetRow | null>(null);
+  const [positions, setPositions] = useState<InvoicePosition[]>([]);
+  const [reports, setReports] = useState<Record<string, InvoiceMonthlyReport>>({});
+  const [rows, setRows] = useState<Record<string, RowState>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [finishing, setFinishing] = useState(false);
+  const [finishMsg, setFinishMsg] = useState('');
+
+  async function loadData() {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(
+        `/api/invoice/reports?token=${encodeURIComponent(token)}&budgetRowId=${encodeURIComponent(budgetRowId)}&month=${month}`,
+      );
+      const json = await res.json();
+      if (!json.ok) { setError(json.message || 'שגיאה בטעינת הנתונים.'); setLoading(false); return; }
+      setBudgetRow(json.budgetRow);
+      setPositions(json.positions);
+      const byPosition: Record<string, InvoiceMonthlyReport> = {};
+      for (const r of json.reports as InvoiceMonthlyReport[]) byPosition[r.positionId] = r;
+      setReports(byPosition);
+      const nextRows: Record<string, RowState> = {};
+      for (const p of json.positions as InvoicePosition[]) {
+        const existing = byPosition[p.id];
+        nextRows[p.id] = {
+          hours: existing ? String(existing.reportedHours) : '',
+          rate: existing ? String(existing.reportedRate) : String(p.agreedHourlyRate),
+          saving: false,
+          error: '',
+        };
+      }
+      setRows(nextRows);
+    } catch {
+      setError('שגיאה בטעינת הנתונים.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadData(); }, [token, budgetRowId, month]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function updateRow(positionId: string, patch: Partial<RowState>) {
+    setRows((prev) => ({ ...prev, [positionId]: { ...prev[positionId], ...patch } }));
+  }
+
+  async function saveRow(positionId: string) {
+    const row = rows[positionId];
+    if (!row) return;
+    const hours = Number(row.hours);
+    const rate = Number(row.rate);
+    if (!Number.isFinite(hours) || hours <= 0 || !Number.isFinite(rate) || rate <= 0) {
+      updateRow(positionId, { error: 'יש להזין שעות ותעריף תקינים.' });
+      return;
+    }
+    const existing = reports[positionId];
+    if (!row.doc && !existing?.hasInvoiceDoc) {
+      updateRow(positionId, { error: 'יש לצרף חשבונית.' });
+      return;
+    }
+    updateRow(positionId, { saving: true, error: '' });
+    try {
+      const res = await fetch('/api/invoice/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, positionId, month, reportedHours: hours, reportedRate: rate }),
+      });
+      const json = await res.json();
+      if (!json.ok) { updateRow(positionId, { saving: false, error: json.message || 'שגיאה בשמירה.' }); return; }
+
+      const report = json.report as InvoiceMonthlyReport;
+      if (row.doc) {
+        await fetch('/api/invoice/upload-report-doc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, reportId: report.id, file: row.doc }),
+        });
+      }
+      setReports((prev) => ({ ...prev, [positionId]: report }));
+      updateRow(positionId, { saving: false, doc: undefined });
+    } catch {
+      updateRow(positionId, { saving: false, error: 'שגיאה בשמירה.' });
+    }
+  }
+
+  async function finishMonth() {
+    setFinishing(true);
+    setFinishMsg('');
+    try {
+      const res = await fetch(`/api/invoice/budget-rows/${budgetRowId}/finish-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, month }),
+      });
+      const json = await res.json();
+      setFinishMsg(json.ok
+        ? 'הדיווח החודשי סומן כהושלם. הפקת "בקשת העברות" בגוגל דוקס תתווסף בהמשך.'
+        : (json.message || 'שגיאה בסימון סיום הדיווח.'));
+      if (json.ok) await loadData();
+    } catch {
+      setFinishMsg('שגיאה בסימון סיום הדיווח.');
+    } finally {
+      setFinishing(false);
+    }
+  }
+
+  if (loading && !budgetRow) {
+    return <div className="min-h-screen flex items-center justify-center text-on-surface-variant">טוען…</div>;
+  }
+  if (error) {
+    return <div className="min-h-screen flex items-center justify-center text-error">{error}</div>;
+  }
+
+  const totalReported = Object.values(reports).reduce((s, r) => s + r.reportedHours, 0);
+  const totalSpent = Object.values(reports).reduce((s, r) => s + r.totalPay, 0);
+
+  return (
+    <div className="min-h-screen flex flex-col bg-surface-bright" dir="rtl">
+      <TopNav
+        institution={institutionName}
+        roleName={budgetRow?.title}
+        onBack={() => router.push(`/form/${encodeURIComponent(token)}/invoice/${budgetRowId}`)}
+      />
+
+      <main className="flex-1 px-margin-desktop py-8">
+        <div className="max-w-container-max mx-auto space-y-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="text-right">
+              <h1 className="text-display-lg text-primary mb-1">דיווח חודשי</h1>
+              <p className="text-body-lg text-on-surface-variant">
+                דיווח שעות בפועל ותעריף לכל עובד, בצירוף חשבונית / דרישת תשלום
+              </p>
+            </div>
+            <div>
+              <label className="text-label-lg text-on-surface block mb-1">חודש דיווח</label>
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <BudgetStatCard
+              icon="schedule"
+              label={`שעות מדווחות - ${month}`}
+              valueLabel={`${formatNum(totalReported)} מתוך ${formatNum(budgetRow?.monthlyHoursQuota ?? 0)} שעות`}
+              current={totalReported}
+              max={budgetRow?.monthlyHoursQuota ?? 0}
+              color="primary"
+            />
+            <BudgetStatCard
+              icon="payments"
+              label="תקציב חודשי מנוצל"
+              valueLabel={`${formatNum(totalSpent)} מתוך ${formatNum(budgetRow?.tariffMonthly ?? 0)} ₪`}
+              current={totalSpent}
+              max={budgetRow?.tariffMonthly ?? 0}
+              color="secondary"
+            />
+          </div>
+
+          <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead className="bg-surface-container-low text-label-lg font-bold text-on-surface-variant">
+                  <tr>
+                    <th className="px-5 py-3">עובד</th>
+                    <th className="px-5 py-3">תת-תפקיד</th>
+                    <th className="px-5 py-3">שעות מוקצות</th>
+                    <th className="px-5 py-3">שעות בפועל</th>
+                    <th className="px-5 py-3">תעריף</th>
+                    <th className="px-5 py-3">סה&quot;כ לתשלום</th>
+                    <th className="px-5 py-3">
+                      חשבונית <span className="text-error">*</span>
+                    </th>
+                    <th className="px-5 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/30">
+                  {positions.length === 0 && (
+                    <tr><td colSpan={8} className="px-5 py-8 text-center text-on-surface-variant">אין עדיין עובדים מוקצים לתקן זה.</td></tr>
+                  )}
+                  {positions.map((p) => {
+                    const row = rows[p.id];
+                    const report = reports[p.id];
+                    if (!row) return null;
+                    return (
+                      <tr key={p.id} className="align-middle">
+                        <td className="px-5 py-3 font-bold">{p.employeeName}</td>
+                        <td className="px-5 py-3">{p.subRole}</td>
+                        <td className="px-5 py-3">{formatNum(p.allocatedHours)}</td>
+                        <td className="px-5 py-3">
+                          <input
+                            type="number"
+                            value={row.hours}
+                            onChange={(e) => updateRow(p.id, { hours: e.target.value })}
+                            className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                          />
+                        </td>
+                        <td className="px-5 py-3">
+                          <input
+                            type="number"
+                            value={row.rate}
+                            onChange={(e) => updateRow(p.id, { rate: e.target.value })}
+                            className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                          />
+                        </td>
+                        <td className="px-5 py-3">{report ? formatNum(report.totalPay) : ' - '}</td>
+                        <td className="px-5 py-3 min-w-[220px]">
+                          {report?.hasInvoiceDoc ? (
+                            <span className="flex items-center gap-1.5 text-tertiary text-label-sm font-bold">
+                              <Icon name="check_circle" className="text-[16px]" fill /> קובץ הועלה
+                            </span>
+                          ) : (
+                            <DocUpload
+                              label=""
+                              value={row.doc}
+                              onChange={(doc) => updateRow(p.id, { doc })}
+                            />
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          <button
+                            onClick={() => void saveRow(p.id)}
+                            disabled={row.saving}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-label-sm hover:opacity-90 disabled:opacity-50 transition-all"
+                          >
+                            <Icon name="save" className="text-[16px]" />
+                            {row.saving ? 'שומר…' : 'שמירה'}
+                          </button>
+                          {row.error && <p className="text-error text-label-sm mt-1">{row.error}</p>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => void finishMonth()}
+              disabled={finishing || positions.length === 0}
+              className="flex items-center gap-2 px-6 py-3 bg-tertiary text-on-tertiary rounded-xl font-bold text-label-lg hover:opacity-90 disabled:opacity-50 transition-all"
+            >
+              <Icon name="task_alt" className="text-[20px]" />
+              {finishing ? 'מסמן…' : 'סיום דיווח חודשי'}
+            </button>
+            {finishMsg && <span className="text-body-md text-on-surface-variant">{finishMsg}</span>}
+          </div>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}

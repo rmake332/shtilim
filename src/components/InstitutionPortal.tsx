@@ -162,15 +162,13 @@ export function InstitutionPortal({
               onClick={() => router.push(`/form/${enc}/budget`)}
             />
 
-            {/* 3 — עובד חשבונית */}
+            {/* 3 - תקני חשבונית */}
             <ModuleCard
               icon="receipt_long"
-              title="הוספת עובד חשבונית"
-              description="הוספת עובד בקטגוריה חשבונית — ללא שיוך לתקן תקציבי."
-              actionLabel="בקרוב"
+              title="ניהול תקני חשבונית"
+              description="הקצאת שעות ותעריף לעובדים המקושרים לתקני חשבונית, ודיווח חודשי בפועל."
+              actionLabel="כניסה לניהול חשבוניות"
               color="tertiary"
-              disabled
-              badge="בפיתוח"
               onClick={() => router.push(`/form/${enc}/invoice`)}
             />
 

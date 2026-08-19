@@ -14,6 +14,8 @@ export const TABLES = {
   ofekCalc: 'tbluSqfzeX9Ns452y', // מחשבון אופק חדש
   bellSchedule: 'tblmglINeMA2YItox', // לוח צלצולים
   institutionSymbols: 'tbl4BCMW4gwsIPxG7', // סמלי מוסד
+  invoicePositions: 'tblmRAd0fHuFBbTSj', // תקני חשבונית
+  invoiceReports: 'tblTk6mYvK1iuC2XP', // דיווח חודשי חשבונית
 } as const;
 
 /** מוסדות fields (institution lookup by token) */
@@ -303,6 +305,44 @@ export const BUDGET_FIELDS = {
   tariff: 'fldXCXha3m4ddSLlB',      // תעריף (text)
   ranking: 'fldGa1xyA97oY2sMh',     // מס כיתות / דירוג (text)
   seniority: 'fld2lspCubFLNIncX',   // שעות לתפקיד / ותק-אופק (text)
+  // חשבונית: שעות לניצול (מכסה חודשית) = reuse של totalBudgetHours למטה, אין שדה נפרד.
+  totalBudgetHours: 'fldaJLQ3OIK24W6yj', // סך שעות בתקציב (number)
+  tariffMonthly: 'fldjwX9I0KGP2Il1b', // תעריף חודשי (number), לתקני חשבונית בלבד
+  maxHourlyRate: 'fldQK32tmOhTT64kk', // תעריף שעתי מקסימלי (formula) = תעריף חודשי / סך שעות בתקציב
+  totalAllocatedHours: 'fld7oYRQx6PD8n5SN', // סה"כ שעות מוקצות (rollup, סכום מ-תקני חשבונית)
+  remainingHoursToAllocate: 'fld6PN4a2UCGT5NOx', // יתרת שעות להקצאה (formula)
+  invoicePositionsLink: 'fldWAO84wCLcMtmsM', // קישור חוזר לתקני חשבונית
+} as const;
+
+/**
+ * תקני חשבונית fields: הקצאת עובד יחיד תחת שורת תקציב חשבונית אחת (שעות מוקצות +
+ * תעריף שעתי מוסכם). שורה אחת = עובד אחד; כמה עובדים יכולים לחלוק אותה שורת תקציב.
+ */
+export const INVOICE_POSITION_FIELDS = {
+  employeeName: 'fldkx0rhTYqZxK0Sx', // שם עובד (text, עותק תצוגתי בלבד, נכתב מהאפליקציה)
+  budgetLink: 'fldvqbXJ3gmbBaz8d', // → תקציב התחלתי
+  employeeLink: 'fld3d1znryoB88bl5', // → רשימת עובדים
+  subRole: 'fldLRjmIemmuuOwje', // תת-תפקיד (singleSelect, אותם choices כמו POSITION_FIELDS.subRole)
+  allocatedHours: 'flds5gSKUmvMzVIcM', // שעות מוקצות (number)
+  agreedHourlyRate: 'fldThxq6r24dwsq0l', // תעריף שעתי מוסכם (number), לא יכול לעלות על BUDGET_FIELDS.maxHourlyRate
+  allocationTransferDocGenerated: 'fldstyCd8iVil4hwa', // בקשת העברות (הקצאה) הופקה (checkbox, stub)
+} as const;
+
+/**
+ * דיווח חודשי חשבונית fields: שורה אחת = עובד+חודש. שעות/תעריף מדווחים מוגבלים
+ * בקוד מול ה-INVOICE_POSITION_FIELDS המקושר (allocatedHours/agreedHourlyRate) וכן
+ * מול BUDGET_FIELDS.totalBudgetHours (מכסה חודשית משותפת לכל העובדים בתקן).
+ */
+export const INVOICE_REPORT_FIELDS = {
+  reportLabel: 'fldW61UI6HpRcD7A5', // מזהה דיווח (text, עותק תצוגתי "שם עובד - חודש")
+  positionLink: 'fld8eIYY7E6YL0R6O', // → תקני חשבונית
+  reportMonth: 'fld4u2EWOqxO9XLW0', // חודש דיווח (text, פורמט "YYYY-MM")
+  reportedHours: 'fldWicxwHAdsazy1A', // שעות מדווחות (number)
+  reportedRate: 'fldlT4J80AMseJ6jR', // תעריף מדווח (number)
+  totalPay: 'fldCt3fHB55CV7fgs', // סה"כ לתשלום (formula, שעות*תעריף)
+  invoiceDoc: 'fldEhMe02mayCjgeY', // חשבונית (attachments)
+  reportedAt: 'fldusad13uoMKPA4u', // תאריך דיווח (dateTime, נכתב מהאפליקציה)
+  monthlyTransferDocGenerated: 'fldFSU6ZsebjC4DVc', // בקשת העברות (חודשי) הופקה (checkbox, stub)
 } as const;
 
 /** קטגוריה / סוג מערכת שעות choice names (from live schema). */
