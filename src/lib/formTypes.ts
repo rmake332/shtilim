@@ -60,10 +60,20 @@ const PARA_OR_TEACHING_CATEGORIES = new Set(['פרא רפואי', 'הוראה'])
  * (police / no-sex-offense and no-violence certs are not requested there).
  * `flags.adultOnly`: when true, shown only from age 18 up (hidden while the birth
  * date is missing/invalid — it is a mandatory field, so the age is known by then).
+ * `ctx.requireViolenceCert`: institution-level manual override (מוסדות checkbox) —
+ * shows the violence-cert doc even when the institution's layer isn't גנים.
  */
 export function isDocVisible(
   condition: 'youth' | 'male' | 'kindergartenLayer' | 'newEmployeeParaOrTeaching',
-  ctx: { birthDate?: string; gender?: GenderUnset; layer?: string; isNewEmployee?: boolean; category?: string },
+  ctx: {
+    birthDate?: string;
+    gender?: GenderUnset;
+    layer?: string;
+    isNewEmployee?: boolean;
+    category?: string;
+    /** חריג ידני מהמוסד: מבקש אישור-העדר עבירות אלימות גם כשהשכבה אינה גנים. */
+    requireViolenceCert?: boolean;
+  },
   flags: { menoExcluded?: boolean; adultOnly?: boolean } = {},
 ): boolean {
   if (flags.menoExcluded && ctx.layer === 'מעון') return false;
@@ -80,7 +90,7 @@ export function isDocVisible(
     case 'male':
       return ctx.gender === 'זכר';
     case 'kindergartenLayer':
-      return ctx.layer === 'גנים';
+      return ctx.layer === 'גנים' || Boolean(ctx.requireViolenceCert);
     case 'newEmployeeParaOrTeaching':
       return Boolean(ctx.isNewEmployee) && PARA_OR_TEACHING_CATEGORIES.has(ctx.category ?? '');
   }

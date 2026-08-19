@@ -36,6 +36,7 @@ export function EmployeeStep({
   token,
   initial,
   institutionLayer,
+  institutionRequireViolenceCert,
   docs,
   onDocsChange,
   mode = 'new',
@@ -47,6 +48,8 @@ export function EmployeeStep({
   initial?: EmployeeData;
   /** שכבת המוסד (גנים/יסודי/חטיבה) — drives the violence-cert document. */
   institutionLayer?: string;
+  /** חריג ידני מהמוסד: מציג את מסמך אישור-העדר אלימות גם כשהשכבה אינה גנים. */
+  institutionRequireViolenceCert?: boolean;
   docs: YouthDocs;
   onDocsChange: (docs: YouthDocs) => void;
   mode?: 'new' | 'edit';
@@ -252,7 +255,12 @@ export function EmployeeStep({
   const visibleDocs = DOC_FIELDS.filter((doc) =>
     isDocVisible(
       doc.condition,
-      { birthDate: data.birthDate, gender: data.gender, layer: institutionLayer },
+      {
+        birthDate: data.birthDate,
+        gender: data.gender,
+        layer: institutionLayer,
+        requireViolenceCert: institutionRequireViolenceCert,
+      },
       doc,
     ),
   );
@@ -282,7 +290,7 @@ export function EmployeeStep({
       onDocsChange(next);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.birthDate, data.gender, institutionLayer, docs]);
+  }, [data.birthDate, data.gender, institutionLayer, institutionRequireViolenceCert, docs]);
 
   // Sync childrenUnder14 when visibility changes:
   // hidden → force "לא" so it doesn't submit a stale value.

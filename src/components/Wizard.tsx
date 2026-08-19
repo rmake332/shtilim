@@ -95,6 +95,7 @@ export function Wizard({
           token={token}
           initial={employee}
           institutionLayer={institution.layer}
+          institutionRequireViolenceCert={institution.requireViolenceCert}
           docs={docs}
           onDocsChange={setDocs}
           mode={isEdit ? 'edit' : 'new'}

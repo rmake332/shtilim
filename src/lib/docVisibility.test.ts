@@ -97,6 +97,17 @@ describe("isDocVisible — 'kindergartenLayer'", () => {
     expect(isDocVisible('kindergartenLayer', { layer: 'יסודי' })).toBe(false);
     expect(isDocVisible('kindergartenLayer', {})).toBe(false);
   });
+
+  it('shows for a non-גנים layer when the institution override is set', () => {
+    expect(isDocVisible('kindergartenLayer', { layer: 'יסודי', requireViolenceCert: true })).toBe(true);
+    expect(isDocVisible('kindergartenLayer', { layer: 'חטיבה', requireViolenceCert: true })).toBe(true);
+    expect(isDocVisible('kindergartenLayer', { requireViolenceCert: true })).toBe(true);
+  });
+
+  it('does not affect the גנים layer when the override is false/omitted', () => {
+    expect(isDocVisible('kindergartenLayer', { layer: 'גנים', requireViolenceCert: false })).toBe(true);
+    expect(isDocVisible('kindergartenLayer', { layer: 'יסודי', requireViolenceCert: false })).toBe(false);
+  });
 });
 
 describe('isDocVisible — menoExcluded (מעון institutions)', () => {
@@ -130,6 +141,15 @@ describe('isDocVisible — adultOnly (העדר עבירות מין / אלימו�
   it('hides the גנים-conditioned doc below 18 and shows it from 18 up', () => {
     expect(isDocVisible('kindergartenLayer', { layer: 'גנים', birthDate: birthForAge(17) }, adult)).toBe(false);
     expect(isDocVisible('kindergartenLayer', { layer: 'גנים', birthDate: birthForAge(18) }, adult)).toBe(true);
+  });
+
+  it('the institution override still respects adultOnly', () => {
+    expect(
+      isDocVisible('kindergartenLayer', { layer: 'יסודי', requireViolenceCert: true, birthDate: birthForAge(17) }, adult),
+    ).toBe(false);
+    expect(
+      isDocVisible('kindergartenLayer', { layer: 'יסודי', requireViolenceCert: true, birthDate: birthForAge(18) }, adult),
+    ).toBe(true);
   });
 
   it('hides when the birth date is missing or invalid', () => {

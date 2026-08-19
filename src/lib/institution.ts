@@ -20,6 +20,8 @@ export interface Institution {
   layer?: string;
   /** מייל חשבת שכר של המוסד — used as the contact email in the form footer. */
   payrollEmail?: string;
+  /** חריג ידני: מבקש אישור-העדר עבירות אלימות גם כשהשכבה אינה גנים. */
+  requireViolenceCert?: boolean;
 }
 
 const FORM_TOKEN_FIELD = 'form_token';
@@ -69,5 +71,6 @@ export async function resolveInstitutionByToken(
     association: f[MOSAD_FIELDS.association] ? String(f[MOSAD_FIELDS.association]) : undefined,
     layer,
     payrollEmail: f[MOSAD_FIELDS.payrollEmail] ? String(f[MOSAD_FIELDS.payrollEmail]) : undefined,
+    requireViolenceCert: Boolean(f[MOSAD_FIELDS.requireViolenceCert]),
   };
 }

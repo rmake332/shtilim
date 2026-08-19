@@ -25,6 +25,7 @@ export const MOSAD_FIELDS = {
   formToken: 'fldn1VdIkJLl2GPWD', // form_token
   formActive: 'fldZUUcUCKPYAXiZK', // form_active
   payrollEmail: 'fldSSieNcnGfsePGa', // מייל חשבת שכר
+  requireViolenceCert: 'fldzSemUnwkFqqZk3', // אישורי משטרה לשכבה שאינה גנים (checkbox, חריג ידני)
 } as const;
 
 /** רשימת עובדים fields */
