@@ -15,6 +15,7 @@ import { submitForm } from '@/lib/submit';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
+import { checkLiveBudget } from '@/lib/schedule/budgetCheck';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
@@ -245,6 +246,38 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     logger.error({ requestId: gate.requestId, err: String(e) }, 'weekly cap check failed');
     return NextResponse.json(
       { ok: false, message: 'שגיאה בבדיקת סה"כ השעות השבועיות של העובד. נסו שוב.' },
+      { status: 503 },
+    );
+  }
+
+  // חריגה מהתקציב - מול הערך החי באיירטייבל, לא מול ה-snapshot שהלקוח מחזיק
+  // (יכול לפגר, ראה docs/airtable-cache-revalidation.md). שעות התקן הנערך עצמו
+  // כבר מנוכות מהיתרה החיה, ולכן מתווספות חזרה כדי לא להעניש אותו על עצמו.
+  try {
+    const existingPosition = await getRecord(TABLES.activePositions, positionId, gate.requestId);
+    const currentUtilizedHours =
+      Number(existingPosition?.fields[POSITION_FIELDS.totalUtilizedHours]) ||
+      Number(existingPosition?.fields[POSITION_FIELDS.weeklyHours]) ||
+      0;
+    const budgetCheck = await checkLiveBudget(
+      {
+        roleId: role.roleId,
+        utilizedHours: computeUtilizedHours(role.layer, schedule),
+        extraCurrentHours: currentUtilizedHours,
+      },
+      gate.requestId,
+    );
+    if (!budgetCheck.ok) {
+      logger.info(
+        { requestId: gate.requestId, positionId, remaining: budgetCheck.remaining },
+        'update blocked - over budget (live check)',
+      );
+      return NextResponse.json({ ok: false, message: budgetCheck.message }, { status: 400 });
+    }
+  } catch (e) {
+    logger.error({ requestId: gate.requestId, err: String(e) }, 'live budget check failed');
+    return NextResponse.json(
+      { ok: false, message: 'שגיאה בבדיקת יתרת התקציב. נסו שוב.' },
       { status: 503 },
     );
   }
