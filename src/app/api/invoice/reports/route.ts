@@ -41,11 +41,12 @@ export async function POST(req: NextRequest) {
   const gate = await gateByToken(req, body.token);
   if (gate instanceof NextResponse) return gate;
 
-  const { positionId, month, reportedHours, reportedRate } = body as {
+  const { positionId, month, reportedHours, reportedRate, invoiceNumber } = body as {
     positionId?: string;
     month?: string;
     reportedHours?: number;
     reportedRate?: number;
+    invoiceNumber?: string;
   };
 
   if (!positionId || !month || !MONTH_RE.test(month)) {
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
         month,
         reportedHours: reportedHours as number,
         reportedRate: reportedRate as number,
+        invoiceNumber: invoiceNumber || '',
       },
       gate.requestId,
     );

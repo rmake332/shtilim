@@ -131,6 +131,10 @@ export function AllocationScreen({
   const [subRole, setSubRole] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
   const [licenseDocs, setLicenseDocs] = useState<Record<string, UploadedDoc | undefined>>({});
+  const [bankName, setBankName] = useState('');
+  const [bankBranch, setBankBranch] = useState('');
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [vatNumber, setVatNumber] = useState('');
   const [allocatedHours, setAllocatedHours] = useState('');
   const [agreedHourlyRate, setAgreedHourlyRate] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -193,6 +197,10 @@ export function AllocationScreen({
       const res = await fetch(`/api/employees/${id}?token=${encodeURIComponent(token)}`);
       const json = await res.json();
       setExistingSubRoleDocs(json.employee?.existingSubRoleDocs ?? []);
+      setBankName(json.employee?.bankName ?? '');
+      setBankBranch(json.employee?.bankBranch ?? '');
+      setBankAccountNumber(json.employee?.bankAccountNumber ?? '');
+      setVatNumber(json.employee?.vatNumber ?? '');
     } catch { setExistingSubRoleDocs([]); }
   }
 
@@ -204,6 +212,10 @@ export function AllocationScreen({
     setSubRole('');
     setLicenseNumber('');
     setLicenseDocs({});
+    setBankName('');
+    setBankBranch('');
+    setBankAccountNumber('');
+    setVatNumber('');
     setAllocatedHours('');
     setAgreedHourlyRate('');
     setFormError('');
@@ -244,6 +256,10 @@ export function AllocationScreen({
           newEmployee: selectedEmployeeId ? undefined : newEmployee,
           subRole,
           licenseNumber: needsLicenseNumber ? licenseNumber : undefined,
+          bankName: bankName || undefined,
+          bankBranch: bankBranch || undefined,
+          bankAccountNumber: bankAccountNumber || undefined,
+          vatNumber: vatNumber || undefined,
           allocatedHours: hoursNum,
           agreedHourlyRate: rateNum,
         }),
@@ -643,6 +659,28 @@ export function AllocationScreen({
                 <input type="text" inputMode="numeric" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md" />
               </div>
             )}
+
+            <div>
+              <p className="text-label-lg text-on-surface font-bold mb-3">פרטי בנק (לא חובה, לצורך הפקת בקשת תשלום)</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 max-w-3xl">
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-2">בנק</label>
+                  <input value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
+                </div>
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-2">סניף</label>
+                  <input value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
+                </div>
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-2">מספר חשבון</label>
+                  <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
+                </div>
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-2">מספר עוסק</label>
+                  <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
+                </div>
+              </div>
+            </div>
 
             {alreadyOnFileDocs.length > 0 && (
               <div className="flex flex-wrap gap-2">

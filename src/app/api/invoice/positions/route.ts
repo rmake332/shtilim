@@ -53,6 +53,10 @@ export async function POST(req: NextRequest) {
     newEmployee,
     subRole,
     licenseNumber,
+    bankName,
+    bankBranch,
+    bankAccountNumber,
+    vatNumber,
     allocatedHours,
     agreedHourlyRate,
   } = body as {
@@ -61,6 +65,10 @@ export async function POST(req: NextRequest) {
     newEmployee?: NewEmployeeInput;
     subRole?: string;
     licenseNumber?: string;
+    bankName?: string;
+    bankBranch?: string;
+    bankAccountNumber?: string;
+    vatNumber?: string;
     allocatedHours?: number;
     agreedHourlyRate?: number;
   };
@@ -124,6 +132,15 @@ export async function POST(req: NextRequest) {
         { [EMPLOYEE_FIELDS.licenseNumber]: Number(licenseNumber) },
         gate.requestId,
       );
+    }
+
+    const bankFields: Record<string, unknown> = {};
+    if (bankName) bankFields[EMPLOYEE_FIELDS.bankName] = bankName;
+    if (bankBranch) bankFields[EMPLOYEE_FIELDS.bankBranch] = bankBranch;
+    if (bankAccountNumber) bankFields[EMPLOYEE_FIELDS.bankAccountNumber] = bankAccountNumber;
+    if (vatNumber) bankFields[EMPLOYEE_FIELDS.vatNumber] = vatNumber;
+    if (Object.keys(bankFields).length > 0) {
+      await updateRecord(TABLES.employees, employeeId, bankFields, gate.requestId);
     }
 
     const position = await createPosition(

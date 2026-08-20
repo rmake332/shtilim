@@ -46,6 +46,11 @@ export const EMPLOYEE_FIELDS = {
   fatherPosition: 'fldmjgP5oDc49Gmz1', // משרת אב (checkbox) — adds 2h to entered hours
   twelveHourEmployment: 'fldDgcYm9abVpBB0D', // העסקה 12 שעות (checkbox) — מפעיל את מסלול ההפסקות של פנימיה
   licenseNumber: 'fldEVNaTqjZ9XqWsu', // מס' רישיון — קלינאות תקשורת / ריפוי בעיסוק
+  // פרטי בנק + מספר עוסק — תקני חשבונית, "בקשת תשלום" בגוגל דוקס
+  bankName: 'fldKHfdIazuoglCd4', // בנק
+  bankBranch: 'flduREz5EPvuxtZm9', // סניף
+  bankAccountNumber: 'fldch7egzJlI3aoSJ', // מספר חשבון
+  vatNumber: 'fldbuBT1AqpEqtYCs', // מספר עוסק
   // Professional-license/qualification attachments, tied to the position's תת-תפקיד.
   // Filed on the EMPLOYEE (reused across positions/years) — not re-requested if already on file.
   docHealthLicenseClinic: 'fldC1g9HcVxdpRMpd', // רישיון משרד הבריאות קלינאות
@@ -343,6 +348,8 @@ export const INVOICE_REPORT_FIELDS = {
   invoiceDoc: 'fldEhMe02mayCjgeY', // חשבונית (attachments)
   reportedAt: 'fldusad13uoMKPA4u', // תאריך דיווח (dateTime, נכתב מהאפליקציה)
   monthlyTransferDocGenerated: 'fldFSU6ZsebjC4DVc', // בקשת העברות (חודשי) הופקה (checkbox, stub)
+  invoiceNumber: 'flddLv3IBdFFuJa4f', // מס' חשבונית (text, מוזן יחד עם שעות/תעריף)
+  paymentRequestDocUrl: 'fldcqwPUdruKSg7df', // קישור למסמך בקשת תשלום (url, נכתב על כל שורות הדיווח של החודש)
 } as const;
 
 /** קטגוריה / סוג מערכת שעות choice names (from live schema). */

@@ -60,6 +60,11 @@ export interface EmployeeDetails {
   /** העסקה 12 שעות — מפעיל את מסלול ההפסקות של פנימיה (ראה schedule/breaks.ts). */
   twelveHourEmployment: boolean;
   licenseNumber: string;
+  /** פרטי בנק + מספר עוסק — תקני חשבונית, "בקשת תשלום" בגוגל דוקס. */
+  bankName: string;
+  bankBranch: string;
+  bankAccountNumber: string;
+  vatNumber: string;
   /** SUB_ROLE_DOC_FIELDS.fieldId values that already have an attachment on file. */
   existingSubRoleDocs: string[];
   /** DOC_FIELDS.fieldId values (youth/role documents) that already have an attachment on file. */
@@ -129,6 +134,10 @@ export async function getEmployeeById(
     fatherPosition: Boolean(f[EMPLOYEE_FIELDS.fatherPosition]),
     twelveHourEmployment: Boolean(f[EMPLOYEE_FIELDS.twelveHourEmployment]),
     licenseNumber: str(f[EMPLOYEE_FIELDS.licenseNumber]),
+    bankName: str(f[EMPLOYEE_FIELDS.bankName]),
+    bankBranch: str(f[EMPLOYEE_FIELDS.bankBranch]),
+    bankAccountNumber: str(f[EMPLOYEE_FIELDS.bankAccountNumber]),
+    vatNumber: str(f[EMPLOYEE_FIELDS.vatNumber]),
     existingSubRoleDocs,
     existingYouthDocs,
   };

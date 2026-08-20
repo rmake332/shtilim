@@ -18,8 +18,10 @@ export interface InvoiceMonthlyReport {
   reportedRate: number;
   totalPay: number;
   hasInvoiceDoc: boolean;
+  invoiceNumber: string;
   reportedAt: string;
   monthlyTransferDocGenerated: boolean;
+  paymentRequestDocUrl: string;
 }
 
 function num(v: unknown): number {
@@ -47,8 +49,10 @@ function mapReport(r: AirtableRecord): InvoiceMonthlyReport {
     reportedRate: num(f[INVOICE_REPORT_FIELDS.reportedRate]),
     totalPay: num(f[INVOICE_REPORT_FIELDS.totalPay]),
     hasInvoiceDoc: Array.isArray(doc) && doc.length > 0,
+    invoiceNumber: str(f[INVOICE_REPORT_FIELDS.invoiceNumber]),
     reportedAt: str(f[INVOICE_REPORT_FIELDS.reportedAt]),
     monthlyTransferDocGenerated: Boolean(f[INVOICE_REPORT_FIELDS.monthlyTransferDocGenerated]),
+    paymentRequestDocUrl: str(f[INVOICE_REPORT_FIELDS.paymentRequestDocUrl]),
   };
 }
 
@@ -85,7 +89,14 @@ export async function listReportsForPosition(
 
 /** יוצר או מעדכן (אם כבר קיים דיווח לאותה הקצאה+חודש) שורת דיווח חודשי. */
 export async function upsertReport(
-  params: { positionId: string; positionLabel: string; month: string; reportedHours: number; reportedRate: number },
+  params: {
+    positionId: string;
+    positionLabel: string;
+    month: string;
+    reportedHours: number;
+    reportedRate: number;
+    invoiceNumber: string;
+  },
   requestId?: string,
 ): Promise<InvoiceMonthlyReport> {
   const existing = await listReportsForPositions([params.positionId], params.month, requestId);
@@ -96,6 +107,7 @@ export async function upsertReport(
     [INVOICE_REPORT_FIELDS.reportedHours]: params.reportedHours,
     [INVOICE_REPORT_FIELDS.reportedRate]: params.reportedRate,
     [INVOICE_REPORT_FIELDS.reportedAt]: reportedAt,
+    [INVOICE_REPORT_FIELDS.invoiceNumber]: params.invoiceNumber,
   };
   const totalPay = Math.round(params.reportedHours * params.reportedRate * 100) / 100;
 
@@ -109,6 +121,7 @@ export async function upsertReport(
       reportedHours: params.reportedHours,
       reportedRate: params.reportedRate,
       totalPay,
+      invoiceNumber: params.invoiceNumber,
       reportedAt,
     };
   }
@@ -125,8 +138,10 @@ export async function upsertReport(
     reportedRate: params.reportedRate,
     totalPay,
     hasInvoiceDoc: false,
+    invoiceNumber: params.invoiceNumber,
     reportedAt,
     monthlyTransferDocGenerated: false,
+    paymentRequestDocUrl: '',
   };
 }
 
@@ -146,4 +161,22 @@ export async function markMonthFinished(
     );
   }
   return reports.length;
+}
+
+/** כותב את קישור מסמך "בקשת תשלום" על כל שורות הדיווח של החודש (לקבוצת positionIds). */
+export async function saveDocUrlForMonth(
+  positionIds: string[],
+  month: string,
+  url: string,
+  requestId?: string,
+): Promise<void> {
+  const reports = await listReportsForPositions(positionIds, month, requestId);
+  for (const rep of reports) {
+    await updateRecord(
+      TABLES.invoiceReports,
+      rep.id,
+      { [INVOICE_REPORT_FIELDS.paymentRequestDocUrl]: url },
+      requestId,
+    );
+  }
 }

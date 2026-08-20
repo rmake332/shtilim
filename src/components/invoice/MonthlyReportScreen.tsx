@@ -32,12 +32,15 @@ interface InvoiceMonthlyReport {
   reportedRate: number;
   totalPay: number;
   hasInvoiceDoc: boolean;
+  invoiceNumber: string;
   monthlyTransferDocGenerated: boolean;
+  paymentRequestDocUrl: string;
 }
 
 interface RowState {
   hours: string;
   rate: string;
+  invoiceNumber: string;
   doc?: UploadedDoc;
   saving: boolean;
   error: string;
@@ -120,6 +123,7 @@ export function MonthlyReportScreen({
   const [error, setError] = useState('');
   const [finishing, setFinishing] = useState(false);
   const [finishMsg, setFinishMsg] = useState('');
+  const [docError, setDocError] = useState('');
 
   async function loadData() {
     setLoading(true);
@@ -141,6 +145,7 @@ export function MonthlyReportScreen({
         nextRows[p.id] = {
           hours: existing ? String(existing.reportedHours) : '',
           rate: existing ? String(existing.reportedRate) : String(p.agreedHourlyRate),
+          invoiceNumber: existing?.invoiceNumber ?? '',
           saving: false,
           error: '',
         };
@@ -178,7 +183,14 @@ export function MonthlyReportScreen({
       const res = await fetch('/api/invoice/reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, positionId, month, reportedHours: hours, reportedRate: rate }),
+        body: JSON.stringify({
+          token,
+          positionId,
+          month,
+          reportedHours: hours,
+          reportedRate: rate,
+          invoiceNumber: row.invoiceNumber,
+        }),
       });
       const json = await res.json();
       if (!json.ok) { updateRow(positionId, { saving: false, error: json.message || 'שגיאה בשמירה.' }); return; }
@@ -201,6 +213,7 @@ export function MonthlyReportScreen({
   async function finishMonth() {
     setFinishing(true);
     setFinishMsg('');
+    setDocError('');
     try {
       const res = await fetch(`/api/invoice/budget-rows/${budgetRowId}/finish-report`, {
         method: 'POST',
@@ -208,10 +221,13 @@ export function MonthlyReportScreen({
         body: JSON.stringify({ token, month }),
       });
       const json = await res.json();
-      setFinishMsg(json.ok
-        ? 'הדיווח החודשי סומן כהושלם. הפקת "בקשת העברות" בגוגל דוקס תתווסף בהמשך.'
-        : (json.message || 'שגיאה בסימון סיום הדיווח.'));
-      if (json.ok) await loadData();
+      if (json.ok) {
+        setFinishMsg('הדיווח החודשי סומן כהושלם.');
+        if (json.docError) setDocError(json.docError);
+        await loadData();
+      } else {
+        setFinishMsg(json.message || 'שגיאה בסימון סיום הדיווח.');
+      }
     } catch {
       setFinishMsg('שגיאה בסימון סיום הדיווח.');
     } finally {
@@ -228,6 +244,8 @@ export function MonthlyReportScreen({
 
   const totalReported = Object.values(reports).reduce((s, r) => s + r.reportedHours, 0);
   const totalSpent = Object.values(reports).reduce((s, r) => s + r.totalPay, 0);
+  // אם כבר קיים קישור מטעינה קודמת (למשל טעינה מחדש של העמוד) - מוצג מיד, בלי צורך ללחוץ שוב.
+  const docUrl = Object.values(reports).find((r) => r.paymentRequestDocUrl)?.paymentRequestDocUrl || null;
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-bright" dir="rtl">
@@ -287,6 +305,7 @@ export function MonthlyReportScreen({
                     <th className="px-5 py-3">שעות בפועל</th>
                     <th className="px-5 py-3">תעריף</th>
                     <th className="px-5 py-3">סה&quot;כ לתשלום</th>
+                    <th className="px-5 py-3">מס&apos; חשבונית</th>
                     <th className="px-5 py-3">
                       חשבונית <span className="text-error">*</span>
                     </th>
@@ -295,7 +314,7 @@ export function MonthlyReportScreen({
                 </thead>
                 <tbody className="divide-y divide-outline-variant/30">
                   {positions.length === 0 && (
-                    <tr><td colSpan={8} className="px-5 py-8 text-center text-on-surface-variant">אין עדיין עובדים מוקצים לתקן זה.</td></tr>
+                    <tr><td colSpan={9} className="px-5 py-8 text-center text-on-surface-variant">אין עדיין עובדים מוקצים לתקן זה.</td></tr>
                   )}
                   {positions.map((p) => {
                     const row = rows[p.id];
@@ -323,6 +342,14 @@ export function MonthlyReportScreen({
                           />
                         </td>
                         <td className="px-5 py-3">{report ? formatNum(report.totalPay) : ' - '}</td>
+                        <td className="px-5 py-3">
+                          <input
+                            type="text"
+                            value={row.invoiceNumber}
+                            onChange={(e) => updateRow(p.id, { invoiceNumber: e.target.value })}
+                            className="w-28 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                          />
+                        </td>
                         <td className="px-5 py-3 min-w-[220px]">
                           {report?.hasInvoiceDoc ? (
                             <span className="flex items-center gap-1.5 text-tertiary text-label-sm font-bold">
@@ -355,7 +382,7 @@ export function MonthlyReportScreen({
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <button
               onClick={() => void finishMonth()}
               disabled={finishing || positions.length === 0}
@@ -365,6 +392,18 @@ export function MonthlyReportScreen({
               {finishing ? 'מסמן…' : 'סיום דיווח חודשי'}
             </button>
             {finishMsg && <span className="text-body-md text-on-surface-variant">{finishMsg}</span>}
+            {docUrl && (
+              <a
+                href={docUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary text-primary font-bold text-label-md hover:bg-primary-container/20 transition-colors"
+              >
+                <Icon name="description" className="text-[18px]" />
+                פתיחת מסמך בקשת תשלום
+              </a>
+            )}
+            {docError && <span className="text-error text-body-md">{docError}</span>}
           </div>
         </div>
       </main>

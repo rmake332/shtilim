@@ -1,0 +1,265 @@
+import 'server-only';
+import { google } from 'googleapis';
+import { logger } from '@/lib/logger';
+
+/** שורת עובד בטבלת "בקשת תשלום". */
+export interface PaymentRequestRow {
+  employeeName: string;
+  invoiceNumber: string;
+  vatNumber: string;
+  bankName: string;
+  bankBranch: string;
+  bankAccountNumber: string;
+  /** סעיף תקציב — budgetRow.title (שם התפקיד/התקן). */
+  budgetLine: string;
+  amount: number;
+}
+
+export interface BuildPaymentRequestHtmlParams {
+  institutionName: string;
+  /** פורמט "YYYY-MM". */
+  month: string;
+  rows: PaymentRequestRow[];
+}
+
+const HEBREW_MONTH_NAMES = [
+  'ינואר',
+  'פברואר',
+  'מרץ',
+  'אפריל',
+  'מאי',
+  'יוני',
+  'יולי',
+  'אוגוסט',
+  'ספטמבר',
+  'אוקטובר',
+  'נובמבר',
+  'דצמבר',
+];
+
+/** "2026-07" → "יולי 2026". */
+function formatMonthHebrew(month: string): string {
+  const [year, monthNum] = month.split('-');
+  const name = HEBREW_MONTH_NAMES[Number(monthNum) - 1] ?? monthNum;
+  return `${name} ${year}`;
+}
+
+/** תאריך נוכחי כ-DD/MM/YYYY. */
+function formatDateHebrew(date: Date): string {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+/** סכום עם מפריד אלפים ו-₪, בלי אפסים מיותרים אחרי הנקודה (כמו formatNum). */
+function formatCurrency(amount: number): string {
+  const rounded = Math.round(amount * 100) / 100;
+  const [intPart, decPart] = rounded.toFixed(2).split('.');
+  const withThousands = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const trimmedDec = decPart.replace(/0+$/, '');
+  return `${withThousands}${trimmedDec ? `.${trimmedDec}` : ''} ₪`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function bankDetails(row: PaymentRequestRow): string {
+  return `בנק ${escapeHtml(row.bankName)}, סניף ${escapeHtml(row.bankBranch)}, ח-ן ${escapeHtml(row.bankAccountNumber)}`;
+}
+
+/**
+ * בונה את ה-HTML המלא של מסמך "בקשת תשלום" (מועלה ל-Drive בהמשך והופך ל-Google Doc).
+ *
+ * עיצוב סופי אושר מול Drive אמיתי (5 סבבי איטרציה) — ראו זיכרון feature-invoice-positions
+ * ואת התוכנית optimized-hopping-zephyr.md. אין לשנות מבנה/סדר עמודות/colspan/פונט/צבעים
+ * בלי לאשר עם המשתמש קודם.
+ *
+ * מלכודת RTL: ה-HTML→Google Docs converter של Drive מתעלם מ-dir="rtl" לגבי סדר העמודות
+ * בטבלה — הן נבנות תמיד לפי הסדר הליניארי של ה-HTML. לכן ה-th/td בכל שורה נכתבים כאן
+ * בסדר הפוך (העמודה שאמורה להופיע הכי מימין נכתבת אחרונה בקוד).
+ */
+export function buildPaymentRequestHtml(params: BuildPaymentRequestHtmlParams): string {
+  const { institutionName, month, rows } = params;
+  const monthLabel = formatMonthHebrew(month);
+  const dateLabel = formatDateHebrew(new Date());
+  const institutionEscaped = escapeHtml(institutionName);
+  const total = rows.reduce((sum, r) => sum + r.amount, 0);
+
+  const bodyRows = rows
+    .map(
+      (row) => `  <tr>
+    <td></td>
+    <td>${escapeHtml(row.budgetLine)}</td>
+    <td>${formatCurrency(row.amount)}</td>
+    <td class="name-cell">${escapeHtml(row.employeeName)}</td>
+    <td>${escapeHtml(row.vatNumber)}</td>
+    <td>${escapeHtml(row.invoiceNumber)}</td>
+    <td>${bankDetails(row)}</td>
+    <td></td>
+  </tr>`,
+    )
+    .join('\n');
+
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<style>
+  body {
+    font-family: 'Noto Sans Hebrew', Arial, sans-serif;
+    direction: rtl;
+    text-align: right;
+    color: #1a1a1a;
+    font-size: 11pt;
+  }
+  .bsd {
+    text-align: right;
+    font-size: 10pt;
+    margin-bottom: 4px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 18pt;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 10px;
+    margin-bottom: 18px;
+  }
+  p.field-line {
+    margin: 3px 0;
+    font-size: 11pt;
+  }
+  p.field-line span.label {
+    font-weight: bold;
+  }
+  table.main {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    margin-top: 18px;
+  }
+  table.main th {
+    background-color: #e3e8ef;
+    border: 1px solid #1a1a1a;
+    padding: 7px 5px;
+    font-weight: bold;
+    text-align: center;
+  }
+  table.main td {
+    border: 1px solid #1a1a1a;
+    padding: 6px 5px;
+    text-align: center;
+  }
+  table.main td.name-cell {
+    text-align: right;
+  }
+  tr.total-row td {
+    font-weight: bold;
+    background-color: #f2f2f2;
+    border-top: 2px solid #1a1a1a;
+  }
+  tr.total-row td.total-label {
+    text-align: left;
+    padding-left: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="bsd">בס"ד</div>
+<h1>טופס בקשת תשלומים</h1>
+
+<p class="field-line"><span class="label">תאריך:</span> ${dateLabel}</p>
+<p class="field-line"><span class="label">חודש בקשת תשלום:</span> ${monthLabel}</p>
+<p class="field-line"><span class="label">המוסד המזמין:</span> ${institutionEscaped}</p>
+<p class="field-line"><span class="label">שם המזמין:</span> ${institutionEscaped}</p>
+
+<table class="main">
+  <tr>
+    <th>אישור מח' שכר</th>
+    <th>סעיף תקציב</th>
+    <th>סכום</th>
+    <th>שם ספק</th>
+    <th>מספר עוסק</th>
+    <th>מס' חשבונית</th>
+    <th>פרטי חשבון בנק</th>
+    <th>תאריך תשלום</th>
+  </tr>
+${bodyRows}
+  <tr class="total-row">
+    <td colspan="2" class="total-label">סה"כ</td>
+    <td>${formatCurrency(total)}</td>
+    <td colspan="5"></td>
+  </tr>
+</table>
+
+</body>
+</html>`;
+}
+
+function getDriveAuth(): InstanceType<typeof google.auth.JWT> {
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+  if (!email || !rawKey) {
+    throw new Error('חסרים משתני סביבה: GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY');
+  }
+  return new google.auth.JWT({
+    email,
+    key: rawKey.replace(/\\n/g, '\n'),
+    scopes: ['https://www.googleapis.com/auth/drive'],
+  });
+}
+
+export interface GeneratePaymentRequestDocParams extends BuildPaymentRequestHtmlParams {
+  /** שם התפקיד/התקן — לשם הקובץ בלבד (לצד חודש). */
+  roleTitle: string;
+}
+
+/**
+ * בונה את ה-HTML (buildPaymentRequestHtml) ומעלה אותו ל-Drive כ-Google Doc אמיתי, דרך
+ * drive.files.create עם mimeType יעד 'application/vnd.google-apps.document' — Drive ממיר
+ * את ה-HTML אוטומטית, כולל הטבלה. אין Docs API ואין טמפלייט קבוע: כל קריאה יוצרת מסמך
+ * חדש מאפס (files.update לא תומך בעדכון תוכן, רק מטא-דאטה).
+ */
+export async function generatePaymentRequestDoc(
+  params: GeneratePaymentRequestDocParams,
+  requestId?: string,
+): Promise<{ url: string }> {
+  const folderId = process.env.GOOGLE_PAYMENT_DEST_FOLDER_ID;
+  if (!folderId) {
+    throw new Error('חסר משתנה סביבה: GOOGLE_PAYMENT_DEST_FOLDER_ID');
+  }
+
+  const html = buildPaymentRequestHtml(params);
+  const monthLabel = formatMonthHebrew(params.month);
+  const fileName = `בקשת תשלום - ${params.roleTitle} - ${monthLabel}`;
+
+  try {
+    const auth = getDriveAuth();
+    const drive = google.drive({ version: 'v3', auth });
+    const { data } = await drive.files.create({
+      requestBody: {
+        name: fileName,
+        mimeType: 'application/vnd.google-apps.document',
+        parents: [folderId],
+      },
+      media: { mimeType: 'text/html', body: html },
+      fields: 'id, webViewLink',
+    });
+    if (!data.webViewLink) {
+      throw new Error('Drive לא החזיר webViewLink עבור המסמך שנוצר');
+    }
+    logger.info({ requestId, fileId: data.id, fileName }, 'payment request doc created');
+    return { url: data.webViewLink };
+  } catch (err) {
+    logger.error({ requestId, err, fileName }, 'payment request doc generation failed');
+    throw new Error('יצירת מסמך בקשת התשלום נכשלה — בדקו את הרשאות ה-Service Account ואת שיתוף תיקיית היעד ב-Drive');
+  }
+}
