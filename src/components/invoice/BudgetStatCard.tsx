@@ -44,7 +44,13 @@ export function BudgetStatCard({
       </div>
       {hasBar && (
         <div className="h-2 rounded-full bg-surface-container-high overflow-hidden">
-          <div className={`h-full transition-all ${over ? 'bg-error' : bar[color]}`} style={{ width: `${pct}%` }} />
+          {/* טרם נוצל במלואו - תמיד טאל (כמו אייקון "תעריף שעתי מקסימלי"), בלי קשר לצבע הכרטיס -
+              שפה אחידה של "בתהליך" בכל הכרטיסים. נוצל במלואו בדיוק (100%, לא חריגה) - צבע
+              הכרטיס עצמו (כחול ל-primary). חריגה בפועל - אדום, שמור אך ורק למצב שגיאה אמיתי. */}
+          <div
+            className={`h-full transition-all ${over ? 'bg-error' : pct >= 100 ? bar[color] : 'bg-tertiary'}`}
+            style={{ width: `${pct}%` }}
+          />
         </div>
       )}
       {over && <p className="text-error text-label-sm mt-1.5">חריגה מהמכסה</p>}
