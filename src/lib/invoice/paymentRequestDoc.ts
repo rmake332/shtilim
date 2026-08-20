@@ -1,4 +1,6 @@
 import 'server-only';
+import fs from 'fs';
+import path from 'path';
 import { google, type drive_v3 } from 'googleapis';
 import { logger } from '@/lib/logger';
 import { getSystemSetting } from '@/lib/settings';
@@ -22,6 +24,8 @@ export interface BuildPaymentRequestHtmlParams {
   /** פורמט "YYYY-MM". */
   month: string;
   rows: PaymentRequestRow[];
+  /** לוגו "מיוחדים בחינוך", כ-data URI מלא (data:image/png;base64,...). מדלג על הלוגו אם חסר. */
+  logoDataUri?: string;
 }
 
 const HEBREW_MONTH_NAMES = [
@@ -126,6 +130,13 @@ export function buildPaymentRequestHtml(params: BuildPaymentRequestHtmlParams): 
     color: #1a1a1a;
     font-size: 11pt;
   }
+  .logo {
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .logo img {
+    height: 55px;
+  }
   .bsd {
     text-align: right;
     font-size: 10pt;
@@ -180,7 +191,7 @@ export function buildPaymentRequestHtml(params: BuildPaymentRequestHtmlParams): 
 </style>
 </head>
 <body>
-
+${params.logoDataUri ? `\n<div class="logo"><img src="${params.logoDataUri}" alt="מיוחדים בחינוך"></div>\n` : ''}
 <div class="bsd">בס"ד</div>
 <h1>טופס בקשת תשלומים</h1>
 
@@ -210,6 +221,27 @@ ${bodyRows}
 
 </body>
 </html>`;
+}
+
+let cachedLogoDataUri: string | null = null;
+
+/**
+ * קורא את public/logo_meyuhadim.png פעם אחת ומחזיר data URI מוכן להטמעה ב-HTML.
+ * PNG ולא WebP (המקור בפועל ב-public/) - נבדק בפועל שה-HTML→Docs converter של
+ * Drive מתעלם בשקט מ-<img> עם data URI מסוג image/webp (המסמך נוצר בלי שגיאה,
+ * אבל בלי תמונה בכלל). ה-PNG הומר פעם אחת מה-webp המקורי (sharp, לא runtime dependency).
+ */
+function getLogoDataUri(): string | undefined {
+  if (cachedLogoDataUri !== null) return cachedLogoDataUri;
+  try {
+    const filePath = path.join(process.cwd(), 'public', 'logo_meyuhadim.png');
+    const base64 = fs.readFileSync(filePath).toString('base64');
+    cachedLogoDataUri = `data:image/png;base64,${base64}`;
+  } catch (err) {
+    logger.error({ err }, 'failed to read logo file for payment request doc');
+    cachedLogoDataUri = '';
+  }
+  return cachedLogoDataUri || undefined;
 }
 
 /**
@@ -294,7 +326,7 @@ export async function generatePaymentRequestDoc(
     );
   }
 
-  const html = buildPaymentRequestHtml(params);
+  const html = buildPaymentRequestHtml({ ...params, logoDataUri: getLogoDataUri() });
   const fileName = `${formatMonthNumeric(params.month)} - בקשת תשלום חשבוניות - הדרכות פרא ${params.institutionName}`;
 
   try {

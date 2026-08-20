@@ -112,4 +112,19 @@ describe('buildPaymentRequestHtml', () => {
     });
     expect(html).toContain('3,600.5 ₪');
   });
+
+  it('omits the logo block when logoDataUri is not provided', () => {
+    const html = buildPaymentRequestHtml({ institutionName: 'מוסד לדוגמה', month: '2026-07', rows: [] });
+    expect(html).not.toContain('<img');
+  });
+
+  it('embeds the logo image when logoDataUri is provided', () => {
+    const html = buildPaymentRequestHtml({
+      institutionName: 'מוסד לדוגמה',
+      month: '2026-07',
+      rows: [],
+      logoDataUri: 'data:image/png;base64,AAAA',
+    });
+    expect(html).toContain('<img src="data:image/png;base64,AAAA" alt="מיוחדים בחינוך">');
+  });
 });

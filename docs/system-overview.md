@@ -143,7 +143,11 @@
 Account רגיל אין מכסת אחסון עצמאית ב-Drive (0 בייט), ופתרונות כמו Shared Drive/
 domain-wide delegation דורשים Google Workspace שאינו זמין לחשבון Gmail רגיל.
 משתני סביבה: `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`/`_REFRESH_TOKEN` (הרשאה חד-פעמית),
-`GOOGLE_PAYMENT_DEST_FOLDER_ID` (תיקיית יעד, בבעלות אותו חשבון).
+`GOOGLE_PAYMENT_DEST_FOLDER_ID` (תיקיית יעד, בבעלות אותו חשבון). (3) לוגו "מיוחדים
+בחינוך" בראש המסמך (`public/logo_meyuhadim.png`, מוטמע כ-`<img>` עם data URI) -
+**חייב PNG, לא WebP**: נבדק בפועל שה-HTML→Docs converter מתעלם בשקט מ-`<img>`
+מסוג `data:image/webp` (המסמך נוצר תקין, בלי שגיאה, אבל בלי תמונה כלל) - אומת
+דרך ייצוא PDF וקריאה חזותית, לא רק בדיקת מבנה ה-HTML המקורי.
 
 מבנה תיקיות: `{תיקיית יעד}/{שנת לימודים}/{שם מוסד}/{קובץ}`. שתי תת-התיקיות
 נמצאות/נוצרות אוטומטית בכל הפקה (`findOrCreateFolder` בתוך `paymentRequestDoc.ts`,
