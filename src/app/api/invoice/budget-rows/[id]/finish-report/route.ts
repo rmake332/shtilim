@@ -67,8 +67,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       });
     }
 
+    const previousDocUrl = reports.find((r) => r.paymentRequestDocUrl)?.paymentRequestDocUrl;
     const generated = await generatePaymentRequestDoc(
-      { institutionName: gate.institution.name, month, rows },
+      { institutionName: gate.institution.name, month, rows, previousDocUrl },
       gate.requestId,
     );
     docUrl = generated.url;

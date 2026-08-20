@@ -254,18 +254,33 @@ async function findOrCreateFolder(
   return created.id;
 }
 
+function extractDriveFileId(url: string): string | null {
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+export interface GeneratePaymentRequestDocParams extends BuildPaymentRequestHtmlParams {
+  /**
+   * קישור המסמך הקודם שהופק לאותו מוסד+חודש (אם יש) - Drive לא תומך בעדכון תוכן
+   * קובץ קיים, אז במקום זה מייצרים מסמך חדש ומעבירים את הישן ל-trash אחרי שהחדש
+   * נוצר בהצלחה (לא הפוך - כדי לא לאבד את הישן אם היצירה החדשה נכשלת).
+   */
+  previousDocUrl?: string;
+}
+
 /**
  * בונה את ה-HTML (buildPaymentRequestHtml) ומעלה אותו ל-Drive כ-Google Doc אמיתי, דרך
  * drive.files.create עם mimeType יעד 'application/vnd.google-apps.document'. Drive ממיר
  * את ה-HTML אוטומטית, כולל הטבלה. אין Docs API ואין טמפלייט קבוע: כל קריאה יוצרת מסמך
- * חדש מאפס (files.update לא תומך בעדכון תוכן, רק מטא-דאטה).
+ * חדש מאפס (files.update לא תומך בעדכון תוכן, רק מטא-דאטה) - "דריסה" של מסמך לאותו
+ * חודש ממומשת כיצירת מסמך חדש + trash לישן (ראו previousDocUrl).
  *
  * מבנה תיקיות ב-Drive: {תיקיית יעד}/{שנת לימודים}/{שם מוסד}/{קובץ}. שנת הלימודים
  * נקראת מטבלת "הגדרות מערכת" (SETTINGS_KEYS.academicYear) כדי שעדכון שנה לא ידרוש
  * שינוי קוד - רק עדכון הערך ב-Airtable. שתי התיקיות נוצרות אוטומטית בפעם הראשונה.
  */
 export async function generatePaymentRequestDoc(
-  params: BuildPaymentRequestHtmlParams,
+  params: GeneratePaymentRequestDocParams,
   requestId?: string,
 ): Promise<{ url: string }> {
   const rootFolderId = process.env.GOOGLE_PAYMENT_DEST_FOLDER_ID;
@@ -301,6 +316,18 @@ export async function generatePaymentRequestDoc(
       throw new Error('Drive לא החזיר webViewLink עבור המסמך שנוצר');
     }
     logger.info({ requestId, fileId: data.id, fileName }, 'payment request doc created');
+
+    const previousFileId = params.previousDocUrl ? extractDriveFileId(params.previousDocUrl) : null;
+    if (previousFileId) {
+      try {
+        await drive.files.update({ fileId: previousFileId, requestBody: { trashed: true } });
+        logger.info({ requestId, previousFileId }, 'previous payment request doc trashed');
+      } catch (err) {
+        // המסמך החדש כבר נוצר בהצלחה - כשל בהעברת הישן ל-trash לא אמור להיכשל את כל הפעולה.
+        logger.error({ requestId, err, previousFileId }, 'failed to trash previous payment request doc');
+      }
+    }
+
     return { url: data.webViewLink };
   } catch (err) {
     logger.error({ requestId, err, fileName }, 'payment request doc generation failed');
