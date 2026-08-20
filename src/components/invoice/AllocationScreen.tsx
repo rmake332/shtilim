@@ -141,6 +141,18 @@ export function AllocationScreen({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
+  // ── edit-employee-details panel state (existing position, not the add form above) ──
+  const [editingEmployeeFor, setEditingEmployeeFor] = useState<string | null>(null); // positionId
+  const [empForm, setEmpForm] = useState({
+    name: '', tz: '', address: '', email: '', phone: '', gender: '', maritalStatus: '', birthDate: '',
+    subRole: '', licenseNumber: '', bankName: '', bankBranch: '', bankAccountNumber: '', vatNumber: '',
+  });
+  const [empExistingSubRoleDocs, setEmpExistingSubRoleDocs] = useState<string[]>([]);
+  const [empLicenseDocs, setEmpLicenseDocs] = useState<Record<string, UploadedDoc | undefined>>({});
+  const [empLoading, setEmpLoading] = useState(false);
+  const [empSaving, setEmpSaving] = useState(false);
+  const [empError, setEmpError] = useState('');
+
   async function loadData() {
     setLoading(true);
     setError('');
@@ -350,6 +362,119 @@ export function AllocationScreen({
     else alert(json.message || 'שגיאה בעדכון הסטטוס.');
   }
 
+  async function openEditEmployee(p: InvoicePosition) {
+    setEditingEmployeeFor(p.id);
+    setEmpError('');
+    setEmpLicenseDocs({});
+    setEmpExistingSubRoleDocs([]);
+    setEmpForm({
+      name: p.employeeName, tz: '', address: '', email: '', phone: '', gender: '', maritalStatus: '', birthDate: '',
+      subRole: p.subRole, licenseNumber: '', bankName: '', bankBranch: '', bankAccountNumber: '', vatNumber: '',
+    });
+    setEmpLoading(true);
+    try {
+      const res = await fetch(`/api/employees/${p.employeeId}?token=${encodeURIComponent(token)}`);
+      const json = await res.json();
+      const e = json.employee;
+      if (e) {
+        setEmpForm({
+          name: e.name ?? p.employeeName,
+          tz: e.tz ?? '',
+          address: e.address ?? '',
+          email: e.email ?? '',
+          phone: e.phone ?? '',
+          gender: e.gender ?? '',
+          maritalStatus: e.maritalStatus ?? '',
+          birthDate: e.birthDate ?? '',
+          subRole: p.subRole,
+          licenseNumber: e.licenseNumber ?? '',
+          bankName: e.bankName ?? '',
+          bankBranch: e.bankBranch ?? '',
+          bankAccountNumber: e.bankAccountNumber ?? '',
+          vatNumber: e.vatNumber ?? '',
+        });
+        setEmpExistingSubRoleDocs(e.existingSubRoleDocs ?? []);
+      }
+    } catch {
+      setEmpError('שגיאה בטעינת פרטי העובד.');
+    } finally {
+      setEmpLoading(false);
+    }
+  }
+
+  function closeEditEmployee() {
+    setEditingEmployeeFor(null);
+    setEmpError('');
+  }
+
+  async function saveEditEmployee(p: InvoicePosition) {
+    setEmpError('');
+    if (!empForm.name.trim()) { setEmpError('יש להזין שם עובד.'); return; }
+    if (!empForm.phone.trim()) { setEmpError('יש להזין טלפון.'); return; }
+    if (!empForm.email.trim()) { setEmpError('יש להזין אימייל.'); return; }
+    if (!empForm.gender) { setEmpError('יש לבחור מין.'); return; }
+    if (!empForm.subRole) { setEmpError('יש לבחור תת-תפקיד.'); return; }
+    const wantedDocs = subRoleDocsFor(empForm.subRole);
+    const needsLicenseNumber = wantedDocs.some((d) => d.requiresLicenseNumber);
+    if (needsLicenseNumber && !empForm.licenseNumber) { setEmpError("יש להזין מס' רישיון."); return; }
+    const pendingDocs = wantedDocs.filter((d) => !empExistingSubRoleDocs.includes(d.fieldId));
+    for (const d of pendingDocs) {
+      if (!empLicenseDocs[d.fieldId]) { setEmpError(`יש לצרף ${d.label}.`); return; }
+    }
+
+    setEmpSaving(true);
+    try {
+      const empRes = await fetch(`/api/employees/${p.employeeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          employee: {
+            name: empForm.name,
+            address: empForm.address,
+            email: empForm.email,
+            phone: empForm.phone,
+            gender: empForm.gender,
+            maritalStatus: empForm.maritalStatus,
+            birthDate: empForm.birthDate,
+            licenseNumber: needsLicenseNumber ? empForm.licenseNumber : undefined,
+            bankName: empForm.bankName,
+            bankBranch: empForm.bankBranch,
+            bankAccountNumber: empForm.bankAccountNumber,
+            vatNumber: empForm.vatNumber,
+          },
+        }),
+      });
+      const empJson = await empRes.json();
+      if (!empJson.ok) { setEmpError(empJson.message || 'שגיאה בשמירת פרטי העובד.'); setEmpSaving(false); return; }
+
+      for (const d of pendingDocs) {
+        const doc = empLicenseDocs[d.fieldId];
+        if (!doc) continue;
+        await fetch('/api/upload-employee-doc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, employeeId: p.employeeId, fieldId: d.fieldId, file: doc }),
+        });
+      }
+
+      const posRes = await fetch(`/api/invoice/positions/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, subRole: empForm.subRole, employeeName: empForm.name }),
+      });
+      const posJson = await posRes.json();
+      if (!posJson.ok) { setEmpError(posJson.message || 'שגיאה בעדכון פרטי התקן.'); setEmpSaving(false); return; }
+
+      setPositions((prev) => prev.map((row) => (row.id === p.id ? posJson.position : row)));
+      setEditingEmployeeFor(null);
+    } catch {
+      setEmpError('שגיאה בשמירת הפרטים.');
+    } finally {
+      setEmpSaving(false);
+    }
+  }
+
   async function finishAllocation() {
     setFinishing(true);
     setFinishMsg('');
@@ -524,6 +649,14 @@ export function AllocationScreen({
                                 </button>
                               )}
                               <button
+                                onClick={() => void openEditEmployee(p)}
+                                className="text-on-surface-variant hover:text-primary"
+                                aria-label="עריכת פרטי עובד"
+                                title="עריכת פרטי עובד"
+                              >
+                                <Icon name="manage_accounts" className="text-[20px]" />
+                              </button>
+                              <button
                                 onClick={() => void toggleActive(p)}
                                 className="text-on-surface-variant hover:text-tertiary"
                                 aria-label={p.inactive ? 'הפעלה מחדש' : 'סימון כלא פעיל'}
@@ -544,6 +677,224 @@ export function AllocationScreen({
               </table>
             </div>
           </div>
+
+          {/* Edit employee details panel (for an existing position) */}
+          {editingEmployeeFor && (() => {
+            const p = positions.find((row) => row.id === editingEmployeeFor);
+            if (!p) return null;
+            const empWantedDocs = subRoleDocsFor(empForm.subRole);
+            const empPendingDocs = empWantedDocs.filter((d) => !empExistingSubRoleDocs.includes(d.fieldId));
+            const empAlreadyOnFileDocs = empWantedDocs.filter((d) => empExistingSubRoleDocs.includes(d.fieldId));
+            const empNeedsLicenseNumber = empWantedDocs.some((d) => d.requiresLicenseNumber);
+            return (
+              <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-6 shadow-sm space-y-5">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-headline-sm font-bold text-on-surface">עריכת פרטי עובד: {p.employeeName}</h2>
+                  <button onClick={closeEditEmployee} className="text-on-surface-variant hover:text-error" aria-label="סגירה">
+                    <Icon name="close" className="text-[20px]" />
+                  </button>
+                </div>
+
+                {empLoading ? (
+                  <p className="text-on-surface-variant text-body-md">טוען…</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl">
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">
+                          שם מלא <span className="text-error">*</span>
+                        </label>
+                        <input
+                          value={empForm.name}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, name: e.target.value }))}
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">ת.ז.</label>
+                        <input
+                          value={empForm.tz}
+                          disabled
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md opacity-60"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">
+                          טלפון <span className="text-error">*</span>
+                        </label>
+                        <input
+                          value={empForm.phone}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, phone: e.target.value }))}
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">
+                          אימייל <span className="text-error">*</span>
+                        </label>
+                        <input
+                          value={empForm.email}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, email: e.target.value }))}
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">כתובת</label>
+                        <input
+                          value={empForm.address}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, address: e.target.value }))}
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">תאריך לידה</label>
+                        <input
+                          type="date"
+                          value={empForm.birthDate}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, birthDate: e.target.value }))}
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">
+                          מין <span className="text-error">*</span>
+                        </label>
+                        <select
+                          value={empForm.gender}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, gender: e.target.value }))}
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                        >
+                          <option value="">בחר</option>
+                          <option value="זכר">זכר</option>
+                          <option value="נקבה">נקבה</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">מצב משפחתי</label>
+                        <input
+                          value={empForm.maritalStatus}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, maritalStatus: e.target.value }))}
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">
+                          תת-תפקיד <span className="text-error">*</span>
+                        </label>
+                        <select
+                          value={empForm.subRole}
+                          onChange={(e) => {
+                            setEmpForm((v) => ({ ...v, subRole: e.target.value }));
+                            setEmpLicenseDocs({});
+                          }}
+                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                        >
+                          <option value="">בחר תת-תפקיד</option>
+                          {subRoleChoices.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {empNeedsLicenseNumber && (
+                      <div className="max-w-xs">
+                        <label className="text-label-lg text-on-surface block mb-2">
+                          מס&apos; רישיון <span className="text-error">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={empForm.licenseNumber}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, licenseNumber: e.target.value }))}
+                          className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-label-lg text-on-surface font-bold mb-3">פרטי בנק (לא חובה, לצורך הפקת בקשת תשלום)</p>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 max-w-3xl">
+                        <div>
+                          <label className="text-label-sm text-on-surface-variant block mb-2">בנק</label>
+                          <input
+                            value={empForm.bankName}
+                            onChange={(e) => setEmpForm((v) => ({ ...v, bankName: e.target.value }))}
+                            className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-label-sm text-on-surface-variant block mb-2">סניף</label>
+                          <input
+                            value={empForm.bankBranch}
+                            onChange={(e) => setEmpForm((v) => ({ ...v, bankBranch: e.target.value }))}
+                            className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-label-sm text-on-surface-variant block mb-2">מספר חשבון</label>
+                          <input
+                            value={empForm.bankAccountNumber}
+                            onChange={(e) => setEmpForm((v) => ({ ...v, bankAccountNumber: e.target.value }))}
+                            className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-label-sm text-on-surface-variant block mb-2">מספר עוסק</label>
+                          <input
+                            value={empForm.vatNumber}
+                            onChange={(e) => setEmpForm((v) => ({ ...v, vatNumber: e.target.value }))}
+                            className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {empAlreadyOnFileDocs.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {empAlreadyOnFileDocs.map((d) => (
+                          <span key={d.fieldId} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-tertiary-container/30 text-on-surface text-label-sm">
+                            <Icon name="check_circle" className="text-tertiary text-[16px]" fill />
+                            {d.label} - קיים בתיק העובד
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {empPendingDocs.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 max-w-2xl">
+                        {empPendingDocs.map((d) => (
+                          <DocUpload
+                            key={d.fieldId}
+                            label={d.label}
+                            required
+                            value={empLicenseDocs[d.fieldId]}
+                            onChange={(doc) => setEmpLicenseDocs((v) => ({ ...v, [d.fieldId]: doc }))}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {empError && <p className="text-error text-body-md">{empError}</p>}
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => void saveEditEmployee(p)}
+                        disabled={empSaving}
+                        className="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-xl font-bold text-label-lg hover:opacity-90 disabled:opacity-50 transition-all"
+                      >
+                        <Icon name="save" className="text-[18px]" />
+                        {empSaving ? 'שומר…' : 'שמירת פרטי עובד'}
+                      </button>
+                      <button
+                        onClick={closeEditEmployee}
+                        className="px-6 py-3 rounded-xl font-bold text-label-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-all"
+                      >
+                        ביטול
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Add employee form */}
           <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-6 shadow-sm space-y-5">

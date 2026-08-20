@@ -14,21 +14,24 @@ async function verifyOwnership(positionId: string, mosadId: string, requestId?: 
 }
 
 /**
- * PATCH /api/invoice/positions/[id] - עריכת שעות מוקצות/תעריף/תת-תפקיד להקצאה קיימת,
- * במהלך "ניהול תקציב". בודק חי מול המכסה, תוך החרגת ההקצאה הנוכחית מעצמה. עם
- * `active` בגוף הבקשה - מסמן לא פעיל/פעיל מחדש (ראו setPositionActive), ומדלג על
- * שאר הלוגיקה.
+ * PATCH /api/invoice/positions/[id] - עריכת הקצאה קיימת, במהלך "ניהול תקציב".
+ * `active` בגוף הבקשה - מסמן לא פעיל/פעיל מחדש (ראו setPositionActive), מדלג על
+ * שאר הלוגיקה. שינוי שעות/תעריף - בודק חי מול המכסה (checkLiveAnnualAllocation),
+ * חסום כשההקצאה לא פעילה (allocatedHours שלה מאופס - ראו setPositionActive).
+ * שינוי תת-תפקיד/שם עובד (מ"עריכת פרטי עובד" ב-AllocationScreen) בלי שינוי
+ * שעות/תעריף - מותר גם כשההקצאה לא פעילה, בלי בדיקת מכסה (אין שינוי שעות).
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
   const gate = await gateByToken(req, body.token);
   if (gate instanceof NextResponse) return gate;
 
-  const { subRole, allocatedHours, agreedHourlyRate, active } = body as {
+  const { subRole, allocatedHours, agreedHourlyRate, active, employeeName } = body as {
     subRole?: string;
     allocatedHours?: number;
     agreedHourlyRate?: number;
     active?: boolean;
+    employeeName?: string;
   };
 
   try {
@@ -40,9 +43,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ ok: true, position: updated });
     }
 
+    const changingHoursOrRate = allocatedHours !== undefined || agreedHourlyRate !== undefined;
+    if (!changingHoursOrRate) {
+      const updated = await updatePosition(params.id, { subRole, employeeName }, gate.requestId);
+      return NextResponse.json({ ok: true, position: updated });
+    }
+
     if (position.inactive) {
       return NextResponse.json(
-        { ok: false, message: 'לא ניתן לערוך הקצאה של עובד לא פעיל. יש להפעיל אותו מחדש תחילה.' },
+        { ok: false, message: 'לא ניתן לערוך שעות/תעריף של עובד לא פעיל. יש להפעיל אותו מחדש תחילה.' },
         { status: 409 },
       );
     }
@@ -66,7 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     const updated = await updatePosition(
       params.id,
-      { subRole, allocatedHours: nextHours, agreedHourlyRate: nextRate },
+      { subRole, allocatedHours: nextHours, agreedHourlyRate: nextRate, employeeName },
       gate.requestId,
     );
     return NextResponse.json({ ok: true, position: updated });

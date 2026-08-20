@@ -6,17 +6,27 @@ import { TABLES, EMPLOYEE_FIELDS } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import type { EmployeeData } from '@/lib/formTypes';
 
+/** Subset of EmployeeData plus the invoice-only fields (license/bank) not part of the main wizard's step data. */
+interface EmployeePatchInput extends Partial<EmployeeData> {
+  licenseNumber?: string;
+  bankName?: string;
+  bankBranch?: string;
+  bankAccountNumber?: string;
+  vatNumber?: string;
+}
+
 /**
  * PATCH /api/employees/[id]
  * Immediately saves edited employee fields to רשימת עובדים.
- * Called when the secretary clicks "סיום עריכה" in EmployeeStep.
+ * Called when the secretary clicks "סיום עריכה" in EmployeeStep, or "עריכת פרטי עובד"
+ * ב-AllocationScreen (תקני חשבונית - כולל גם מס' רישיון ופרטי בנק).
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
   const gate = await gateByToken(req, body.token);
   if (gate instanceof NextResponse) return gate;
 
-  const { employee } = body as { employee: EmployeeData };
+  const { employee } = body as { employee: EmployeePatchInput };
   if (!employee) return NextResponse.json({ ok: false, message: 'חסרים נתונים.' }, { status: 400 });
 
   const fields: Record<string, unknown> = {};
@@ -27,6 +37,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (employee.maritalStatus) fields[EMPLOYEE_FIELDS.maritalStatus] = employee.maritalStatus;
   if (employee.gender)        fields[EMPLOYEE_FIELDS.gender]        = employee.gender;
   if (employee.birthDate)     fields[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;
+  if (employee.licenseNumber)      fields[EMPLOYEE_FIELDS.licenseNumber]      = Number(employee.licenseNumber);
+  if (employee.bankName)           fields[EMPLOYEE_FIELDS.bankName]           = employee.bankName;
+  if (employee.bankBranch)         fields[EMPLOYEE_FIELDS.bankBranch]         = employee.bankBranch;
+  if (employee.bankAccountNumber)  fields[EMPLOYEE_FIELDS.bankAccountNumber]  = employee.bankAccountNumber;
+  if (employee.vatNumber)          fields[EMPLOYEE_FIELDS.vatNumber]          = employee.vatNumber;
 
   try {
     logger.info({ requestId: gate.requestId, employeeId: params.id }, 'patching employee record');

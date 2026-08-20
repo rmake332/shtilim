@@ -117,7 +117,7 @@ export async function createPosition(
 
 export async function updatePosition(
   positionId: string,
-  params: Partial<{ subRole: string; allocatedHours: number; agreedHourlyRate: number }>,
+  params: Partial<{ subRole: string; allocatedHours: number; agreedHourlyRate: number; employeeName: string }>,
   requestId?: string,
 ): Promise<InvoicePosition> {
   const current = await getPosition(positionId, requestId);
@@ -129,6 +129,9 @@ export async function updatePosition(
   if (params.agreedHourlyRate !== undefined) {
     fields[INVOICE_POSITION_FIELDS.agreedHourlyRate] = params.agreedHourlyRate;
   }
+  // עותק תצוגתי בלבד על התקן (INVOICE_POSITION_FIELDS.employeeName) - נשמר בסנכרון עם
+  // שינוי שם בתיק העובד עצמו דרך "עריכת פרטי עובד" (ראו AllocationScreen).
+  if (params.employeeName !== undefined) fields[INVOICE_POSITION_FIELDS.employeeName] = params.employeeName;
   // Airtable's update response isn't keyed by field ID (only GET/list requests set
   // returnFieldsByFieldId) - merge onto the pre-fetched record instead of the response.
   // Spreading params directly would overwrite unset fields with explicit `undefined`
