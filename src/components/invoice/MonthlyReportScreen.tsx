@@ -45,6 +45,8 @@ interface RowState {
   doc?: UploadedDoc;
   saving: boolean;
   error: string;
+  /** true = שדות פתוחים לעריכה. שורה עם דיווח שמור נטענת נעולה (false) - "עריכה" פותחת אותה. */
+  editing: boolean;
 }
 
 /** ברירת המחדל היא החודש הקודם - הדיווח החודשי בפועל מוגש בדרך כלל אחרי סיום החודש. */
@@ -149,6 +151,7 @@ export function MonthlyReportScreen({
           invoiceNumber: existing?.invoiceNumber ?? '',
           saving: false,
           error: '',
+          editing: !existing,
         };
       }
       setRows(nextRows);
@@ -214,10 +217,28 @@ export function MonthlyReportScreen({
         });
       }
       setReports((prev) => ({ ...prev, [positionId]: report }));
-      updateRow(positionId, { saving: false, doc: undefined });
+      updateRow(positionId, { saving: false, doc: undefined, editing: false });
     } catch {
       updateRow(positionId, { saving: false, error: 'שגיאה בשמירה.' });
     }
+  }
+
+  function startEditRow(positionId: string) {
+    updateRow(positionId, { editing: true, error: '' });
+  }
+
+  /** ביטול עריכה - חוזר לערכים השמורים האחרונים (לא לריק), נועל מחדש. */
+  function cancelEditRow(positionId: string) {
+    const report = reports[positionId];
+    if (!report) { updateRow(positionId, { editing: false, error: '' }); return; }
+    updateRow(positionId, {
+      hours: String(report.reportedHours),
+      rate: String(report.reportedRate),
+      invoiceNumber: report.invoiceNumber,
+      doc: undefined,
+      editing: false,
+      error: '',
+    });
   }
 
   async function finishMonth() {
@@ -332,6 +353,9 @@ export function MonthlyReportScreen({
                     const row = rows[p.id];
                     const report = reports[p.id];
                     if (!row) return null;
+                    // לא פעיל - תמיד נעול, בלי אפשרות עריכה (דיווח חדש חסום גם בשרת).
+                    // אחרת - נעול כברירת מחדל ברגע שיש דיווח שמור, עד לחיצה על "עריכה".
+                    const locked = p.inactive || !row.editing;
                     return (
                       <tr key={p.id} className={`align-middle ${p.inactive ? 'opacity-60' : ''}`}>
                         <td className="px-5 py-3 font-bold">
@@ -341,36 +365,51 @@ export function MonthlyReportScreen({
                               <Icon name="pause_circle" className="text-[14px]" fill /> לא פעיל
                             </span>
                           )}
+                          {!p.inactive && report && locked && (
+                            <span className="mr-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tertiary-container/40 text-on-surface text-label-sm font-bold align-middle">
+                              <Icon name="check_circle" className="text-tertiary text-[14px]" fill /> דווח
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-3">{p.subRole}</td>
                         <td className="px-5 py-3">{formatNum(p.allocatedHours)}</td>
                         <td className="px-5 py-3">
-                          <input
-                            type="number"
-                            value={row.hours}
-                            onChange={(e) => updateRow(p.id, { hours: e.target.value })}
-                            disabled={p.inactive}
-                            className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md disabled:opacity-50"
-                          />
+                          {locked ? (
+                            formatNum(Number(row.hours) || 0)
+                          ) : (
+                            <input
+                              type="number"
+                              value={row.hours}
+                              onChange={(e) => updateRow(p.id, { hours: e.target.value })}
+                              className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                              autoFocus
+                            />
+                          )}
                         </td>
                         <td className="px-5 py-3">
-                          <input
-                            type="number"
-                            value={row.rate}
-                            onChange={(e) => updateRow(p.id, { rate: e.target.value })}
-                            disabled={p.inactive}
-                            className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md disabled:opacity-50"
-                          />
+                          {locked ? (
+                            formatNum(Number(row.rate) || 0)
+                          ) : (
+                            <input
+                              type="number"
+                              value={row.rate}
+                              onChange={(e) => updateRow(p.id, { rate: e.target.value })}
+                              className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                            />
+                          )}
                         </td>
                         <td className="px-5 py-3">{report ? formatNum(report.totalPay) : ' - '}</td>
                         <td className="px-5 py-3">
-                          <input
-                            type="text"
-                            value={row.invoiceNumber}
-                            onChange={(e) => updateRow(p.id, { invoiceNumber: e.target.value })}
-                            disabled={p.inactive}
-                            className="w-28 bg-surface-container-low rounded-lg py-2 px-2 text-body-md disabled:opacity-50"
-                          />
+                          {locked ? (
+                            row.invoiceNumber || ' - '
+                          ) : (
+                            <input
+                              type="text"
+                              value={row.invoiceNumber}
+                              onChange={(e) => updateRow(p.id, { invoiceNumber: e.target.value })}
+                              className="w-28 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                            />
+                          )}
                         </td>
                         <td className="px-5 py-3 min-w-[220px]">
                           {report?.hasInvoiceDoc ? (
@@ -378,7 +417,7 @@ export function MonthlyReportScreen({
                               <Icon name="check_circle" className="text-[16px]" fill /> קובץ הועלה
                             </span>
                           ) : (
-                            !p.inactive && (
+                            !locked && (
                               <DocUpload
                                 label=""
                                 value={row.doc}
@@ -388,17 +427,40 @@ export function MonthlyReportScreen({
                           )}
                         </td>
                         <td className="px-5 py-3">
-                          {!p.inactive && (
+                          {p.inactive ? null : locked ? (
                             <button
-                              onClick={() => void saveRow(p.id)}
-                              disabled={row.saving}
-                              className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-label-sm hover:opacity-90 disabled:opacity-50 transition-all"
+                              onClick={() => startEditRow(p.id)}
+                              className="text-on-surface-variant hover:text-primary"
+                              aria-label="עריכה"
+                              title="עריכה"
                             >
-                              <Icon name="save" className="text-[16px]" />
-                              {row.saving ? 'שומר…' : 'שמירה'}
+                              <Icon name="edit" className="text-[18px]" />
                             </button>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => void saveRow(p.id)}
+                                  disabled={row.saving}
+                                  className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-label-sm hover:opacity-90 disabled:opacity-50 transition-all"
+                                >
+                                  <Icon name="save" className="text-[16px]" />
+                                  {row.saving ? 'שומר…' : 'שמירה'}
+                                </button>
+                                {report && (
+                                  <button
+                                    onClick={() => cancelEditRow(p.id)}
+                                    disabled={row.saving}
+                                    className="text-on-surface-variant hover:text-error"
+                                    aria-label="ביטול"
+                                  >
+                                    <Icon name="close" className="text-[20px]" />
+                                  </button>
+                                )}
+                              </div>
+                              {row.error && <p className="text-error text-label-sm mt-1">{row.error}</p>}
+                            </div>
                           )}
-                          {row.error && <p className="text-error text-label-sm mt-1">{row.error}</p>}
                         </td>
                       </tr>
                     );
