@@ -8,7 +8,6 @@ import {
   type AirtableRecord,
 } from '@/lib/airtable/client';
 import { TABLES, INVOICE_POSITION_FIELDS } from '@/lib/airtable/schema';
-import { listReportsForPosition } from '@/lib/invoice/reports';
 
 /** הקצאת עובד יחיד תחת שורת תקציב חשבונית אחת. */
 export interface InvoicePosition {
@@ -146,11 +145,15 @@ export async function deletePosition(positionId: string, requestId?: string): Pr
 
 /**
  * מסמן הקצאה כלא פעילה/פעילה. עובד שהפך ללא פעיל באמצע השנה לא נמחק (יש לו כבר
- * דיווחים חודשיים היסטוריים), אבל לא אמור להמשיך "לתפוס" יתרת שעות/תקציב של
- * התקן קדימה: שעות מוקצות מוקטנות אוטומטית למה שכבר דווח בפועל (המאזן משתחרר
- * חזרה למאגר דרך ה-rollup הקיים ב-BUDGET_FIELDS.totalAllocatedHours), ודיווח
- * חודשי חדש נחסם (ראו הבדיקה ב-src/app/api/invoice/reports/route.ts). הפעלה
- * מחדש לא משחזרת את השעות שהוקטנו - יש להקצות מחדש ידנית אם צריך.
+ * דיווחים חודשיים היסטוריים), אבל לא אמור להמשיך "לתפוס" מהמכסה החודשית
+ * המשותפת של התקן קדימה: allocatedHours הוא החלק הקבוע שלו מתוך המכסה החודשית
+ * (לא סכום מצטבר על פני השנה - "שעות לניצול" מתאפסת ונבדקת מחדש כל חודש, ראו
+ * BUDGET_FIELDS.totalBudgetHours), כך שסימון לא פעיל מאפס אותו לגמרי ומשחרר את
+ * מלוא החלק שלו חזרה למאגר עבור עובדים אחרים (דרך ה-rollup הקיים ב-
+ * BUDGET_FIELDS.totalAllocatedHours). דיווחים חודשיים היסטוריים לא נוגעים בהם -
+ * הם כבר שייכים לחודשים שעברו ולא מצטברים לכאן. דיווח חודשי חדש נחסם בנפרד
+ * (ראו הבדיקה ב-src/app/api/invoice/reports/route.ts). הפעלה מחדש לא משחזרת את
+ * השעות שאופסו - יש להקצות מחדש ידנית אם צריך.
  */
 export async function setPositionActive(
   positionId: string,
@@ -161,12 +164,8 @@ export async function setPositionActive(
   if (!current) throw new Error(`invoice position not found: ${positionId}`);
 
   const fields: Record<string, unknown> = { [INVOICE_POSITION_FIELDS.inactive]: !active };
-  let allocatedHours = current.allocatedHours;
-  if (!active) {
-    const reports = await listReportsForPosition(positionId, requestId);
-    allocatedHours = reports.reduce((sum, r) => sum + r.reportedHours, 0);
-    fields[INVOICE_POSITION_FIELDS.allocatedHours] = allocatedHours;
-  }
+  const allocatedHours = active ? current.allocatedHours : 0;
+  if (!active) fields[INVOICE_POSITION_FIELDS.allocatedHours] = 0;
   await updateRecord(TABLES.invoicePositions, positionId, fields, requestId);
   return { ...current, allocatedHours, inactive: !active };
 }
