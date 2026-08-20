@@ -204,17 +204,24 @@ ${bodyRows}
 </html>`;
 }
 
-function getDriveAuth(): InstanceType<typeof google.auth.JWT> {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
-  if (!email || !rawKey) {
-    throw new Error('חסרים משתני סביבה: GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY');
+/**
+ * OAuth2 כמשתמש Google אמיתי (לא Service Account) — Service Account רגיל אין לו מכסת
+ * אחסון עצמאית ב-Drive, ו-Shared Drive/domain-wide delegation דורשים Google Workspace.
+ * ה-refresh token נוצר פעם אחת ידנית (ראו .env.example) ולא פג תוקף, כך שהמסמכים נוצרים
+ * ישירות בחשבון Drive הרגיל של המשתמש, במכסה שלו.
+ */
+function getDriveAuth(): InstanceType<typeof google.auth.OAuth2> {
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error(
+      'חסרים משתני סביבה: GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET / GOOGLE_OAUTH_REFRESH_TOKEN',
+    );
   }
-  return new google.auth.JWT({
-    email,
-    key: rawKey.replace(/\\n/g, '\n'),
-    scopes: ['https://www.googleapis.com/auth/drive'],
-  });
+  const auth = new google.auth.OAuth2(clientId, clientSecret);
+  auth.setCredentials({ refresh_token: refreshToken });
+  return auth;
 }
 
 export interface GeneratePaymentRequestDocParams extends BuildPaymentRequestHtmlParams {
@@ -260,6 +267,6 @@ export async function generatePaymentRequestDoc(
     return { url: data.webViewLink };
   } catch (err) {
     logger.error({ requestId, err, fileName }, 'payment request doc generation failed');
-    throw new Error('יצירת מסמך בקשת התשלום נכשלה — בדקו את הרשאות ה-Service Account ואת שיתוף תיקיית היעד ב-Drive');
+    throw new Error('יצירת מסמך בקשת התשלום נכשלה — בדקו את תוקף ה-OAuth refresh token ואת מזהה תיקיית היעד ב-Drive');
   }
 }
