@@ -10,7 +10,7 @@ export interface PaymentRequestRow {
   bankName: string;
   bankBranch: string;
   bankAccountNumber: string;
-  /** סעיף תקציב — budgetRow.title (שם התפקיד/התקן). */
+  /** סעיף תקציב: budgetRow.title (שם התפקיד/התקן). */
   budgetLine: string;
   amount: number;
 }
@@ -76,12 +76,12 @@ function bankDetails(row: PaymentRequestRow): string {
 /**
  * בונה את ה-HTML המלא של מסמך "בקשת תשלום" (מועלה ל-Drive בהמשך והופך ל-Google Doc).
  *
- * עיצוב סופי אושר מול Drive אמיתי (5 סבבי איטרציה) — ראו זיכרון feature-invoice-positions
+ * עיצוב סופי אושר מול Drive אמיתי (5 סבבי איטרציה), ראו זיכרון feature-invoice-positions
  * ואת התוכנית optimized-hopping-zephyr.md. אין לשנות מבנה/סדר עמודות/colspan/פונט/צבעים
  * בלי לאשר עם המשתמש קודם.
  *
  * מלכודת RTL: ה-HTML→Google Docs converter של Drive מתעלם מ-dir="rtl" לגבי סדר העמודות
- * בטבלה — הן נבנות תמיד לפי הסדר הליניארי של ה-HTML. לכן ה-th/td בכל שורה נכתבים כאן
+ * בטבלה, הן נבנות תמיד לפי הסדר הליניארי של ה-HTML. לכן ה-th/td בכל שורה נכתבים כאן
  * בסדר הפוך (העמודה שאמורה להופיע הכי מימין נכתבת אחרונה בקוד).
  */
 export function buildPaymentRequestHtml(params: BuildPaymentRequestHtmlParams): string {
@@ -205,7 +205,7 @@ ${bodyRows}
 }
 
 /**
- * OAuth2 כמשתמש Google אמיתי (לא Service Account) — Service Account רגיל אין לו מכסת
+ * OAuth2 כמשתמש Google אמיתי (לא Service Account): ל-Service Account רגיל אין מכסת
  * אחסון עצמאית ב-Drive, ו-Shared Drive/domain-wide delegation דורשים Google Workspace.
  * ה-refresh token נוצר פעם אחת ידנית (ראו .env.example) ולא פג תוקף, כך שהמסמכים נוצרים
  * ישירות בחשבון Drive הרגיל של המשתמש, במכסה שלו.
@@ -225,13 +225,13 @@ function getDriveAuth(): InstanceType<typeof google.auth.OAuth2> {
 }
 
 export interface GeneratePaymentRequestDocParams extends BuildPaymentRequestHtmlParams {
-  /** שם התפקיד/התקן — לשם הקובץ בלבד (לצד חודש). */
+  /** שם התפקיד/התקן, לשם הקובץ בלבד (לצד חודש). */
   roleTitle: string;
 }
 
 /**
  * בונה את ה-HTML (buildPaymentRequestHtml) ומעלה אותו ל-Drive כ-Google Doc אמיתי, דרך
- * drive.files.create עם mimeType יעד 'application/vnd.google-apps.document' — Drive ממיר
+ * drive.files.create עם mimeType יעד 'application/vnd.google-apps.document'. Drive ממיר
  * את ה-HTML אוטומטית, כולל הטבלה. אין Docs API ואין טמפלייט קבוע: כל קריאה יוצרת מסמך
  * חדש מאפס (files.update לא תומך בעדכון תוכן, רק מטא-דאטה).
  */
@@ -267,6 +267,6 @@ export async function generatePaymentRequestDoc(
     return { url: data.webViewLink };
   } catch (err) {
     logger.error({ requestId, err, fileName }, 'payment request doc generation failed');
-    throw new Error('יצירת מסמך בקשת התשלום נכשלה — בדקו את תוקף ה-OAuth refresh token ואת מזהה תיקיית היעד ב-Drive');
+    throw new Error('יצירת מסמך בקשת התשלום נכשלה, בדקו את תוקף ה-OAuth refresh token ואת מזהה תיקיית היעד ב-Drive');
   }
 }
