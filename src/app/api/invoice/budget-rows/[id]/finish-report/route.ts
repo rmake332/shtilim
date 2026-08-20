@@ -68,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const generated = await generatePaymentRequestDoc(
-      { institutionName: gate.institution.name, month, roleTitle: row.title, rows },
+      { institutionName: gate.institution.name, month, rows },
       gate.requestId,
     );
     docUrl = generated.url;

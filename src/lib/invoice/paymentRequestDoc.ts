@@ -1,6 +1,8 @@
 import 'server-only';
-import { google } from 'googleapis';
+import { google, type drive_v3 } from 'googleapis';
 import { logger } from '@/lib/logger';
+import { getSystemSetting } from '@/lib/settings';
+import { SETTINGS_KEYS } from '@/lib/airtable/schema';
 
 /** שורת עובד בטבלת "בקשת תשלום". */
 export interface PaymentRequestRow {
@@ -50,6 +52,12 @@ function formatDateHebrew(date: Date): string {
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const yyyy = date.getFullYear();
   return `${dd}/${mm}/${yyyy}`;
+}
+
+/** "2026-08" → "08.26", לשם הקובץ. */
+function formatMonthNumeric(month: string): string {
+  const [year, monthNum] = month.split('-');
+  return `${monthNum}.${year.slice(2)}`;
 }
 
 /** סכום עם מפריד אלפים ו-₪, בלי אפסים מיותרים אחרי הנקודה (כמו formatNum). */
@@ -224,9 +232,26 @@ function getDriveAuth(): InstanceType<typeof google.auth.OAuth2> {
   return auth;
 }
 
-export interface GeneratePaymentRequestDocParams extends BuildPaymentRequestHtmlParams {
-  /** שם התפקיד/התקן, לשם הקובץ בלבד (לצד חודש). */
-  roleTitle: string;
+/** שם תיקייה יחיד לחיפוש/יצירה תחת parentId (לא רקורסיבי - Drive מרשה שמות כפולים). */
+async function findOrCreateFolder(
+  drive: drive_v3.Drive,
+  name: string,
+  parentId: string,
+  requestId: string | undefined,
+): Promise<string> {
+  const escapedName = name.replace(/'/g, "\\'");
+  const query = `name='${escapedName}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+  const { data: found } = await drive.files.list({ q: query, fields: 'files(id)', pageSize: 1 });
+  const existingId = found.files?.[0]?.id;
+  if (existingId) return existingId;
+
+  const { data: created } = await drive.files.create({
+    requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
+    fields: 'id',
+  });
+  logger.info({ requestId, folderId: created.id, name, parentId }, 'payment request doc folder created');
+  if (!created.id) throw new Error(`Drive לא החזיר מזהה עבור תיקייה חדשה: ${name}`);
+  return created.id;
 }
 
 /**
@@ -234,28 +259,40 @@ export interface GeneratePaymentRequestDocParams extends BuildPaymentRequestHtml
  * drive.files.create עם mimeType יעד 'application/vnd.google-apps.document'. Drive ממיר
  * את ה-HTML אוטומטית, כולל הטבלה. אין Docs API ואין טמפלייט קבוע: כל קריאה יוצרת מסמך
  * חדש מאפס (files.update לא תומך בעדכון תוכן, רק מטא-דאטה).
+ *
+ * מבנה תיקיות ב-Drive: {תיקיית יעד}/{שנת לימודים}/{שם מוסד}/{קובץ}. שנת הלימודים
+ * נקראת מטבלת "הגדרות מערכת" (SETTINGS_KEYS.academicYear) כדי שעדכון שנה לא ידרוש
+ * שינוי קוד - רק עדכון הערך ב-Airtable. שתי התיקיות נוצרות אוטומטית בפעם הראשונה.
  */
 export async function generatePaymentRequestDoc(
-  params: GeneratePaymentRequestDocParams,
+  params: BuildPaymentRequestHtmlParams,
   requestId?: string,
 ): Promise<{ url: string }> {
-  const folderId = process.env.GOOGLE_PAYMENT_DEST_FOLDER_ID;
-  if (!folderId) {
+  const rootFolderId = process.env.GOOGLE_PAYMENT_DEST_FOLDER_ID;
+  if (!rootFolderId) {
     throw new Error('חסר משתנה סביבה: GOOGLE_PAYMENT_DEST_FOLDER_ID');
+  }
+  const academicYear = await getSystemSetting(SETTINGS_KEYS.academicYear, requestId);
+  if (!academicYear) {
+    throw new Error(
+      `חסרה הגדרת שנת לימודים בטבלת "הגדרות מערכת" (מפתח ${SETTINGS_KEYS.academicYear})`,
+    );
   }
 
   const html = buildPaymentRequestHtml(params);
-  const monthLabel = formatMonthHebrew(params.month);
-  const fileName = `בקשת תשלום - ${params.roleTitle} - ${monthLabel}`;
+  const fileName = `${formatMonthNumeric(params.month)} - בקשת תשלום חשבוניות - הדרכות פרא ${params.institutionName}`;
 
   try {
     const auth = getDriveAuth();
     const drive = google.drive({ version: 'v3', auth });
+    const yearFolderId = await findOrCreateFolder(drive, academicYear, rootFolderId, requestId);
+    const institutionFolderId = await findOrCreateFolder(drive, params.institutionName, yearFolderId, requestId);
+
     const { data } = await drive.files.create({
       requestBody: {
         name: fileName,
         mimeType: 'application/vnd.google-apps.document',
-        parents: [folderId],
+        parents: [institutionFolderId],
       },
       media: { mimeType: 'text/html', body: html },
       fields: 'id, webViewLink',

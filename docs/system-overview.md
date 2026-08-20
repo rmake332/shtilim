@@ -141,6 +141,14 @@ domain-wide delegation דורשים Google Workspace שאינו זמין לחש�
 משתני סביבה: `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`/`_REFRESH_TOKEN` (הרשאה חד-פעמית),
 `GOOGLE_PAYMENT_DEST_FOLDER_ID` (תיקיית יעד, בבעלות אותו חשבון).
 
+מבנה תיקיות: `{תיקיית יעד}/{שנת לימודים}/{שם מוסד}/{קובץ}`. שתי תת-התיקיות
+נמצאות/נוצרות אוטומטית בכל הפקה (`findOrCreateFolder` בתוך `paymentRequestDoc.ts`,
+חיפוש לפי שם תחת ה-parent הנכון לפני יצירה, כדי לא לשכפל). שנת הלימודים נקראת
+מטבלת Airtable חדשה `הגדרות מערכת` (`src/lib/settings.ts`, מפתח
+`SETTINGS_KEYS.academicYear`) כדי שעדכון שנה בתחילת כל שנה"ל יהיה עריכת ערך
+ב-Airtable בלבד, בלי שינוי קוד. שם הקובץ: `{MM.YY של חודש הדיווח} - בקשת תשלום
+חשבוניות - הדרכות פרא {שם המוסד}` ("הדרכות פרא" הוא טקסט קבוע, זהה בכל מסמך).
+
 ## Airtable - בסיס תשפ"ז (`appKlvldLrk14ird8`)
 
 מיפוי טבלאות/שדות המקור: `src/lib/airtable/schema.ts`. טבלאות מרכזיות:
@@ -157,6 +165,7 @@ domain-wide delegation דורשים Google Workspace שאינו זמין לחש�
 | סמלי מוסד | `tbl4BCMW4gwsIPxG7` | סמלי מוסד למיפוי תפקיד↔סמל |
 | תקני חשבונית | `tblmRAd0fHuFBbTSj` | הקצאת עובד יחיד תחת שורת תקציב חשבונית (שעות מוקצות + תעריף שעתי מוסכם) |
 | דיווח חודשי חשבונית | `tblTk6mYvK1iuC2XP` | שעות בפועל + חשבונית + מס' חשבונית, לעובד חשבונית בחודש נתון. קישור למסמך "בקשת תשלום" שהופק |
+| הגדרות מערכת | `tblFzx04m2VgoeLhZ` | key/value כללי, שורה בודדת לכל מפתח. כרגע: שנת הלימודים הנוכחית (תיקיית האב בהפקת בקשת תשלום) |
 
 גישה דרך `src/lib/airtable/client.ts` (עטיפה ל-REST API, `cache: 'no-store'`
 כברירת מחדל). `AIRTABLE_MOCK=1` מפעיל fixtures מקומיים (`src/lib/airtable/mock.ts`)

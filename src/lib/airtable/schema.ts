@@ -16,6 +16,19 @@ export const TABLES = {
   institutionSymbols: 'tbl4BCMW4gwsIPxG7', // סמלי מוסד
   invoicePositions: 'tblmRAd0fHuFBbTSj', // תקני חשבונית
   invoiceReports: 'tblTk6mYvK1iuC2XP', // דיווח חודשי חשבונית
+  systemSettings: 'tblFzx04m2VgoeLhZ', // הגדרות מערכת (key/value, שורה בודדת לכל מפתח)
+} as const;
+
+/** הגדרות מערכת fields (key/value, נערך ידנית ב-Airtable). */
+export const SYSTEM_SETTINGS_FIELDS = {
+  key: 'fldQECeA6B98Z1GU8', // מפתח
+  value: 'fldYU0GmR7t6PSbO6', // ערך
+} as const;
+
+/** מפתחות ידועים בטבלת הגדרות מערכת. */
+export const SETTINGS_KEYS = {
+  /** שנת הלימודים הנוכחית (למשל 'תשפ"ז') - תיקיית האב הראשונה בהפקת בקשת תשלום ב-Drive. */
+  academicYear: 'academic_year',
 } as const;
 
 /** מוסדות fields (institution lookup by token) */
