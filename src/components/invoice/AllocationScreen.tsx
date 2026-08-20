@@ -717,7 +717,7 @@ export function AllocationScreen({
                         <input
                           value={empForm.name}
                           onChange={(e) => setEmpForm((v) => ({ ...v, name: e.target.value }))}
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         />
                       </div>
                       <div>
@@ -725,7 +725,7 @@ export function AllocationScreen({
                         <input
                           value={empForm.tz}
                           disabled
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md opacity-60"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md opacity-60"
                         />
                       </div>
                       <div>
@@ -735,7 +735,7 @@ export function AllocationScreen({
                         <input
                           value={empForm.phone}
                           onChange={(e) => setEmpForm((v) => ({ ...v, phone: e.target.value }))}
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         />
                       </div>
                       <div>
@@ -745,7 +745,7 @@ export function AllocationScreen({
                         <input
                           value={empForm.email}
                           onChange={(e) => setEmpForm((v) => ({ ...v, email: e.target.value }))}
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         />
                       </div>
                       <div>
@@ -753,7 +753,7 @@ export function AllocationScreen({
                         <input
                           value={empForm.address}
                           onChange={(e) => setEmpForm((v) => ({ ...v, address: e.target.value }))}
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         />
                       </div>
                       <div>
@@ -762,7 +762,7 @@ export function AllocationScreen({
                           type="date"
                           value={empForm.birthDate}
                           onChange={(e) => setEmpForm((v) => ({ ...v, birthDate: e.target.value }))}
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         />
                       </div>
                       <div>
@@ -772,7 +772,7 @@ export function AllocationScreen({
                         <select
                           value={empForm.gender}
                           onChange={(e) => setEmpForm((v) => ({ ...v, gender: e.target.value }))}
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         >
                           <option value="">בחר</option>
                           <option value="זכר">זכר</option>
@@ -784,7 +784,7 @@ export function AllocationScreen({
                         <input
                           value={empForm.maritalStatus}
                           onChange={(e) => setEmpForm((v) => ({ ...v, maritalStatus: e.target.value }))}
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         />
                       </div>
                       <div>
@@ -797,7 +797,7 @@ export function AllocationScreen({
                             setEmpForm((v) => ({ ...v, subRole: e.target.value }));
                             setEmpLicenseDocs({});
                           }}
-                          className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         >
                           <option value="">בחר תת-תפקיד</option>
                           {subRoleChoices.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -815,7 +815,7 @@ export function AllocationScreen({
                           inputMode="numeric"
                           value={empForm.licenseNumber}
                           onChange={(e) => setEmpForm((v) => ({ ...v, licenseNumber: e.target.value }))}
-                          className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         />
                       </div>
                     )}
@@ -830,7 +830,7 @@ export function AllocationScreen({
                           <input
                             value={empForm.bankName}
                             onChange={(e) => setEmpForm((v) => ({ ...v, bankName: e.target.value }))}
-                            className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                            className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                           />
                         </div>
                         <div>
@@ -840,7 +840,7 @@ export function AllocationScreen({
                           <input
                             value={empForm.bankBranch}
                             onChange={(e) => setEmpForm((v) => ({ ...v, bankBranch: e.target.value }))}
-                            className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                            className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                           />
                         </div>
                         <div>
@@ -850,7 +850,7 @@ export function AllocationScreen({
                           <input
                             value={empForm.bankAccountNumber}
                             onChange={(e) => setEmpForm((v) => ({ ...v, bankAccountNumber: e.target.value }))}
-                            className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                            className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                           />
                         </div>
                         <div>
@@ -860,7 +860,7 @@ export function AllocationScreen({
                           <input
                             value={empForm.vatNumber}
                             onChange={(e) => setEmpForm((v) => ({ ...v, vatNumber: e.target.value }))}
-                            className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                            className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                           />
                         </div>
                       </div>
@@ -925,7 +925,7 @@ export function AllocationScreen({
                   value={tzQuery}
                   onChange={(e) => setTzQuery(e.target.value)}
                   placeholder="הקלדת ת.ז…"
-                  className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md"
+                  className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                 />
                 {searching && <p className="text-label-sm text-on-surface-variant mt-1">מחפש…</p>}
                 {searchResults.length > 0 && (
@@ -964,7 +964,7 @@ export function AllocationScreen({
                     <input
                       value={newEmployee.name}
                       onChange={(e) => setNewEmployee((v) => ({ ...v, name: e.target.value }))}
-                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     />
                   </div>
                   <div>
@@ -974,7 +974,7 @@ export function AllocationScreen({
                     <input
                       value={newEmployee.tz}
                       onChange={(e) => { setNewEmployee((v) => ({ ...v, tz: e.target.value })); setTzQuery(e.target.value); }}
-                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     />
                   </div>
                   <div>
@@ -984,7 +984,7 @@ export function AllocationScreen({
                     <input
                       value={newEmployee.phone}
                       onChange={(e) => setNewEmployee((v) => ({ ...v, phone: e.target.value }))}
-                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     />
                   </div>
                   <div>
@@ -994,7 +994,7 @@ export function AllocationScreen({
                     <input
                       value={newEmployee.email}
                       onChange={(e) => setNewEmployee((v) => ({ ...v, email: e.target.value }))}
-                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     />
                   </div>
                   <div>
@@ -1002,7 +1002,7 @@ export function AllocationScreen({
                     <input
                       value={newEmployee.address}
                       onChange={(e) => setNewEmployee((v) => ({ ...v, address: e.target.value }))}
-                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     />
                   </div>
                   <div>
@@ -1011,7 +1011,7 @@ export function AllocationScreen({
                       type="date"
                       value={newEmployee.birthDate}
                       onChange={(e) => setNewEmployee((v) => ({ ...v, birthDate: e.target.value }))}
-                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     />
                   </div>
                   <div>
@@ -1021,7 +1021,7 @@ export function AllocationScreen({
                     <select
                       value={newEmployee.gender}
                       onChange={(e) => setNewEmployee((v) => ({ ...v, gender: e.target.value }))}
-                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     >
                       <option value="">בחר</option>
                       <option value="זכר">זכר</option>
@@ -1033,7 +1033,7 @@ export function AllocationScreen({
                     <input
                       value={newEmployee.maritalStatus}
                       onChange={(e) => setNewEmployee((v) => ({ ...v, maritalStatus: e.target.value }))}
-                      className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     />
                   </div>
                 </div>
@@ -1043,25 +1043,25 @@ export function AllocationScreen({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl">
               <div>
                 <label className="text-label-lg text-on-surface block mb-2">תת-תפקיד <span className="text-error">*</span></label>
-                <select value={subRole} onChange={(e) => { setSubRole(e.target.value); setLicenseDocs({}); setLicenseNumber(''); }} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md">
+                <select value={subRole} onChange={(e) => { setSubRole(e.target.value); setLicenseDocs({}); setLicenseNumber(''); }} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md">
                   <option value="">בחר תת-תפקיד</option>
                   {subRoleChoices.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-label-lg text-on-surface block mb-2">שעות מוקצות <span className="text-error">*</span></label>
-                <input type="number" value={allocatedHours} onChange={(e) => setAllocatedHours(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md" />
+                <input type="number" value={allocatedHours} onChange={(e) => setAllocatedHours(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
               </div>
               <div>
                 <label className="text-label-lg text-on-surface block mb-2">תעריף שעתי מוסכם <span className="text-error">*</span></label>
-                <input type="number" value={agreedHourlyRate} onChange={(e) => setAgreedHourlyRate(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md" />
+                <input type="number" value={agreedHourlyRate} onChange={(e) => setAgreedHourlyRate(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
               </div>
             </div>
 
             {needsLicenseNumber && (
               <div className="max-w-xs">
                 <label className="text-label-lg text-on-surface block mb-2">מס&apos; רישיון <span className="text-error">*</span></label>
-                <input type="text" inputMode="numeric" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-3 px-3 text-body-md" />
+                <input type="text" inputMode="numeric" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
               </div>
             )}
 
@@ -1072,25 +1072,25 @@ export function AllocationScreen({
                   <label className="text-label-sm text-on-surface-variant block mb-2">
                     בנק <span className="text-error">*</span>
                   </label>
-                  <input value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
+                  <input value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
                 </div>
                 <div>
                   <label className="text-label-sm text-on-surface-variant block mb-2">
                     סניף <span className="text-error">*</span>
                   </label>
-                  <input value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
+                  <input value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
                 </div>
                 <div>
                   <label className="text-label-sm text-on-surface-variant block mb-2">
                     מספר חשבון <span className="text-error">*</span>
                   </label>
-                  <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
+                  <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
                 </div>
                 <div>
                   <label className="text-label-sm text-on-surface-variant block mb-2">
                     מספר עוסק <span className="text-error">*</span>
                   </label>
-                  <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
+                  <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
                 </div>
               </div>
             </div>
