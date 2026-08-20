@@ -82,6 +82,9 @@ export async function POST(req: NextRequest) {
   if (!givenEmployeeId && !newEmployee?.tz) {
     return NextResponse.json({ ok: false, message: 'חסר עובד לשיוך.' }, { status: 400 });
   }
+  if (!bankName?.trim() || !bankBranch?.trim() || !bankAccountNumber?.trim() || !vatNumber?.trim()) {
+    return NextResponse.json({ ok: false, message: 'פרטי בנק ומספר עוסק הם שדות חובה.' }, { status: 400 });
+  }
 
   try {
     const row = await fetchInvoiceBudgetRow(gate.institution.mosadId, budgetRowId, gate.requestId);

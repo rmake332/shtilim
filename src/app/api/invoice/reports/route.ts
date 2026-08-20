@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(reportedHours) || !Number.isFinite(reportedRate) || (reportedHours as number) <= 0 || (reportedRate as number) <= 0) {
     return NextResponse.json({ ok: false, message: 'שעות ותעריף חייבים להיות גדולים מ-0.' }, { status: 400 });
   }
+  if (!invoiceNumber?.trim()) {
+    return NextResponse.json({ ok: false, message: "מס' חשבונית הוא שדה חובה." }, { status: 400 });
+  }
 
   try {
     const position = await getPosition(positionId, gate.requestId);

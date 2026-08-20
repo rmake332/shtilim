@@ -251,6 +251,11 @@ export function AllocationScreen({
     for (const d of pendingDocs) {
       if (!licenseDocs[d.fieldId]) { setFormError(`יש לצרף ${d.label}.`); return; }
     }
+    if (!bankName.trim() || !bankBranch.trim() || !bankAccountNumber.trim()) {
+      setFormError('יש להזין פרטי בנק מלאים (בנק, סניף ומספר חשבון).');
+      return;
+    }
+    if (!vatNumber.trim()) { setFormError('יש להזין מספר עוסק.'); return; }
     const hoursNum = Number(allocatedHours);
     const rateNum = Number(agreedHourlyRate);
     if (!Number.isFinite(hoursNum) || hoursNum <= 0) { setFormError('יש להזין שעות מוקצות תקינות.'); return; }
@@ -421,6 +426,11 @@ export function AllocationScreen({
     for (const d of pendingDocs) {
       if (!empLicenseDocs[d.fieldId]) { setEmpError(`יש לצרף ${d.label}.`); return; }
     }
+    if (!empForm.bankName.trim() || !empForm.bankBranch.trim() || !empForm.bankAccountNumber.trim()) {
+      setEmpError('יש להזין פרטי בנק מלאים (בנק, סניף ומספר חשבון).');
+      return;
+    }
+    if (!empForm.vatNumber.trim()) { setEmpError('יש להזין מספר עוסק.'); return; }
 
     setEmpSaving(true);
     try {
@@ -811,10 +821,12 @@ export function AllocationScreen({
                     )}
 
                     <div>
-                      <p className="text-label-lg text-on-surface font-bold mb-3">פרטי בנק (לא חובה, לצורך הפקת בקשת תשלום)</p>
+                      <p className="text-label-lg text-on-surface font-bold mb-3">פרטי בנק (לצורך הפקת בקשת תשלום)</p>
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 max-w-3xl">
                         <div>
-                          <label className="text-label-sm text-on-surface-variant block mb-2">בנק</label>
+                          <label className="text-label-sm text-on-surface-variant block mb-2">
+                            בנק <span className="text-error">*</span>
+                          </label>
                           <input
                             value={empForm.bankName}
                             onChange={(e) => setEmpForm((v) => ({ ...v, bankName: e.target.value }))}
@@ -822,7 +834,9 @@ export function AllocationScreen({
                           />
                         </div>
                         <div>
-                          <label className="text-label-sm text-on-surface-variant block mb-2">סניף</label>
+                          <label className="text-label-sm text-on-surface-variant block mb-2">
+                            סניף <span className="text-error">*</span>
+                          </label>
                           <input
                             value={empForm.bankBranch}
                             onChange={(e) => setEmpForm((v) => ({ ...v, bankBranch: e.target.value }))}
@@ -830,7 +844,9 @@ export function AllocationScreen({
                           />
                         </div>
                         <div>
-                          <label className="text-label-sm text-on-surface-variant block mb-2">מספר חשבון</label>
+                          <label className="text-label-sm text-on-surface-variant block mb-2">
+                            מספר חשבון <span className="text-error">*</span>
+                          </label>
                           <input
                             value={empForm.bankAccountNumber}
                             onChange={(e) => setEmpForm((v) => ({ ...v, bankAccountNumber: e.target.value }))}
@@ -838,7 +854,9 @@ export function AllocationScreen({
                           />
                         </div>
                         <div>
-                          <label className="text-label-sm text-on-surface-variant block mb-2">מספר עוסק</label>
+                          <label className="text-label-sm text-on-surface-variant block mb-2">
+                            מספר עוסק <span className="text-error">*</span>
+                          </label>
                           <input
                             value={empForm.vatNumber}
                             onChange={(e) => setEmpForm((v) => ({ ...v, vatNumber: e.target.value }))}
@@ -1048,22 +1066,30 @@ export function AllocationScreen({
             )}
 
             <div>
-              <p className="text-label-lg text-on-surface font-bold mb-3">פרטי בנק (לא חובה, לצורך הפקת בקשת תשלום)</p>
+              <p className="text-label-lg text-on-surface font-bold mb-3">פרטי בנק (לצורך הפקת בקשת תשלום)</p>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 max-w-3xl">
                 <div>
-                  <label className="text-label-sm text-on-surface-variant block mb-2">בנק</label>
+                  <label className="text-label-sm text-on-surface-variant block mb-2">
+                    בנק <span className="text-error">*</span>
+                  </label>
                   <input value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
                 </div>
                 <div>
-                  <label className="text-label-sm text-on-surface-variant block mb-2">סניף</label>
+                  <label className="text-label-sm text-on-surface-variant block mb-2">
+                    סניף <span className="text-error">*</span>
+                  </label>
                   <input value={bankBranch} onChange={(e) => setBankBranch(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
                 </div>
                 <div>
-                  <label className="text-label-sm text-on-surface-variant block mb-2">מספר חשבון</label>
+                  <label className="text-label-sm text-on-surface-variant block mb-2">
+                    מספר חשבון <span className="text-error">*</span>
+                  </label>
                   <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
                 </div>
                 <div>
-                  <label className="text-label-sm text-on-surface-variant block mb-2">מספר עוסק</label>
+                  <label className="text-label-sm text-on-surface-variant block mb-2">
+                    מספר עוסק <span className="text-error">*</span>
+                  </label>
                   <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md" />
                 </div>
               </div>

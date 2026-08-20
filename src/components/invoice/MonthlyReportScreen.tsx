@@ -179,6 +179,10 @@ export function MonthlyReportScreen({
       updateRow(positionId, { error: 'יש להזין שעות ותעריף תקינים.' });
       return;
     }
+    if (!row.invoiceNumber.trim()) {
+      updateRow(positionId, { error: "יש להזין מס' חשבונית." });
+      return;
+    }
     const existing = reports[positionId];
     if (!row.doc && !existing?.hasInvoiceDoc) {
       updateRow(positionId, { error: 'יש לצרף חשבונית.' });
@@ -311,7 +315,9 @@ export function MonthlyReportScreen({
                     <th className="px-5 py-3">שעות בפועל</th>
                     <th className="px-5 py-3">תעריף</th>
                     <th className="px-5 py-3">סה&quot;כ לתשלום</th>
-                    <th className="px-5 py-3">מס&apos; חשבונית</th>
+                    <th className="px-5 py-3">
+                      מס&apos; חשבונית <span className="text-error">*</span>
+                    </th>
                     <th className="px-5 py-3">
                       חשבונית <span className="text-error">*</span>
                     </th>
