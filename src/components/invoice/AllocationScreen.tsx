@@ -31,6 +31,7 @@ interface InvoicePosition {
   allocatedHours: number;
   agreedHourlyRate: number;
   allocationTransferDocGenerated: boolean;
+  inactive: boolean;
 }
 
 interface SearchResult {
@@ -336,6 +337,19 @@ export function AllocationScreen({
     else alert(json.message || 'שגיאה בהסרת העובד.');
   }
 
+  async function toggleActive(p: InvoicePosition) {
+    const willBeActive = p.inactive; // כרגע לא פעיל -> מפעילים; כרגע פעיל -> מסמנים לא פעיל
+    if (!willBeActive && !confirm('לסמן את העובד כלא פעיל? יתרת השעות שלא נוצלה תשוחרר חזרה לתקן, ולא יהיה ניתן לדווח עבורו שעות נוספות.')) return;
+    const res = await fetch(`/api/invoice/positions/${p.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, active: willBeActive }),
+    });
+    const json = await res.json();
+    if (json.ok) setPositions((prev) => prev.map((row) => (row.id === p.id ? json.position : row)));
+    else alert(json.message || 'שגיאה בעדכון הסטטוס.');
+  }
+
   async function finishAllocation() {
     setFinishing(true);
     setFinishMsg('');
@@ -425,17 +439,18 @@ export function AllocationScreen({
                     <th className="px-5 py-3">תת-תפקיד</th>
                     <th className="px-5 py-3">שעות מוקצות</th>
                     <th className="px-5 py-3">תעריף שעתי מוסכם</th>
+                    <th className="px-5 py-3">סטטוס</th>
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/30">
                   {positions.length === 0 && (
-                    <tr><td colSpan={5} className="px-5 py-8 text-center text-on-surface-variant">אין עדיין עובדים מוקצים לתקן זה.</td></tr>
+                    <tr><td colSpan={6} className="px-5 py-8 text-center text-on-surface-variant">אין עדיין עובדים מוקצים לתקן זה.</td></tr>
                   )}
                   {positions.map((p) => {
                     const isEditing = editingId === p.id;
                     return (
-                      <tr key={p.id}>
+                      <tr key={p.id} className={p.inactive ? 'opacity-60' : ''}>
                         <td className="px-5 py-3 font-bold">{p.employeeName}</td>
                         <td className="px-5 py-3">{p.subRole}</td>
                         <td className="px-5 py-3">
@@ -464,6 +479,17 @@ export function AllocationScreen({
                           )}
                         </td>
                         <td className="px-5 py-3">
+                          {p.inactive ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-error-container/40 text-error text-label-sm font-bold">
+                              <Icon name="pause_circle" className="text-[16px]" fill /> לא פעיל
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tertiary-container/40 text-on-surface text-label-sm font-bold">
+                              <Icon name="check_circle" className="text-tertiary text-[16px]" fill /> פעיל
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
                           {isEditing ? (
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-2">
@@ -488,12 +514,22 @@ export function AllocationScreen({
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
+                              {!p.inactive && (
+                                <button
+                                  onClick={() => startEditRow(p)}
+                                  className="text-on-surface-variant hover:text-primary"
+                                  aria-label="עריכה"
+                                >
+                                  <Icon name="edit" className="text-[18px]" />
+                                </button>
+                              )}
                               <button
-                                onClick={() => startEditRow(p)}
-                                className="text-on-surface-variant hover:text-primary"
-                                aria-label="עריכה"
+                                onClick={() => void toggleActive(p)}
+                                className="text-on-surface-variant hover:text-tertiary"
+                                aria-label={p.inactive ? 'הפעלה מחדש' : 'סימון כלא פעיל'}
+                                title={p.inactive ? 'הפעלה מחדש' : 'סימון כלא פעיל'}
                               >
-                                <Icon name="edit" className="text-[18px]" />
+                                <Icon name={p.inactive ? 'play_circle' : 'pause_circle'} className="text-[20px]" />
                               </button>
                               <button onClick={() => void removePosition(p.id)} className="text-on-surface-variant hover:text-error" aria-label="הסרה">
                                 <Icon name="delete" className="text-[20px]" />

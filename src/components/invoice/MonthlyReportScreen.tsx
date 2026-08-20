@@ -23,6 +23,7 @@ interface InvoicePosition {
   subRole: string;
   allocatedHours: number;
   agreedHourlyRate: number;
+  inactive: boolean;
 }
 
 interface InvoiceMonthlyReport {
@@ -167,6 +168,11 @@ export function MonthlyReportScreen({
   async function saveRow(positionId: string) {
     const row = rows[positionId];
     if (!row) return;
+    const position = positions.find((p) => p.id === positionId);
+    if (position?.inactive) {
+      updateRow(positionId, { error: 'עובד לא פעיל - לא ניתן לדווח עבורו שעות נוספות.' });
+      return;
+    }
     const hours = Number(row.hours);
     const rate = Number(row.rate);
     if (!Number.isFinite(hours) || hours <= 0 || !Number.isFinite(rate) || rate <= 0) {
@@ -321,8 +327,15 @@ export function MonthlyReportScreen({
                     const report = reports[p.id];
                     if (!row) return null;
                     return (
-                      <tr key={p.id} className="align-middle">
-                        <td className="px-5 py-3 font-bold">{p.employeeName}</td>
+                      <tr key={p.id} className={`align-middle ${p.inactive ? 'opacity-60' : ''}`}>
+                        <td className="px-5 py-3 font-bold">
+                          {p.employeeName}
+                          {p.inactive && (
+                            <span className="mr-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error-container/40 text-error text-label-sm font-bold align-middle">
+                              <Icon name="pause_circle" className="text-[14px]" fill /> לא פעיל
+                            </span>
+                          )}
+                        </td>
                         <td className="px-5 py-3">{p.subRole}</td>
                         <td className="px-5 py-3">{formatNum(p.allocatedHours)}</td>
                         <td className="px-5 py-3">
@@ -330,7 +343,8 @@ export function MonthlyReportScreen({
                             type="number"
                             value={row.hours}
                             onChange={(e) => updateRow(p.id, { hours: e.target.value })}
-                            className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                            disabled={p.inactive}
+                            className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md disabled:opacity-50"
                           />
                         </td>
                         <td className="px-5 py-3">
@@ -338,7 +352,8 @@ export function MonthlyReportScreen({
                             type="number"
                             value={row.rate}
                             onChange={(e) => updateRow(p.id, { rate: e.target.value })}
-                            className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                            disabled={p.inactive}
+                            className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md disabled:opacity-50"
                           />
                         </td>
                         <td className="px-5 py-3">{report ? formatNum(report.totalPay) : ' - '}</td>
@@ -347,7 +362,8 @@ export function MonthlyReportScreen({
                             type="text"
                             value={row.invoiceNumber}
                             onChange={(e) => updateRow(p.id, { invoiceNumber: e.target.value })}
-                            className="w-28 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                            disabled={p.inactive}
+                            className="w-28 bg-surface-container-low rounded-lg py-2 px-2 text-body-md disabled:opacity-50"
                           />
                         </td>
                         <td className="px-5 py-3 min-w-[220px]">
@@ -356,22 +372,26 @@ export function MonthlyReportScreen({
                               <Icon name="check_circle" className="text-[16px]" fill /> קובץ הועלה
                             </span>
                           ) : (
-                            <DocUpload
-                              label=""
-                              value={row.doc}
-                              onChange={(doc) => updateRow(p.id, { doc })}
-                            />
+                            !p.inactive && (
+                              <DocUpload
+                                label=""
+                                value={row.doc}
+                                onChange={(doc) => updateRow(p.id, { doc })}
+                              />
+                            )
                           )}
                         </td>
                         <td className="px-5 py-3">
-                          <button
-                            onClick={() => void saveRow(p.id)}
-                            disabled={row.saving}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-label-sm hover:opacity-90 disabled:opacity-50 transition-all"
-                          >
-                            <Icon name="save" className="text-[16px]" />
-                            {row.saving ? 'שומר…' : 'שמירה'}
-                          </button>
+                          {!p.inactive && (
+                            <button
+                              onClick={() => void saveRow(p.id)}
+                              disabled={row.saving}
+                              className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-label-sm hover:opacity-90 disabled:opacity-50 transition-all"
+                            >
+                              <Icon name="save" className="text-[16px]" />
+                              {row.saving ? 'שומר…' : 'שמירה'}
+                            </button>
+                          )}
                           {row.error && <p className="text-error text-label-sm mt-1">{row.error}</p>}
                         </td>
                       </tr>

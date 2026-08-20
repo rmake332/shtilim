@@ -344,6 +344,7 @@ export const INVOICE_POSITION_FIELDS = {
   allocatedHours: 'flds5gSKUmvMzVIcM', // שעות מוקצות (number)
   agreedHourlyRate: 'fldThxq6r24dwsq0l', // תעריף שעתי מוסכם (number), לא יכול לעלות על BUDGET_FIELDS.maxHourlyRate
   allocationTransferDocGenerated: 'fldstyCd8iVil4hwa', // בקשת העברות (הקצאה) הופקה (checkbox, stub)
+  inactive: 'fld9P3OlrpkfWwpgK', // לא פעיל (checkbox) - ראו setPositionActive ב-src/lib/invoice/positions.ts
 } as const;
 
 /**

@@ -8,6 +8,7 @@ import {
   type AirtableRecord,
 } from '@/lib/airtable/client';
 import { TABLES, INVOICE_POSITION_FIELDS } from '@/lib/airtable/schema';
+import { listReportsForPosition } from '@/lib/invoice/reports';
 
 /** הקצאת עובד יחיד תחת שורת תקציב חשבונית אחת. */
 export interface InvoicePosition {
@@ -19,6 +20,8 @@ export interface InvoicePosition {
   allocatedHours: number;
   agreedHourlyRate: number;
   allocationTransferDocGenerated: boolean;
+  /** עובד לא פעיל בתקן זה - לא ניתן לדווח עבורו שעות נוספות. ראו setPositionActive. */
+  inactive: boolean;
 }
 
 function num(v: unknown): number {
@@ -50,6 +53,7 @@ function mapPosition(r: AirtableRecord): InvoicePosition {
     allocatedHours: num(f[INVOICE_POSITION_FIELDS.allocatedHours]),
     agreedHourlyRate: num(f[INVOICE_POSITION_FIELDS.agreedHourlyRate]),
     allocationTransferDocGenerated: Boolean(f[INVOICE_POSITION_FIELDS.allocationTransferDocGenerated]),
+    inactive: Boolean(f[INVOICE_POSITION_FIELDS.inactive]),
   };
 }
 
@@ -108,6 +112,7 @@ export async function createPosition(
     allocatedHours: params.allocatedHours,
     agreedHourlyRate: params.agreedHourlyRate,
     allocationTransferDocGenerated: false,
+    inactive: false,
   };
 }
 
@@ -137,6 +142,33 @@ export async function updatePosition(
 
 export async function deletePosition(positionId: string, requestId?: string): Promise<void> {
   await deleteRecord(TABLES.invoicePositions, positionId, requestId);
+}
+
+/**
+ * מסמן הקצאה כלא פעילה/פעילה. עובד שהפך ללא פעיל באמצע השנה לא נמחק (יש לו כבר
+ * דיווחים חודשיים היסטוריים), אבל לא אמור להמשיך "לתפוס" יתרת שעות/תקציב של
+ * התקן קדימה: שעות מוקצות מוקטנות אוטומטית למה שכבר דווח בפועל (המאזן משתחרר
+ * חזרה למאגר דרך ה-rollup הקיים ב-BUDGET_FIELDS.totalAllocatedHours), ודיווח
+ * חודשי חדש נחסם (ראו הבדיקה ב-src/app/api/invoice/reports/route.ts). הפעלה
+ * מחדש לא משחזרת את השעות שהוקטנו - יש להקצות מחדש ידנית אם צריך.
+ */
+export async function setPositionActive(
+  positionId: string,
+  active: boolean,
+  requestId?: string,
+): Promise<InvoicePosition> {
+  const current = await getPosition(positionId, requestId);
+  if (!current) throw new Error(`invoice position not found: ${positionId}`);
+
+  const fields: Record<string, unknown> = { [INVOICE_POSITION_FIELDS.inactive]: !active };
+  let allocatedHours = current.allocatedHours;
+  if (!active) {
+    const reports = await listReportsForPosition(positionId, requestId);
+    allocatedHours = reports.reduce((sum, r) => sum + r.reportedHours, 0);
+    fields[INVOICE_POSITION_FIELDS.allocatedHours] = allocatedHours;
+  }
+  await updateRecord(TABLES.invoicePositions, positionId, fields, requestId);
+  return { ...current, allocatedHours, inactive: !active };
 }
 
 /** מסמן את כל ההקצאות תחת שורת תקציב כ"בקשת העברות הופקה" (stub - אין עדיין הפקת מסמך בפועל). */

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
 import { fetchInvoiceBudgetRow } from '@/lib/invoice/budget';
-import { getPosition, updatePosition, deletePosition } from '@/lib/invoice/positions';
+import { getPosition, updatePosition, deletePosition, setPositionActive } from '@/lib/invoice/positions';
 import { checkLiveAnnualAllocation } from '@/lib/invoice/budgetCheck';
 import { listReportsForPosition } from '@/lib/invoice/reports';
 import { logger } from '@/lib/logger';
@@ -15,22 +15,37 @@ async function verifyOwnership(positionId: string, mosadId: string, requestId?: 
 
 /**
  * PATCH /api/invoice/positions/[id] - עריכת שעות מוקצות/תעריף/תת-תפקיד להקצאה קיימת,
- * במהלך "ניהול תקציב". בודק חי מול המכסה, תוך החרגת ההקצאה הנוכחית מעצמה.
+ * במהלך "ניהול תקציב". בודק חי מול המכסה, תוך החרגת ההקצאה הנוכחית מעצמה. עם
+ * `active` בגוף הבקשה - מסמן לא פעיל/פעיל מחדש (ראו setPositionActive), ומדלג על
+ * שאר הלוגיקה.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
   const gate = await gateByToken(req, body.token);
   if (gate instanceof NextResponse) return gate;
 
-  const { subRole, allocatedHours, agreedHourlyRate } = body as {
+  const { subRole, allocatedHours, agreedHourlyRate, active } = body as {
     subRole?: string;
     allocatedHours?: number;
     agreedHourlyRate?: number;
+    active?: boolean;
   };
 
   try {
     const position = await verifyOwnership(params.id, gate.institution.mosadId, gate.requestId);
     if (!position) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
+
+    if (typeof active === 'boolean') {
+      const updated = await setPositionActive(params.id, active, gate.requestId);
+      return NextResponse.json({ ok: true, position: updated });
+    }
+
+    if (position.inactive) {
+      return NextResponse.json(
+        { ok: false, message: 'לא ניתן לערוך הקצאה של עובד לא פעיל. יש להפעיל אותו מחדש תחילה.' },
+        { status: 409 },
+      );
+    }
 
     const nextHours = Number.isFinite(allocatedHours) ? (allocatedHours as number) : position.allocatedHours;
     const nextRate = Number.isFinite(agreedHourlyRate) ? (agreedHourlyRate as number) : position.agreedHourlyRate;

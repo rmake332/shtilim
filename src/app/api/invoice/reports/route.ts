@@ -59,6 +59,12 @@ export async function POST(req: NextRequest) {
   try {
     const position = await getPosition(positionId, gate.requestId);
     if (!position) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
+    if (position.inactive) {
+      return NextResponse.json(
+        { ok: false, message: 'עובד זה סומן כלא פעיל בתקן - לא ניתן לדווח עבורו שעות נוספות.' },
+        { status: 409 },
+      );
+    }
     const row = await fetchInvoiceBudgetRow(gate.institution.mosadId, position.budgetRowId, gate.requestId);
     if (!row) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
 
