@@ -228,13 +228,13 @@ export async function POST(req: NextRequest) {
         ofekAllRecordId = combined.recordId;
         ofekRowForDisplay = combined;
         effectiveKey = combinedKey;
-        // Back out the other roles → values for the CURRENT position only.
+        // Back out the other roles → values for the CURRENT position only. השהייה
+        // שחוזרת מהמחשבון תלויה בהיקף המשולב (23 ⇐ 18) גם כשהיא לא נכנסת למפתח
+        // עצמו (existingStayForCombined), ולכן יש לחסר את שהיית התקנים הקיימים
+        // מהתוצאה בכל שכבה, לא רק בגנים.
         frontal = Math.max(0, combined.frontalHours - existing.frontalHours);
         individual = Math.max(0, combined.individualHours - existing.individualHours);
-        // גנים: חסר שהייה קיימת. יסודי/חטיבה: שהייה לא נכנסה ל-combined, אז combined.stayHours = שהייה של התפקיד הנוכחי בלבד.
-        stay = isGanim
-          ? Math.max(0, combined.stayHours - existing.stayHours)
-          : combined.stayHours;
+        stay = Math.max(0, combined.stayHours - existing.stayHours);
       }
     }
 
