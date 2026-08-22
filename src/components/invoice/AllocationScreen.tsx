@@ -255,7 +255,7 @@ export function AllocationScreen({
       setFormError('יש להזין פרטי בנק מלאים (בנק, סניף ומספר חשבון).');
       return;
     }
-    if (!vatNumber.trim()) { setFormError('יש להזין מספר עוסק.'); return; }
+    if (!/^\d{9}$/.test(vatNumber.trim())) { setFormError('מספר עוסק חייב להיות בן 9 ספרות.'); return; }
     const hoursNum = Number(allocatedHours);
     const rateNum = Number(agreedHourlyRate);
     if (!Number.isFinite(hoursNum) || hoursNum <= 0) { setFormError('יש להזין שעות מוקצות תקינות.'); return; }
@@ -430,7 +430,7 @@ export function AllocationScreen({
       setEmpError('יש להזין פרטי בנק מלאים (בנק, סניף ומספר חשבון).');
       return;
     }
-    if (!empForm.vatNumber.trim()) { setEmpError('יש להזין מספר עוסק.'); return; }
+    if (!/^\d{9}$/.test(empForm.vatNumber.trim())) { setEmpError('מספר עוסק חייב להיות בן 9 ספרות.'); return; }
 
     setEmpSaving(true);
     try {
@@ -860,6 +860,9 @@ export function AllocationScreen({
                           <input
                             value={empForm.vatNumber}
                             onChange={(e) => setEmpForm((v) => ({ ...v, vatNumber: e.target.value }))}
+                            inputMode="numeric"
+                            maxLength={9}
+                            placeholder="9 ספרות"
                             className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                           />
                         </div>
@@ -1090,7 +1093,14 @@ export function AllocationScreen({
                   <label className="text-label-sm text-on-surface-variant block mb-2">
                     מספר עוסק <span className="text-error">*</span>
                   </label>
-                  <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
+                  <input
+                    value={vatNumber}
+                    onChange={(e) => setVatNumber(e.target.value)}
+                    inputMode="numeric"
+                    maxLength={9}
+                    placeholder="9 ספרות"
+                    className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
+                  />
                 </div>
               </div>
             </div>

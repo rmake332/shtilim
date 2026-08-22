@@ -8,6 +8,13 @@ import {
 } from '@/lib/airtable/client';
 import { TABLES, INVOICE_REPORT_FIELDS } from '@/lib/airtable/schema';
 
+/** קובץ החשבונית המצורף לדיווח - נשלף בזמן הפקת "בקשת תשלום" (מיזוג PDF, העלאה נפרדת ל-Drive). */
+export interface InvoiceAttachment {
+  url: string;
+  filename: string;
+  contentType: string;
+}
+
 /** דיווח שעות בפועל וחשבונית לתשלום, לעובד חשבונית אחד בחודש נתון. */
 export interface InvoiceMonthlyReport {
   id: string;
@@ -18,10 +25,13 @@ export interface InvoiceMonthlyReport {
   reportedRate: number;
   totalPay: number;
   hasInvoiceDoc: boolean;
+  invoiceAttachment: InvoiceAttachment | null;
   invoiceNumber: string;
   reportedAt: string;
   monthlyTransferDocGenerated: boolean;
   paymentRequestDocUrl: string;
+  paymentRequestFolderUrl: string;
+  mergedPdfUrl: string;
 }
 
 function num(v: unknown): number {
@@ -38,6 +48,14 @@ function recordLinks(v: unknown): string[] {
   return v.map((x) => (typeof x === 'string' ? x : (x as { id?: string })?.id)).filter(Boolean) as string[];
 }
 
+/** שדה attachments של Airtable מוחזר כמערך {url, filename, type, ...} - לוקחים רק את הראשון. */
+function invoiceAttachment(v: unknown): InvoiceAttachment | null {
+  if (!Array.isArray(v) || !v[0]) return null;
+  const a = v[0] as { url?: string; filename?: string; type?: string };
+  if (!a.url) return null;
+  return { url: a.url, filename: a.filename || 'חשבונית', contentType: a.type || 'application/octet-stream' };
+}
+
 function mapReport(r: AirtableRecord): InvoiceMonthlyReport {
   const f = r.fields;
   const doc = f[INVOICE_REPORT_FIELDS.invoiceDoc];
@@ -49,10 +67,13 @@ function mapReport(r: AirtableRecord): InvoiceMonthlyReport {
     reportedRate: num(f[INVOICE_REPORT_FIELDS.reportedRate]),
     totalPay: num(f[INVOICE_REPORT_FIELDS.totalPay]),
     hasInvoiceDoc: Array.isArray(doc) && doc.length > 0,
+    invoiceAttachment: invoiceAttachment(doc),
     invoiceNumber: str(f[INVOICE_REPORT_FIELDS.invoiceNumber]),
     reportedAt: str(f[INVOICE_REPORT_FIELDS.reportedAt]),
     monthlyTransferDocGenerated: Boolean(f[INVOICE_REPORT_FIELDS.monthlyTransferDocGenerated]),
     paymentRequestDocUrl: str(f[INVOICE_REPORT_FIELDS.paymentRequestDocUrl]),
+    paymentRequestFolderUrl: str(f[INVOICE_REPORT_FIELDS.paymentRequestFolderUrl]),
+    mergedPdfUrl: str(f[INVOICE_REPORT_FIELDS.mergedPdfUrl]),
   };
 }
 
@@ -138,10 +159,13 @@ export async function upsertReport(
     reportedRate: params.reportedRate,
     totalPay,
     hasInvoiceDoc: false,
+    invoiceAttachment: null,
     invoiceNumber: params.invoiceNumber,
     reportedAt,
     monthlyTransferDocGenerated: false,
     paymentRequestDocUrl: '',
+    paymentRequestFolderUrl: '',
+    mergedPdfUrl: '',
   };
 }
 
@@ -163,11 +187,14 @@ export async function markMonthFinished(
   return reports.length;
 }
 
-/** כותב את קישור מסמך "בקשת תשלום" על כל שורות הדיווח של החודש (לקבוצת positionIds). */
+/**
+ * כותב את קישורי "בקשת תשלום" (מסמך + תיקייה + PDF מאוחד) על כל שורות הדיווח של
+ * החודש (לקבוצת positionIds) - אותה מוסכמה כמו הצ'קבוקס monthlyTransferDocGenerated.
+ */
 export async function saveDocUrlForMonth(
   positionIds: string[],
   month: string,
-  url: string,
+  urls: { docUrl: string; folderUrl: string; mergedPdfUrl: string },
   requestId?: string,
 ): Promise<void> {
   const reports = await listReportsForPositions(positionIds, month, requestId);
@@ -175,7 +202,11 @@ export async function saveDocUrlForMonth(
     await updateRecord(
       TABLES.invoiceReports,
       rep.id,
-      { [INVOICE_REPORT_FIELDS.paymentRequestDocUrl]: url },
+      {
+        [INVOICE_REPORT_FIELDS.paymentRequestDocUrl]: urls.docUrl,
+        [INVOICE_REPORT_FIELDS.paymentRequestFolderUrl]: urls.folderUrl,
+        [INVOICE_REPORT_FIELDS.mergedPdfUrl]: urls.mergedPdfUrl,
+      },
       requestId,
     );
   }

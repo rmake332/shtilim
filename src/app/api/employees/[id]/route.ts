@@ -28,6 +28,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { employee } = body as { employee: EmployeePatchInput };
   if (!employee) return NextResponse.json({ ok: false, message: 'חסרים נתונים.' }, { status: 400 });
+  if (employee.vatNumber && !/^\d{9}$/.test(employee.vatNumber.trim())) {
+    return NextResponse.json({ ok: false, message: 'מספר עוסק חייב להיות בן 9 ספרות.' }, { status: 400 });
+  }
 
   const fields: Record<string, unknown> = {};
   if (employee.name)          fields[EMPLOYEE_FIELDS.name]          = employee.name;

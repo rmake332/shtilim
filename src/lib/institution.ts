@@ -22,6 +22,8 @@ export interface Institution {
   payrollEmail?: string;
   /** חריג ידני: מבקש אישור-העדר עבירות אלימות גם כשהשכבה אינה גנים. */
   requireViolenceCert?: boolean;
+  /** כתובות מייל נוספות שמקבלות עותק מ"בקשת תשלום" בכל דיווח חודשי (אחת בכל שורה). */
+  paymentRequestCcEmails: string[];
 }
 
 const FORM_TOKEN_FIELD = 'form_token';
@@ -34,7 +36,13 @@ export async function resolveInstitutionByToken(
   // Dev bypass: in mock mode the token "dev" yields a fake institution (no real PAT/token needed).
   // layer 'גנים' so the violence-cert document path is exercisable in mock.
   if (process.env.AIRTABLE_MOCK === '1' && token === 'dev') {
-    return { mosadId: 'recDEV', name: 'שתילים ירושלים (DEV)', association: 'שתילים רשת חינוך', layer: 'גנים' };
+    return {
+      mosadId: 'recDEV',
+      name: 'שתילים ירושלים (DEV)',
+      association: 'שתילים רשת חינוך',
+      layer: 'גנים',
+      paymentRequestCcEmails: [],
+    };
   }
 
   if (!token || token.length < 12) return null;
@@ -72,5 +80,9 @@ export async function resolveInstitutionByToken(
     layer,
     payrollEmail: f[MOSAD_FIELDS.payrollEmail] ? String(f[MOSAD_FIELDS.payrollEmail]) : undefined,
     requireViolenceCert: Boolean(f[MOSAD_FIELDS.requireViolenceCert]),
+    paymentRequestCcEmails: String(f[MOSAD_FIELDS.paymentRequestCcEmails] ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
   };
 }

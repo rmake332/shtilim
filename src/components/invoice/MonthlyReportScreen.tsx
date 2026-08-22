@@ -36,6 +36,8 @@ interface InvoiceMonthlyReport {
   invoiceNumber: string;
   monthlyTransferDocGenerated: boolean;
   paymentRequestDocUrl: string;
+  paymentRequestFolderUrl: string;
+  mergedPdfUrl: string;
 }
 
 interface RowState {
@@ -48,6 +50,8 @@ interface RowState {
   /** true = שדות פתוחים לעריכה. שורה עם דיווח שמור נטענת נעולה (false) - "עריכה" פותחת אותה. */
   editing: boolean;
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** ברירת המחדל היא החודש הקודם - הדיווח החודשי בפועל מוגש בדרך כלל אחרי סיום החודש. */
 function defaultReportMonth(): string {
@@ -127,6 +131,8 @@ export function MonthlyReportScreen({
   const [finishing, setFinishing] = useState(false);
   const [finishMsg, setFinishMsg] = useState('');
   const [docError, setDocError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [toEmail, setToEmail] = useState('');
 
   async function loadData() {
     setLoading(true);
@@ -171,6 +177,10 @@ export function MonthlyReportScreen({
   async function saveRow(positionId: string) {
     const row = rows[positionId];
     if (!row) return;
+    if (monthLocked) {
+      updateRow(positionId, { error: 'חודש זה כבר ננעל - בקשת התשלום כבר נשלחה.' });
+      return;
+    }
     const position = positions.find((p) => p.id === positionId);
     if (position?.inactive) {
       updateRow(positionId, { error: 'עובד לא פעיל - לא ניתן לדווח עבורו שעות נוספות.' });
@@ -224,6 +234,7 @@ export function MonthlyReportScreen({
   }
 
   function startEditRow(positionId: string) {
+    if (monthLocked) return;
     updateRow(positionId, { editing: true, error: '' });
   }
 
@@ -242,19 +253,25 @@ export function MonthlyReportScreen({
   }
 
   async function finishMonth() {
+    if (!EMAIL_RE.test(toEmail.trim())) {
+      setFinishMsg('יש להזין כתובת מייל תקינה לפני השליחה.');
+      return;
+    }
     setFinishing(true);
     setFinishMsg('');
     setDocError('');
+    setEmailError('');
     try {
       const res = await fetch(`/api/invoice/budget-rows/${budgetRowId}/finish-report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, month }),
+        body: JSON.stringify({ token, month, toEmail: toEmail.trim() }),
       });
       const json = await res.json();
       if (json.ok) {
-        setFinishMsg('הדיווח החודשי סומן כהושלם.');
+        setFinishMsg('הדיווח החודשי סומן כהושלם והחודש ננעל.');
         if (json.docError) setDocError(json.docError);
+        if (json.emailError) setEmailError(json.emailError);
         await loadData();
       } else {
         setFinishMsg(json.message || 'שגיאה בסימון סיום הדיווח.');
@@ -275,8 +292,12 @@ export function MonthlyReportScreen({
 
   const totalReported = Object.values(reports).reduce((s, r) => s + r.reportedHours, 0);
   const totalSpent = Object.values(reports).reduce((s, r) => s + r.totalPay, 0);
-  // אם כבר קיים קישור מטעינה קודמת (למשל טעינה מחדש של העמוד) - מוצג מיד, בלי צורך ללחוץ שוב.
+  // חודש שכבר "סיום דיווח חודשי" נלחץ עבורו ננעל לצמיתות - אין עריכה חוזרת/שליחה חוזרת (v1).
+  const monthLocked = Object.values(reports).some((r) => r.monthlyTransferDocGenerated);
+  // אם כבר קיימים קישורים מטעינה קודמת (למשל טעינה מחדש של העמוד) - מוצגים מיד, בלי צורך ללחוץ שוב.
   const docUrl = Object.values(reports).find((r) => r.paymentRequestDocUrl)?.paymentRequestDocUrl || null;
+  const folderUrl = Object.values(reports).find((r) => r.paymentRequestFolderUrl)?.paymentRequestFolderUrl || null;
+  const mergedPdfUrl = Object.values(reports).find((r) => r.mergedPdfUrl)?.mergedPdfUrl || null;
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-bright" dir="rtl">
@@ -353,9 +374,9 @@ export function MonthlyReportScreen({
                     const row = rows[p.id];
                     const report = reports[p.id];
                     if (!row) return null;
-                    // לא פעיל - תמיד נעול, בלי אפשרות עריכה (דיווח חדש חסום גם בשרת).
+                    // לא פעיל, או שהחודש כבר ננעל לצמיתות - תמיד נעול, בלי אפשרות עריכה.
                     // אחרת - נעול כברירת מחדל ברגע שיש דיווח שמור, עד לחיצה על "עריכה".
-                    const locked = p.inactive || !row.editing;
+                    const locked = p.inactive || monthLocked || !row.editing;
                     return (
                       <tr key={p.id} className={`align-middle ${p.inactive ? 'opacity-60' : ''}`}>
                         <td className="px-5 py-3 font-bold">
@@ -427,7 +448,7 @@ export function MonthlyReportScreen({
                           )}
                         </td>
                         <td className="px-5 py-3">
-                          {p.inactive ? null : locked ? (
+                          {p.inactive || monthLocked ? null : locked ? (
                             <button
                               onClick={() => startEditRow(p.id)}
                               className="text-on-surface-variant hover:text-primary"
@@ -470,15 +491,39 @@ export function MonthlyReportScreen({
             </div>
           </div>
 
+          {monthLocked && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-tertiary-container/30 text-on-surface">
+              <Icon name="lock" className="text-tertiary text-[20px]" />
+              <span className="font-bold">חודש זה ננעל - בקשת התשלום כבר הופקה ונשלחה, לא ניתן לערוך או לשלוח שוב.</span>
+            </div>
+          )}
+
+          {!monthLocked && (
+            <div className="max-w-sm">
+              <label className="text-label-lg text-on-surface block mb-1">
+                כתובת מייל לשליחת בקשת התשלום <span className="text-error">*</span>
+              </label>
+              <input
+                type="email"
+                value={toEmail}
+                onChange={(e) => setToEmail(e.target.value)}
+                placeholder="example@mail.com"
+                className="w-full bg-surface-container-low rounded-lg py-2.5 px-3 text-body-md"
+              />
+            </div>
+          )}
+
           <div className="flex items-center gap-4 flex-wrap">
-            <button
-              onClick={() => void finishMonth()}
-              disabled={finishing || positions.length === 0}
-              className="flex items-center gap-2 px-6 py-3 bg-tertiary text-on-tertiary rounded-xl font-bold text-label-lg hover:opacity-90 disabled:opacity-50 transition-all"
-            >
-              <Icon name="task_alt" className="text-[20px]" />
-              {finishing ? 'מסמן…' : 'סיום דיווח חודשי'}
-            </button>
+            {!monthLocked && (
+              <button
+                onClick={() => void finishMonth()}
+                disabled={finishing || positions.length === 0}
+                className="flex items-center gap-2 px-6 py-3 bg-tertiary text-on-tertiary rounded-xl font-bold text-label-lg hover:opacity-90 disabled:opacity-50 transition-all"
+              >
+                <Icon name="task_alt" className="text-[20px]" />
+                {finishing ? 'שולח…' : 'סיום דיווח חודשי ושליחה'}
+              </button>
+            )}
             {finishMsg && <span className="text-body-md text-on-surface-variant">{finishMsg}</span>}
             {docUrl && (
               <a
@@ -491,8 +536,31 @@ export function MonthlyReportScreen({
                 פתיחת מסמך בקשת תשלום
               </a>
             )}
-            {docError && <span className="text-error text-body-md">{docError}</span>}
+            {folderUrl && (
+              <a
+                href={folderUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant font-bold text-label-md hover:bg-surface-container transition-colors"
+              >
+                <Icon name="folder_open" className="text-[18px]" />
+                פתיחת תיקיית החודש
+              </a>
+            )}
+            {mergedPdfUrl && (
+              <a
+                href={mergedPdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant font-bold text-label-md hover:bg-surface-container transition-colors"
+              >
+                <Icon name="picture_as_pdf" className="text-[18px]" />
+                PDF מאוחד עם חשבוניות
+              </a>
+            )}
           </div>
+          {docError && <p className="text-error text-body-md">{docError}</p>}
+          {emailError && <p className="text-error text-body-md">שליחת המייל: {emailError}</p>}
         </div>
       </main>
 

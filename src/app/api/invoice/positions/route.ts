@@ -85,6 +85,9 @@ export async function POST(req: NextRequest) {
   if (!bankName?.trim() || !bankBranch?.trim() || !bankAccountNumber?.trim() || !vatNumber?.trim()) {
     return NextResponse.json({ ok: false, message: 'פרטי בנק ומספר עוסק הם שדות חובה.' }, { status: 400 });
   }
+  if (!/^\d{9}$/.test(vatNumber.trim())) {
+    return NextResponse.json({ ok: false, message: 'מספר עוסק חייב להיות בן 9 ספרות.' }, { status: 400 });
+  }
 
   try {
     const row = await fetchInvoiceBudgetRow(gate.institution.mosadId, budgetRowId, gate.requestId);

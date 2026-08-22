@@ -2,6 +2,13 @@ import 'server-only';
 import { logger } from '@/lib/logger';
 
 /**
+ * Webhook fired when a monthly invoice report is finished, so a Make scenario can send
+ * the "בקשת תשלום" email (to + cc). URL is configured per-project - no default, since
+ * the receiving Make scenario doesn't exist until set up for this specific project.
+ */
+const PAYMENT_REQUEST_EMAIL_WEBHOOK_URL = process.env.PAYMENT_REQUEST_EMAIL_WEBHOOK_URL || '';
+
+/**
  * Webhook fired to Make.com whenever a position is submitted (new) or edited.
  * Triggers the downstream "ממתין לעדכון" scenario. URL is overridable via env.
  */
@@ -108,5 +115,55 @@ export async function notifySubmitWebhook(
   } catch (e) {
     logger.error({ requestId, err: String(e) }, 'submit webhook error');
     await notifyError(errCtx(`Make webhook network error: ${String(e)}`), requestId);
+  }
+}
+
+/**
+ * Notify Make.com that a "בקשת תשלום" document is ready, so it can send it by email.
+ * Not best-effort like the other webhooks here - the caller shows the result (success/
+ * failure) directly to the user, since a silently-dropped payment-request email would be
+ * a real institution-facing problem, not just a missed developer-facing notification.
+ */
+export async function notifyPaymentRequestEmail(
+  params: {
+    to: string;
+    cc: string[];
+    institution: string;
+    /** פורמט "YYYY-MM". */
+    month: string;
+    docUrl: string;
+    folderUrl?: string;
+  },
+  requestId?: string,
+): Promise<{ ok: boolean; message?: string }> {
+  if (!PAYMENT_REQUEST_EMAIL_WEBHOOK_URL) {
+    logger.warn({ requestId }, 'payment request email skipped (no PAYMENT_REQUEST_EMAIL_WEBHOOK_URL configured)');
+    return { ok: false, message: 'שליחת המייל לא הוגדרה עדיין (חסר webhook).' };
+  }
+
+  const payload = {
+    'אל': params.to,
+    'העתק': params.cc,
+    'מוסד': params.institution,
+    'חודש': params.month,
+    'קישור למסמך': params.docUrl,
+    'קישור לתיקייה': params.folderUrl || '',
+  };
+
+  try {
+    const res = await fetch(PAYMENT_REQUEST_EMAIL_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      logger.error({ requestId, status: res.status }, 'payment request email webhook failed');
+      return { ok: false, message: `שליחת המייל נכשלה (סטטוס ${res.status}).` };
+    }
+    logger.info({ requestId, to: params.to }, 'payment request email webhook sent');
+    return { ok: true };
+  } catch (e) {
+    logger.error({ requestId, err: String(e) }, 'payment request email webhook error');
+    return { ok: false, message: 'שליחת המייל נכשלה (שגיאת רשת).' };
   }
 }

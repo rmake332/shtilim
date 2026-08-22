@@ -76,14 +76,14 @@ describe('buildPaymentRequestHtml', () => {
     expect(html).toContain('בנק לאומי (10), סניף 623, ח-ן 123456');
   });
 
-  it('leaves "תאריך תשלום" and "אישור מח\' שכר" empty for every data row', () => {
+  it('marks "אישור מח\' שכר" with a checkmark and leaves "תאריך תשלום" empty, for every data row', () => {
     const html = buildPaymentRequestHtml({
       institutionName: 'מוסד לדוגמה',
       month: '2026-07',
       rows: [row(), row({ employeeName: 'שרה לוי' })],
     });
-    // כל שורת נתונים מתחילה ב-<td></td> (אישור מח' שכר) ומסתיימת ב-<td></td> (תאריך תשלום)
-    const dataRowMatches = html.match(/<tr>\n\s*<td><\/td>[\s\S]*?<td><\/td>\n\s*<\/tr>/g) ?? [];
+    // כל שורת נתונים מתחילה ב-<td>✓</td> (אישור מח' שכר) ומסתיימת ב-<td></td> (תאריך תשלום)
+    const dataRowMatches = html.match(/<tr>\n\s*<td>&#10003;<\/td>[\s\S]*?<td><\/td>\n\s*<\/tr>/g) ?? [];
     expect(dataRowMatches).toHaveLength(2);
   });
 

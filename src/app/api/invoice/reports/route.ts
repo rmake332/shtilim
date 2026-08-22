@@ -71,6 +71,15 @@ export async function POST(req: NextRequest) {
     const row = await fetchInvoiceBudgetRow(gate.institution.mosadId, position.budgetRowId, gate.requestId);
     if (!row) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
 
+    const siblingPositions = await listPositionsForBudgetRow(position.budgetRowId, gate.requestId);
+    const monthReports = await listReportsForPositions(siblingPositions.map((p) => p.id), month, gate.requestId);
+    if (monthReports.some((r) => r.monthlyTransferDocGenerated)) {
+      return NextResponse.json(
+        { ok: false, message: 'חודש זה כבר ננעל - בקשת התשלום כבר נשלחה, לא ניתן לערוך.' },
+        { status: 409 },
+      );
+    }
+
     const check = await checkLiveMonthlyQuota(
       {
         budgetRowId: position.budgetRowId,

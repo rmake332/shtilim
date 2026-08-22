@@ -41,6 +41,7 @@ export const MOSAD_FIELDS = {
   formActive: 'fldZUUcUCKPYAXiZK', // form_active
   payrollEmail: 'fldSSieNcnGfsePGa', // מייל חשבת שכר
   requireViolenceCert: 'fldzSemUnwkFqqZk3', // אישורי משטרה לשכבה שאינה גנים (checkbox, חריג ידני)
+  paymentRequestCcEmails: 'fldjbzkovukmhn9D3', // כתובות מייל נוספות לבקשת תשלום (multilineText, כתובת אחת בכל שורה)
 } as const;
 
 /** רשימת עובדים fields */
@@ -364,6 +365,8 @@ export const INVOICE_REPORT_FIELDS = {
   monthlyTransferDocGenerated: 'fldFSU6ZsebjC4DVc', // בקשת העברות (חודשי) הופקה (checkbox, stub)
   invoiceNumber: 'flddLv3IBdFFuJa4f', // מס' חשבונית (text, מוזן יחד עם שעות/תעריף)
   paymentRequestDocUrl: 'fldcqwPUdruKSg7df', // קישור למסמך בקשת תשלום (url, נכתב על כל שורות הדיווח של החודש)
+  paymentRequestFolderUrl: 'fldINfwz3GfUo6AcO', // קישור לתיקיית בקשת תשלום (url) - כולל המסמך, החשבוניות בנפרד, וה-PDF המאוחד
+  mergedPdfUrl: 'fldz07h00rSM9WY0b', // קישור ל-PDF מאוחד עם חשבוניות (url)
 } as const;
 
 /** קטגוריה / סוג מערכת שעות choice names (from live schema). */
