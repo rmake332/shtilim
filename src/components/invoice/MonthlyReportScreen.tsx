@@ -432,18 +432,25 @@ export function MonthlyReportScreen({
                           )}
                         </td>
                         <td className="px-5 py-3 min-w-[220px]">
-                          {report?.hasInvoiceDoc ? (
-                            <span className="flex items-center gap-1.5 text-tertiary text-label-sm font-bold">
-                              <Icon name="check_circle" className="text-[16px]" fill /> קובץ הועלה
-                            </span>
+                          {locked ? (
+                            report?.hasInvoiceDoc && (
+                              <span className="flex items-center gap-1.5 text-tertiary text-label-sm font-bold">
+                                <Icon name="check_circle" className="text-[16px]" fill /> קובץ הועלה
+                              </span>
+                            )
                           ) : (
-                            !locked && (
+                            <div className="flex flex-col gap-1">
+                              {report?.hasInvoiceDoc && !row.doc && (
+                                <span className="flex items-center gap-1.5 text-tertiary text-label-sm">
+                                  <Icon name="check_circle" className="text-[14px]" fill /> קיים קובץ - ניתן להחליף
+                                </span>
+                              )}
                               <DocUpload
                                 label=""
                                 value={row.doc}
                                 onChange={(doc) => updateRow(p.id, { doc })}
                               />
-                            )
+                            </div>
                           )}
                         </td>
                         <td className="px-5 py-3">
