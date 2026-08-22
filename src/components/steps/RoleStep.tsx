@@ -344,7 +344,7 @@ export function RoleStep({
 
   const employmentDocDef = DOC_FIELDS.find((d) => d.key === 'docEmployment')!;
   const showMinistryFileQuestion = Boolean(
-    isNewEmployee && selectedRole && (data.category === 'פרא רפואי' || data.category === 'הוראה'),
+    isNewEmployee && selectedRole && data.salaryType === 'דירוג וותק',
   );
   const showEmploymentDoc = showMinistryFileQuestion && data.hasMinistryFile === 'כן';
 
@@ -995,7 +995,7 @@ export function RoleStep({
         </section>
       )}
 
-      {/* שאלת תיק משרד החינוך + העלאת נתוני העסקה — לעובד חדש בפרא/הוראה */}
+      {/* שאלת תיק משרד החינוך + העלאת נתוני העסקה — לעובד חדש בתפקיד עם סוג שכר דירוג וותק */}
       {showMinistryFileQuestion && (
         <section className="bg-white p-6 rounded-xl shadow-card border border-outline-variant mb-4 space-y-5">
           <div>

@@ -206,7 +206,7 @@ export interface RoleData {
   tariff: string | null;
   ranking: string | null;
   seniority: string | null;
-  /** האם קיים תיק במשרד החינוך — רלוונטי לעובד חדש בפרא/הוראה. */
+  /** האם קיים תיק במשרד החינוך — רלוונטי לעובד חדש כשסוג השכר הוא דירוג וותק. */
   hasMinistryFile: YesNoUnset;
   /** מס' רישיון — required when subRole is קלינאות תקשורת / ריפוי בעיסוק; '' until entered. */
   licenseNumber: string;

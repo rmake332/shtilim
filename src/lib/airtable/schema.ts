@@ -221,7 +221,7 @@ export const DOC_FIELDS = [
     key: 'docEmployment',
     fieldId: POSITION_FIELDS.docEmployment,
     label: 'נתוני העסקה',
-    condition: 'newEmployeeParaOrTeaching', // עובד חדש + קטגוריה פרא/הוראה
+    condition: 'newEmployeeParaOrTeaching', // שם ישן; ההצגה בפועל נקבעת ב-RoleStep.showMinistryFileQuestion (עובד חדש + סוג שכר "דירוג וותק"), לא לפי condition זה
     menoExcluded: false,
     adultOnly: false,
   },
