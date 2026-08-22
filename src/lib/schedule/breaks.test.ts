@@ -17,15 +17,15 @@ const PARA = breakPolicyFor({ scheduleType: 'פרא', layer: 'יסודי', twelv
 const BOARDING = breakPolicyFor({ scheduleType: 'רגיל', layer: 'פנימיה', twelveHourEmployment: false });
 
 describe('breakPolicyFor', () => {
-  it('רגיל — שעון, השלמה ל-8.5, מנוכה', () => {
-    expect(REGULAR).toEqual({ twelveHour: false, metric: 'clock', fixedHalfHour: false, deducts: true });
+  it('רגיל — שעון, השלמה ל-8.5', () => {
+    expect(REGULAR).toEqual({ twelveHour: false, metric: 'clock', fixedHalfHour: false });
   });
   it('סגן ראשון — כמו רגיל', () => {
     expect(breakPolicyFor({ scheduleType: 'סגן ראשון', layer: 'יסודי', twelveHourEmployment: false }).metric)
       .toBe('clock');
   });
-  it('פרא — אקדמי, חצי שעה, לא מנוכה', () => {
-    expect(PARA).toEqual({ twelveHour: false, metric: 'academic', fixedHalfHour: true, deducts: false });
+  it('פרא — אקדמי, חצי שעה', () => {
+    expect(PARA).toEqual({ twelveHour: false, metric: 'academic', fixedHalfHour: true });
   });
   it('הוראה ו"הוראה - לוח פרא" — אקדמי', () => {
     expect(breakPolicyFor({ scheduleType: 'הוראה', layer: 'יסודי', twelveHourEmployment: false }).metric)
@@ -34,7 +34,7 @@ describe('breakPolicyFor', () => {
       .toBe('academic');
   });
   it('שכבת פנימיה מפעילה את מסלול 12 השעות', () => {
-    expect(BOARDING).toEqual({ twelveHour: true, metric: 'clock', fixedHalfHour: true, deducts: true });
+    expect(BOARDING).toEqual({ twelveHour: true, metric: 'clock', fixedHalfHour: true });
   });
   it('דגל "העסקה 12 שעות" על העובד מפעיל את המסלול גם בשכבה רגילה', () => {
     const p = breakPolicyFor({ scheduleType: 'רגיל', layer: 'יסודי', twelveHourEmployment: true });

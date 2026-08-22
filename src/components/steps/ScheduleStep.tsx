@@ -759,8 +759,8 @@ function GridSchedule({
     (s, d) => s + (requiredBreak[d] > 0 ? breakMinutes(breaks[d]) : 0),
     0,
   );
-  /** שעות העבודה הנספרות — נוכחות פחות הפסקות במסלול שבו ההפסקה מנוכה. */
-  const netHours = breakPolicy.deducts ? (totalMin - totalBreakMin) / 60 : totalHours;
+  /** שעות העבודה הנספרות — זהות לנוכחות; ההפסקה נרשמת אך אינה מנוכה מהשעות. */
+  const netHours = totalHours;
   /**
    * מה שנשמר בפועל: הפסקות של ימים שכבר אינן נדרשות (השעות ירדו מתחת ל-8.5) מושמטות,
    * כדי שרישום ישן לא ידלוף לאיירטייבל.
@@ -977,7 +977,6 @@ function GridSchedule({
     // Regular: just the entered hours; NO ofek calc, so there is no
     // frontal/individual/stay breakdown. Zero those out. Block if over budget.
     if (!needsOfek) {
-      // netHours = נוכחות פחות ההפסקות; זהה ל-totalHours כשההפסקה אינה מנוכה.
       const hours = Math.round(netHours * 100) / 100;
       if (hours > role.remainingHours) errs.push(overBudgetMessage(hours, role.remainingHours));
       if (errs.length) { setErrors(errs); return; }
@@ -1143,7 +1142,7 @@ function GridSchedule({
             </div>
           )}
 
-          {/* הפסקות — נוכחות מול שעות עבודה בפועל */}
+          {/* הפסקות — נרשמות אך אינן מנוכות מסך השעות הנספרות */}
           {totalBreakMin > 0 && (
             <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
               <div className="flex justify-between text-on-surface-variant">
@@ -1151,15 +1150,9 @@ function GridSchedule({
                 <span className="font-bold">{formatNum(totalHours)}</span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
-                <span>שעות הפסקה:</span>
-                <span className="font-bold text-error">−{formatNum(totalBreakMin / 60)}</span>
+                <span>שעות הפסקה (נרשמות, לא מנוכות):</span>
+                <span className="font-bold">{formatNum(totalBreakMin / 60)}</span>
               </div>
-              {breakPolicy.deducts && (
-                <div className="flex justify-between text-on-surface-variant">
-                  <span>שעות עבודה:</span>
-                  <span className="font-bold text-primary">{formatNum(netHours)}</span>
-                </div>
-              )}
             </div>
           )}
 

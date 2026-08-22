@@ -368,8 +368,8 @@ function hhmmToSeconds(hhmm: string): number | null {
   return Number(m[1]) * 3600 + Number(m[2]) * 60;
 }
 
-function buildScheduleFields(schedule: ScheduleData): Record<string, number> {
-  const out: Record<string, number> = {};
+function buildScheduleFields(schedule: ScheduleData): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
   for (const day of DAY_KEYS_SUBMIT) {
     const def = SCHEDULE_FIELDS[day];
     const slots = def.in.length; // מוצ"ש has 1 slot; weekdays have 3
@@ -386,13 +386,14 @@ function buildScheduleFields(schedule: ScheduleData): Record<string, number> {
       out[def.out[idx]] = 0;
     }
   }
-  // הפסקה יומית — א'–ו' בלבד. יום ללא הפסקה מאופס, כדי שהסרת הפסקה בעריכה תימחק גם באיירטייבל.
+  // הפסקה יומית — א'–ו' בלבד. יום ללא הפסקה מנוקה ל-null, כדי שהסרת הפסקה בעריכה
+  // תימחק גם באיירטייבל (0 ישאיר את השדה "לא ריק" מבחינת איירטייבל).
   for (const day of BREAK_DAY_KEYS) {
     const brk = schedule.breaks?.[day];
     const inSec = brk ? hhmmToSeconds(brk.in) : null;
     const outSec = brk ? hhmmToSeconds(brk.out) : null;
-    out[BREAK_FIELDS[day].in] = inSec ?? 0;
-    out[BREAK_FIELDS[day].out] = outSec ?? 0;
+    out[BREAK_FIELDS[day].in] = inSec ?? null;
+    out[BREAK_FIELDS[day].out] = outSec ?? null;
   }
   return out;
 }
