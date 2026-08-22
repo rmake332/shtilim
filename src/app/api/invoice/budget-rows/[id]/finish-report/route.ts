@@ -11,16 +11,16 @@ import { logger } from '@/lib/logger';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * POST /api/invoice/budget-rows/[id]/finish-report - מסמן שהדיווח החודשי לתקן זה
- * (לחודש הנתון) הושלם (checkbox על כל שורות הדיווח המקושרות), מפיק מסמך "בקשת תשלום"
- * אמיתי בגוגל דוקס + PDF מאוחד עם כל החשבוניות (ראו src/lib/invoice/paymentRequestDoc.ts),
- * ושולח אותו במייל (Make webhook) לכתובת שהוזנה + רשימת ההעתקים של המוסד.
+ * POST /api/invoice/budget-rows/[id]/finish-report - מפיק מסמך "בקשת תשלום" אמיתי
+ * בגוגל דוקס + PDF מאוחד עם כל החשבוניות (ראו src/lib/invoice/paymentRequestDoc.ts),
+ * שולח אותו במייל (Make webhook) לכתובת שהוזנה + רשימת ההעתקים של המוסד, ורק לאחר
+ * מכן מסמן שהדיווח החודשי לתקן זה (לחודש הנתון) הושלם (checkbox על כל שורות הדיווח).
  *
- * **נעילה מלאה**: אם החודש הזה כבר הושלם בעבר (checkbox כבר מסומן), הבקשה נדחית -
- * אין אפשרות "לשלוח שוב"/לתקן אחרי שליחה (v1, לפי בקשת המשתמשת).
- *
- * שלוש פעולות נפרדות בכוונה: סימון ה-checkbox, הפקת המסמך, ושליחת המייל - כל אחת
- * יכולה להצליח או להיכשל בנפרד, בלי לחסום את הקודמות לה (docError/emailError נפרדים).
+ * **סדר הפעולות קריטי**: הפקת המסמך קודמת לנעילה בכוונה - אם ההפקה נכשלת (Drive/
+ * quota/auth), החודש **לא** ננעל, כדי שאפשר יהיה לנסות "סיום דיווח" שוב. נעילה
+ * (v1, מלאה, בלי אפשרות פתיחה מחדש) קורית רק אחרי שהמסמך אכן נוצר בהצלחה ונשמר.
+ * שליחת המייל בסוף היא לא-חוסמת (emailError נפרד) - כשל בה לא מבטל את הנעילה, כי
+ * המסמך כבר קיים ונשמר; המשתמשת יכולה לפתוח אותו ידנית מהקישור המוצג ב-UI.
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
@@ -39,7 +39,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let row;
   let positions;
   let existingReports;
-  let count: number;
   try {
     row = await fetchInvoiceBudgetRow(gate.institution.mosadId, params.id, gate.requestId);
     if (!row) {
@@ -54,24 +53,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         { status: 409 },
       );
     }
-    count = await markMonthFinished(positionIds, month, gate.requestId);
-    if (count === 0) {
+    if (existingReports.length === 0) {
       return NextResponse.json({ ok: false, message: 'אין עדיין דיווחים לחודש זה.' }, { status: 400 });
     }
   } catch (e) {
-    logger.error({ requestId: gate.requestId, budgetRowId: params.id, err: String(e) }, 'finish-report failed');
-    return NextResponse.json({ ok: false, message: 'שגיאה בסימון סיום הדיווח.' }, { status: 500 });
+    logger.error({ requestId: gate.requestId, budgetRowId: params.id, err: String(e) }, 'finish-report data load failed');
+    return NextResponse.json({ ok: false, message: 'שגיאה בטעינת נתוני הדיווח.' }, { status: 500 });
   }
 
-  let docUrl: string | null = null;
-  let folderUrl: string | null = null;
-  let mergedPdfUrl: string | null = null;
-  let docError: string | null = null;
-  let emailError: string | null = null;
-  try {
-    const positionIds = positions.map((p) => p.id);
-    const positionsById = new Map(positions.map((p) => [p.id, p]));
+  const positionIds = positions.map((p) => p.id);
+  const positionsById = new Map(positions.map((p) => [p.id, p]));
 
+  let docUrl: string;
+  let folderUrl: string;
+  let mergedPdfUrl: string;
+  try {
     const rows: PaymentRequestRow[] = [];
     for (const report of existingReports) {
       const position = positionsById.get(report.positionId);
@@ -98,7 +94,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     docUrl = generated.url;
     folderUrl = generated.folderUrl;
     mergedPdfUrl = generated.mergedPdfUrl;
+  } catch (e) {
+    logger.error(
+      { requestId: gate.requestId, budgetRowId: params.id, month, err: String(e) },
+      'payment request doc generation failed',
+    );
+    const message = e instanceof Error ? e.message : 'שגיאה בהפקת מסמך בקשת התשלום.';
+    return NextResponse.json({ ok: false, message }, { status: 500 });
+  }
+
+  let count: number;
+  let emailError: string | null = null;
+  try {
     await saveDocUrlForMonth(positionIds, month, { docUrl, folderUrl, mergedPdfUrl }, gate.requestId);
+    count = await markMonthFinished(positionIds, month, gate.requestId);
 
     const emailResult = await notifyPaymentRequestEmail(
       {
@@ -113,12 +122,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
     if (!emailResult.ok) emailError = emailResult.message ?? 'שליחת המייל נכשלה.';
   } catch (e) {
+    // המסמך כבר נוצר ונשמר בהצלחה (docUrl/folderUrl/mergedPdfUrl תקינים) - רק
+    // הנעילה/השמירה נכשלה. לא ננעל, כדי שניסיון חוזר יגלה את previousDocUrl וידרוס
+    // אותו במקום ליצור כפילות (ראו הערת "דריסה" ב-generatePaymentRequestDoc).
     logger.error(
       { requestId: gate.requestId, budgetRowId: params.id, month, err: String(e) },
-      'payment request doc generation failed',
+      'finish-report lock/save failed after doc generation succeeded',
     );
-    docError = e instanceof Error ? e.message : 'שגיאה בהפקת מסמך בקשת התשלום.';
+    return NextResponse.json(
+      {
+        ok: false,
+        message: 'המסמך הופק בהצלחה אך סימון הדיווח כהושלם נכשל - נסו "סיום דיווח חודשי" שוב.',
+        docUrl,
+        folderUrl,
+        mergedPdfUrl,
+      },
+      { status: 500 },
+    );
   }
 
-  return NextResponse.json({ ok: true, reportCount: count, docUrl, folderUrl, mergedPdfUrl, docError, emailError });
+  return NextResponse.json({ ok: true, reportCount: count, docUrl, folderUrl, mergedPdfUrl, docError: null, emailError });
 }

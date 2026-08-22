@@ -130,7 +130,6 @@ export function MonthlyReportScreen({
   const [error, setError] = useState('');
   const [finishing, setFinishing] = useState(false);
   const [finishMsg, setFinishMsg] = useState('');
-  const [docError, setDocError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [toEmail, setToEmail] = useState('');
 
@@ -259,7 +258,6 @@ export function MonthlyReportScreen({
     }
     setFinishing(true);
     setFinishMsg('');
-    setDocError('');
     setEmailError('');
     try {
       const res = await fetch(`/api/invoice/budget-rows/${budgetRowId}/finish-report`, {
@@ -270,14 +268,15 @@ export function MonthlyReportScreen({
       const json = await res.json();
       if (json.ok) {
         setFinishMsg('הדיווח החודשי סומן כהושלם והחודש ננעל.');
-        if (json.docError) setDocError(json.docError);
         if (json.emailError) setEmailError(json.emailError);
-        await loadData();
       } else {
-        setFinishMsg(json.message || 'שגיאה בסימון סיום הדיווח.');
+        setFinishMsg(json.message || 'שגיאה בהפקת מסמך בקשת התשלום.');
       }
+      // גם בכשל חלקי (המסמך הופק אך הנעילה נכשלה) הקישורים כבר נשמרו ב-Airtable -
+      // טעינה מחדש מציגה אותם דרך ה-state הרגיל (docUrl/folderUrl/mergedPdfUrl).
+      await loadData();
     } catch {
-      setFinishMsg('שגיאה בסימון סיום הדיווח.');
+      setFinishMsg('שגיאה בהפקת מסמך בקשת התשלום.');
     } finally {
       setFinishing(false);
     }
@@ -559,7 +558,6 @@ export function MonthlyReportScreen({
               </a>
             )}
           </div>
-          {docError && <p className="text-error text-body-md">{docError}</p>}
           {emailError && <p className="text-error text-body-md">שליחת המייל: {emailError}</p>}
         </div>
       </main>
