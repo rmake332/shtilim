@@ -379,6 +379,8 @@ export interface GeneratePaymentRequestDocResult {
   folderUrl: string;
   /** קישור ל-PDF אחד שממזג את מסמך בקשת התשלום עם כל קובצי החשבוניות (בזה אחר זה). */
   mergedPdfUrl: string;
+  /** מזהה הקובץ הגולמי ב-Drive של ה-PDF המאוחד (לא קישור) - לשימוש ב-Make webhook. */
+  mergedPdfFileId: string;
 }
 
 /**
@@ -487,6 +489,7 @@ export async function generatePaymentRequestDoc(
       url: data.webViewLink,
       folderUrl: `https://drive.google.com/drive/folders/${monthFolderId}`,
       mergedPdfUrl: mergedFile.webViewLink,
+      mergedPdfFileId: mergedFile.id,
     };
   } catch (err) {
     logger.error({ requestId, err, docName }, 'payment request doc generation failed');

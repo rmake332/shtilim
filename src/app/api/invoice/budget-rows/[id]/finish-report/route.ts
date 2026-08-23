@@ -14,16 +14,16 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /**
  * POST /api/invoice/budget-rows/[id]/finish-report - מפיק מסמך "בקשת תשלום" אמיתי
  * בגוגל דוקס + PDF מאוחד עם כל החשבוניות (ראו src/lib/invoice/paymentRequestDoc.ts),
- * קובע את יתרת השעות הזמינה להעברה לחודש הבא (finalizeMonthBalance, ראו
- * src/lib/invoice/monthlyBalance.ts), שולח את המסמך במייל (Make webhook) לכתובת
- * שהוזנה + רשימת ההעתקים של המוסד, ורק לאחר מכן מסמן שהדיווח החודשי לתקן זה
- * (לחודש הנתון) הושלם (checkbox על כל שורות הדיווח).
+ * קובע את יתרת השעות/התקציב (₪) הזמינה להעברה לחודש הבא (finalizeMonthBalance, ראו
+ * src/lib/invoice/monthlyBalance.ts), שולח את המסמך במייל (Make webhook, לפי fileId
+ * של ה-PDF המאוחד) לכתובת שהוזנה + רשימת ההעתקים של המוסד, ורק לאחר מכן מסמן
+ * שהדיווח החודשי לתקן זה (לחודש הנתון) הושלם (checkbox על כל שורות הדיווח).
  *
  * **סדר הפעולות קריטי**: הפקת המסמך קודמת לנעילה בכוונה - אם ההפקה נכשלת (Drive/
  * quota/auth), החודש **לא** ננעל, כדי שאפשר יהיה לנסות "סיום דיווח" שוב. קביעת
- * יתרת השעות קודמת גם היא לנעילה (ולא הפוך) - אם היא נכשלת, החודש נשאר פתוח,
- * כדי שלעולם לא ייווצר מצב של חודש נעול בלי שורת יתרה תואמת (שהייתה גורמת
- * לחודש הבא "לדלג" עליו כאילו לא דווח בכלל). נעילה (v1, מלאה, בלי אפשרות פתיחה
+ * היתרה קודמת גם היא לנעילה (ולא הפוך) - אם היא נכשלת, החודש נשאר פתוח, כדי
+ * שלעולם לא ייווצר מצב של חודש נעול בלי שורת יתרה תואמת (שהייתה גורמת לחודש
+ * הבא "לדלג" עליו כאילו לא דווח בכלל). נעילה (v1, מלאה, בלי אפשרות פתיחה
  * מחדש) קורית רק אחרי שהמסמך אכן נוצר בהצלחה, נשמר, והיתרה נקבעה. שליחת המייל
  * בסוף היא לא-חוסמת (emailError נפרד) - כשל בה לא מבטל את הנעילה, כי המסמך כבר
  * קיים ונשמר; המשתמשת יכולה לפתוח אותו ידנית מהקישור המוצג ב-UI.
@@ -73,6 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let docUrl: string;
   let folderUrl: string;
   let mergedPdfUrl: string;
+  let mergedPdfFileId: string;
   try {
     const rows: PaymentRequestRow[] = [];
     for (const report of existingReports) {
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     docUrl = generated.url;
     folderUrl = generated.folderUrl;
     mergedPdfUrl = generated.mergedPdfUrl;
+    mergedPdfFileId = generated.mergedPdfFileId;
   } catch (e) {
     logger.error(
       { requestId: gate.requestId, budgetRowId: params.id, month, err: String(e) },
@@ -113,8 +115,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let emailError: string | null = null;
   try {
     const reportedHoursTotal = existingReports.reduce((sum, r) => sum + r.reportedHours, 0);
+    const paidTotal = existingReports.reduce((sum, r) => sum + r.totalPay, 0);
     await finalizeMonthBalance(
-      { budgetRowId: params.id, budgetRowTitle: row.title, month, quotaSnapshot: row.monthlyHoursQuota, reportedHoursTotal },
+      {
+        budgetRowId: params.id,
+        budgetRowTitle: row.title,
+        month,
+        quotaSnapshot: row.monthlyHoursQuota,
+        reportedHoursTotal,
+        budgetSnapshot: row.tariffMonthly,
+        paidTotal,
+      },
       gate.requestId,
     );
     await saveDocUrlForMonth(positionIds, month, { docUrl, folderUrl, mergedPdfUrl }, gate.requestId);
@@ -122,12 +133,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const emailResult = await notifyPaymentRequestEmail(
       {
+        fileId: mergedPdfFileId,
         to: toEmail,
         cc: gate.institution.paymentRequestCcEmails,
         institution: gate.institution.name,
+        role: row.title,
         month,
-        docUrl: mergedPdfUrl,
-        folderUrl,
       },
       gate.requestId,
     );

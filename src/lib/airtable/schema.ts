@@ -391,9 +391,13 @@ export const INVOICE_BALANCE_FIELDS = {
   budgetLink: 'fldo1ijvTE72sJt8l', // → תקציב התחלתי
   month: 'fldjtphFS2RXecarx', // חודש (text, פורמט "YYYY-MM")
   quotaSnapshot: 'fldhXDuv0wwIi6Qcl', // מכסה חודשית (סנאפשוט) - BUDGET_FIELDS.totalBudgetHours בעת הנעילה
-  carriedIn: 'fld7FOYDVqoDWq6qV', // יתרה נכנסת (number) - מיתרה יוצאת של החודש הנעול הקודם, 0 אם אין
+  carriedIn: 'fld7FOYDVqoDWq6qV', // יתרה נכנסת (number) - שעות מיתרה יוצאת של החודש הנעול הקודם, 0 אם אין
   reportedHoursTotal: 'fldodB944qE4vFmXf', // סה"כ שעות מדווחות (number) - סכום כלל העובדים בתקן לחודש זה
   carriedOut: 'fldSwZrmgAQXBFPin', // יתרה יוצאת (formula) = quotaSnapshot + carriedIn - reportedHoursTotal
+  budgetQuotaSnapshot: 'fldU5RdBPg8zGhfj1', // תקציב חודשי (סנאפשוט) - BUDGET_FIELDS.tariffMonthly בעת הנעילה
+  budgetCarriedIn: 'fldXZfPL7EUJllqmE', // יתרת תקציב נכנסת (number) - ₪ מיתרת התקציב היוצאת של החודש הנעול הקודם
+  paidTotal: 'fldaO3kyrm7Dp3I6b', // סה"כ שולם (number) - סכום totalPay (₪) של כלל העובדים בתקן לחודש זה
+  budgetCarriedOut: 'fld4DyYy1JKktI01J', // יתרת תקציב יוצאת (formula) = budgetQuotaSnapshot + budgetCarriedIn - paidTotal
 } as const;
 
 /** קטגוריה / סוג מערכת שעות choice names (from live schema). */

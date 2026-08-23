@@ -4,15 +4,15 @@ import { fetchInvoiceBudgetRow } from '@/lib/invoice/budget';
 import { listPositionsForBudgetRow, getPosition } from '@/lib/invoice/positions';
 import { listReportsForPositions, upsertReport } from '@/lib/invoice/reports';
 import { checkLiveMonthlyQuota } from '@/lib/invoice/budgetCheck';
-import { getCarryInBalance } from '@/lib/invoice/monthlyBalance';
+import { getCarryIn } from '@/lib/invoice/monthlyBalance';
 import { logger } from '@/lib/logger';
 
 const MONTH_RE = /^\d{4}-\d{2}$/;
 
 /**
  * GET /api/invoice/reports?token=&budgetRowId=&month=YYYY-MM - דיווחי כל העובדים
- * לחודש נתון, בצירוף carriedInBalance: יתרת שעות שהועברה מחודשים קודמים (0 אם
- * אין), ראו src/lib/invoice/monthlyBalance.ts.
+ * לחודש נתון, בצירוף carriedInBalance/carriedInBudget: יתרת שעות/תקציב (₪)
+ * שהועברה מחודשים קודמים (0 אם אין), ראו src/lib/invoice/monthlyBalance.ts.
  */
 export async function GET(req: NextRequest) {
   const gate = await gateByToken(req);
@@ -30,8 +30,15 @@ export async function GET(req: NextRequest) {
 
     const positions = await listPositionsForBudgetRow(budgetRowId, gate.requestId);
     const reports = await listReportsForPositions(positions.map((p) => p.id), month, gate.requestId);
-    const carriedInBalance = await getCarryInBalance(budgetRowId, month, gate.requestId);
-    return NextResponse.json({ ok: true, budgetRow: row, positions, reports, carriedInBalance });
+    const carriedIn = await getCarryIn(budgetRowId, month, gate.requestId);
+    return NextResponse.json({
+      ok: true,
+      budgetRow: row,
+      positions,
+      reports,
+      carriedInBalance: carriedIn.hours,
+      carriedInBudget: carriedIn.budget,
+    });
   } catch (e) {
     logger.error({ requestId: gate.requestId, budgetRowId, month, err: String(e) }, 'invoice reports list failed');
     return NextResponse.json({ ok: false, message: 'שגיאה בטעינת דיווחים.' }, { status: 500 });

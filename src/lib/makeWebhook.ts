@@ -3,10 +3,11 @@ import { logger } from '@/lib/logger';
 
 /**
  * Webhook fired when a monthly invoice report is finished, so a Make scenario can send
- * the "בקשת תשלום" email (to + cc). URL is configured per-project - no default, since
- * the receiving Make scenario doesn't exist until set up for this specific project.
+ * the "בקשת תשלום" email (to + cc), attaching the merged PDF from Drive by fileId.
  */
-const PAYMENT_REQUEST_EMAIL_WEBHOOK_URL = process.env.PAYMENT_REQUEST_EMAIL_WEBHOOK_URL || '';
+const PAYMENT_REQUEST_EMAIL_WEBHOOK_URL =
+  process.env.PAYMENT_REQUEST_EMAIL_WEBHOOK_URL ||
+  'https://hook.eu2.make.com/2gqxp8ban4dqv5ht7fz73hkbcslahfdj/';
 
 /**
  * Webhook fired to Make.com whenever a position is submitted (new) or edited.
@@ -126,28 +127,25 @@ export async function notifySubmitWebhook(
  */
 export async function notifyPaymentRequestEmail(
   params: {
+    /** מזהה קובץ ה-PDF המאוחד ב-Drive (לא קישור) - Make שולף/מצרף אותו לפי זה. */
+    fileId: string;
     to: string;
     cc: string[];
     institution: string;
+    /** שם התפקיד/סעיף התקציב (budgetRow.title). */
+    role: string;
     /** פורמט "YYYY-MM". */
     month: string;
-    docUrl: string;
-    folderUrl?: string;
   },
   requestId?: string,
 ): Promise<{ ok: boolean; message?: string }> {
-  if (!PAYMENT_REQUEST_EMAIL_WEBHOOK_URL) {
-    logger.warn({ requestId }, 'payment request email skipped (no PAYMENT_REQUEST_EMAIL_WEBHOOK_URL configured)');
-    return { ok: false, message: 'שליחת המייל לא הוגדרה עדיין (חסר webhook).' };
-  }
-
   const payload = {
-    'אל': params.to,
-    'העתק': params.cc,
-    'מוסד': params.institution,
-    'חודש': params.month,
-    'קישור למסמך': params.docUrl,
-    'קישור לתיקייה': params.folderUrl || '',
+    fileId: params.fileId,
+    email: params.to,
+    cc: params.cc,
+    institution: params.institution,
+    role: params.role,
+    month: params.month,
   };
 
   try {
