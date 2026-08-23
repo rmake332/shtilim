@@ -464,6 +464,7 @@ export function RoleStep({
             <p className="text-body-sm text-on-surface-variant">
               {data.category}{data.layer ? ` · ${data.layer}` : ''}
               {data.remainingHours > 0 ? ` · ${formatNum(data.remainingHours)} שעות פנויות` : ''}
+              {data.tariff ? ` · תעריף ${data.tariff}` : ''}
             </p>
           </div>
         </div>
