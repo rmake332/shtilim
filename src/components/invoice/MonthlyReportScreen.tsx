@@ -272,8 +272,8 @@ export function MonthlyReportScreen({
       } else {
         setFinishMsg(json.message || 'שגיאה בהפקת מסמך בקשת התשלום.');
       }
-      // גם בכשל חלקי (המסמך הופק אך הנעילה נכשלה) הקישורים כבר נשמרו ב-Airtable -
-      // טעינה מחדש מציגה אותם דרך ה-state הרגיל (docUrl/folderUrl/mergedPdfUrl).
+      // גם בכשל חלקי (המסמך הופק אך הנעילה נכשלה) הקישור כבר נשמר ב-Airtable -
+      // טעינה מחדש מציגה אותו דרך ה-state הרגיל (mergedPdfUrl).
       await loadData();
     } catch {
       setFinishMsg('שגיאה בהפקת מסמך בקשת התשלום.');
@@ -293,9 +293,7 @@ export function MonthlyReportScreen({
   const totalSpent = Object.values(reports).reduce((s, r) => s + r.totalPay, 0);
   // חודש שכבר "סיום דיווח חודשי" נלחץ עבורו ננעל לצמיתות - אין עריכה חוזרת/שליחה חוזרת (v1).
   const monthLocked = Object.values(reports).some((r) => r.monthlyTransferDocGenerated);
-  // אם כבר קיימים קישורים מטעינה קודמת (למשל טעינה מחדש של העמוד) - מוצגים מיד, בלי צורך ללחוץ שוב.
-  const docUrl = Object.values(reports).find((r) => r.paymentRequestDocUrl)?.paymentRequestDocUrl || null;
-  const folderUrl = Object.values(reports).find((r) => r.paymentRequestFolderUrl)?.paymentRequestFolderUrl || null;
+  // אם כבר קיים קישור מטעינה קודמת (למשל טעינה מחדש של העמוד) - מוצג מיד, בלי צורך ללחוץ שוב.
   const mergedPdfUrl = Object.values(reports).find((r) => r.mergedPdfUrl)?.mergedPdfUrl || null;
 
   return (
@@ -531,37 +529,15 @@ export function MonthlyReportScreen({
               </button>
             )}
             {finishMsg && <span className="text-body-md text-on-surface-variant">{finishMsg}</span>}
-            {docUrl && (
-              <a
-                href={docUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary text-primary font-bold text-label-md hover:bg-primary-container/20 transition-colors"
-              >
-                <Icon name="description" className="text-[18px]" />
-                פתיחת מסמך בקשת תשלום
-              </a>
-            )}
-            {folderUrl && (
-              <a
-                href={folderUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant font-bold text-label-md hover:bg-surface-container transition-colors"
-              >
-                <Icon name="folder_open" className="text-[18px]" />
-                פתיחת תיקיית החודש
-              </a>
-            )}
             {mergedPdfUrl && (
               <a
                 href={mergedPdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-outline-variant text-on-surface-variant font-bold text-label-md hover:bg-surface-container transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary text-primary font-bold text-label-md hover:bg-primary-container/20 transition-colors"
               >
                 <Icon name="picture_as_pdf" className="text-[18px]" />
-                PDF מאוחד עם חשבוניות
+                פתיחת מסמך בקשת העברות
               </a>
             )}
           </div>
