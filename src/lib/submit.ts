@@ -134,7 +134,7 @@ export async function submitForm(
     [POSITION_FIELDS.layer]: role.layer || undefined,
     [POSITION_FIELDS.subRole]: role.subRole || undefined,
     [POSITION_FIELDS.weeklyHours]: schedule.weeklyHours || undefined,
-    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role.layer, schedule) || undefined,
+    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role.layer, schedule, role.scheduleType) || undefined,
     [POSITION_FIELDS.motherPosition]: schedule.motherPosition ? 'כן' : 'לא',
     [POSITION_FIELDS.frontalHours]: schedule.frontalHours || undefined,
     [POSITION_FIELDS.individualHours]: schedule.individualHours || undefined,

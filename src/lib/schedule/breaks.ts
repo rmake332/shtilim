@@ -31,7 +31,7 @@ export const FIXED_BREAK_MINUTES = 30;
 export const BOARDING_LAYER = 'פנימיה';
 
 /** סוגי מערכת שעות שבהם השעות הנספרות הן אקדמיות ולא שעות שעון. */
-const ACADEMIC_SCHEDULE_TYPES = new Set(['פרא', 'הוראה', 'הוראה - לוח פרא']);
+const ACADEMIC_SCHEDULE_TYPES = new Set(['פרא', 'הוראה', 'הוראה - לוח פרא', 'הוראה ללא שהייה']);
 
 export interface BreakPolicy {
   /** פנימיה או "העסקה 12 שעות" על העובד. */

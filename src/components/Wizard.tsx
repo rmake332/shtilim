@@ -151,6 +151,7 @@ export function Wizard({
           initial={schedule ?? (prevYear ? { ...emptySchedule(), week: prevYear.week, prevYearRecordId: prevYear.recordId } : undefined)}
           positionId={positionId}
           prevYear={prevYear}
+          biweeklyTrack={institution.biweeklyTrack}
           onBack={isEdit ? undefined : () => setStep('role')}
           onEditEmployee={isEdit ? () => setStep('employee') : undefined}
           onEditRole={isEdit ? () => setStep('role') : undefined}

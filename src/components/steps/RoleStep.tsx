@@ -32,6 +32,7 @@ interface RoleOption {
   title: string;
   category: string;
   scheduleType: string | null;
+  isBiweekly: boolean;
   remainingHours: number;
   layer: string[];
   paraBoard: boolean;
@@ -263,6 +264,7 @@ export function RoleStep({
         ...d,
         roleId: found.id,
         scheduleType: found.scheduleType,
+        isBiweekly: found.isBiweekly,
         remainingHours: found.remainingHours,
         layer: found.layer[0] ?? institutionLayer ?? '',
         paraBoard: found.paraBoard,
@@ -292,6 +294,7 @@ export function RoleStep({
       roleTitle: role.title,
       category: role.category,
       scheduleType: role.scheduleType,
+      isBiweekly: role.isBiweekly,
       remainingHours: role.remainingHours,
       layer: role.layer[0] ?? institutionLayer ?? '',
       subRole: '',

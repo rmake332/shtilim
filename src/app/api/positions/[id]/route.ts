@@ -138,6 +138,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       roleTitle: strField(pf[POSITION_FIELDS.roleTitleText]),
       category,
       scheduleType: strField(pf[POSITION_FIELDS.layer]) ? null : null, // schedule type is from budget row, loaded on client
+      isBiweekly: false, // budget flags loaded client-side when role chosen
       remainingHours: currentHours,
       layer: strField(pf[POSITION_FIELDS.layer]),
       subRole: strField(pf[POSITION_FIELDS.subRole]),
@@ -262,7 +263,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const budgetCheck = await checkLiveBudget(
       {
         roleId: role.roleId,
-        utilizedHours: computeUtilizedHours(role.layer, schedule),
+        utilizedHours: computeUtilizedHours(role.layer, schedule, role.scheduleType),
         extraCurrentHours: currentUtilizedHours,
       },
       gate.requestId,
@@ -439,7 +440,7 @@ async function updatePosition(
     [POSITION_FIELDS.layer]: role.layer || undefined,
     [POSITION_FIELDS.subRole]: role.subRole || undefined,
     [POSITION_FIELDS.weeklyHours]: schedule.weeklyHours || undefined,
-    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role.layer, schedule) || undefined,
+    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role.layer, schedule, role.scheduleType) || undefined,
     [POSITION_FIELDS.motherPosition]: schedule.motherPosition ? 'כן' : 'לא',
     [POSITION_FIELDS.frontalHours]: schedule.frontalHours || undefined,
     [POSITION_FIELDS.individualHours]: schedule.individualHours || undefined,

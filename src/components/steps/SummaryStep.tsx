@@ -192,7 +192,7 @@ export function SummaryStep({
   const hasBreakdown = ofekCategoryFor(role.scheduleType) !== null;
   // מערכות עם מחשבון אופק חדש: "סה"כ שעות לניצול" הוא הפלט של האופק (frontal+individual+שהייה
   // בגנים), לא שעות המערכת הגולמיות שהוזנו לפני החישוב. ראו computeUtilizedHours ב-submit.ts.
-  const utilizedHours = computeUtilizedHours(role.layer, schedule);
+  const utilizedHours = computeUtilizedHours(role.layer, schedule, role.scheduleType);
 
   if (result?.ok) {
     return (

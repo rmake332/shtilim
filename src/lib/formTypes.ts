@@ -180,6 +180,8 @@ export interface RoleData {
   roleTitle: string;
   category: string;
   scheduleType: string | null;
+  /** מערכת דו-שבועית (פנימיות) — המסלול (שעות הסף) נגזר מהמוסד, לא מהתפקיד. */
+  isBiweekly: boolean;
   remainingHours: number;
   /** Final layer: from budget if present, else manually chosen. */
   layer: string;
@@ -222,6 +224,7 @@ export function emptyRole(): RoleData {
     roleTitle: '',
     category: '',
     scheduleType: null,
+    isBiweekly: false,
     remainingHours: 0,
     layer: '',
     subRole: '',
@@ -267,6 +270,12 @@ export interface ScheduleData {
   severeDisabilityBonus: number;
   jobPercent: number;
   motherPosition: boolean;
+  /**
+   * ניכוי מערכת דו-שבועית: חצי מהשעות העודפות (יציאה מאוחרת בחמישי + כניסה
+   * מוקדמת בראשון + כל שעות יום שישי) לעומת מסלול המוסד. מנוכה רק מ"ניצול
+   * השעות בתקציב" (computeUtilizedHours) — לא ממחשבון אופק ולא מ-weeklyHours.
+   */
+  biweeklyDeductionHours?: number;
   /** For deputy-1: 37.5 or 40; for manager/deputy-2: manual weekly total. */
   manualWeeklyHours?: number;
   worksElsewherePara: boolean;

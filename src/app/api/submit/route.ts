@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   // תקציב שנשלחים בסמיכות לא יחרגו ביחד מבלי שאף בדיקה תתפוס את זה.
   try {
     const budgetCheck = await checkLiveBudget(
-      { roleId: role.roleId, utilizedHours: computeUtilizedHours(role.layer, schedule) },
+      { roleId: role.roleId, utilizedHours: computeUtilizedHours(role.layer, schedule, role.scheduleType) },
       gate.requestId,
     );
     if (!budgetCheck.ok) {

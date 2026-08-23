@@ -11,6 +11,7 @@ import {
   ofekRowHoursSum,
   motherPositionFromOfekRow,
   jobPercentBase,
+  computeUtilizedHours,
 } from './ofek';
 
 describe('jobPercent', () => {
@@ -195,10 +196,55 @@ describe('ofekCategoryFor', () => {
     expect(ofekCategoryFor('הוראה')).toBe('הוראה');
     expect(ofekCategoryFor('הוראה - לוח פרא')).toBe('הוראה');
   });
+  it('maps הוראה ללא שהייה to its own ofek table', () => {
+    expect(ofekCategoryFor('הוראה ללא שהייה')).toBe('הוראה_ללא_שהייה');
+  });
   it('returns null when the role is not measured by ofek', () => {
     expect(ofekCategoryFor('רגיל')).toBeNull();
     expect(ofekCategoryFor('סגן ראשון')).toBeNull();
     expect(ofekCategoryFor('מילוי מקום')).toBeNull();
     expect(ofekCategoryFor(null)).toBeNull();
+  });
+});
+
+describe('computeUtilizedHours', () => {
+  it('sums frontal + individual, without stay, outside גנים', () => {
+    expect(computeUtilizedHours('יסודי', { frontalHours: 10, individualHours: 5, stayHoursInstitution: 3, stayHoursHome: 2 })).toBe(15);
+  });
+  it('includes stay hours for גנים', () => {
+    expect(computeUtilizedHours('גנים', { frontalHours: 10, individualHours: 5, stayHoursInstitution: 3, stayHoursHome: 2 })).toBe(20);
+  });
+  it('falls back to weeklyHours when there is no ofek breakdown (e.g. "רגיל")', () => {
+    expect(computeUtilizedHours('יסודי', { weeklyHours: 25 })).toBe(25);
+  });
+
+  it('subtracts the biweekly deduction from the ofek breakdown', () => {
+    expect(
+      computeUtilizedHours('גנים', {
+        frontalHours: 10,
+        individualHours: 5,
+        stayHoursInstitution: 3,
+        stayHoursHome: 2,
+        biweeklyDeductionHours: 4,
+      }),
+    ).toBe(16);
+  });
+  it('subtracts the biweekly deduction from the weeklyHours fallback (non-ofek types)', () => {
+    expect(computeUtilizedHours('יסודי', { weeklyHours: 25, biweeklyDeductionHours: 3 })).toBe(22);
+  });
+  it('never goes below 0', () => {
+    expect(computeUtilizedHours('יסודי', { weeklyHours: 5, biweeklyDeductionHours: 10 })).toBe(0);
+  });
+  it('ignores an absent biweekly deduction', () => {
+    expect(computeUtilizedHours('יסודי', { weeklyHours: 25 })).toBe(25);
+  });
+  it('excludes stay for הוראה ללא שהייה even in גנים', () => {
+    expect(
+      computeUtilizedHours(
+        'גנים',
+        { frontalHours: 10, individualHours: 5, stayHoursInstitution: 3, stayHoursHome: 2 },
+        'הוראה ללא שהייה',
+      ),
+    ).toBe(15);
   });
 });

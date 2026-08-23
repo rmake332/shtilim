@@ -10,6 +10,8 @@ export interface RoleOption {
   title: string;
   category: string;
   scheduleType: string | null;
+  /** מערכת דו-שבועית (פנימיות) — המסלול עצמו (שעות הסף) נגזר מהמוסד המקושר. */
+  isBiweekly: boolean;
   remainingHours: number;
   layer: string[]; // שכבה values present on the budget record (may be empty)
   bellScheduleNums: string[];
@@ -84,6 +86,7 @@ function mapRole(r: AirtableRecord): MappedBudget {
     title: single(f[BUDGET_FIELDS.role]) ?? '',
     category: single(f[BUDGET_FIELDS.category]) ?? '',
     scheduleType: single(f[BUDGET_FIELDS.scheduleType]),
+    isBiweekly: Boolean(f[BUDGET_FIELDS.isBiweekly]),
     remainingHours: num(f[BUDGET_FIELDS.remainingHours]),
     remainingGemulim: num(f[BUDGET_FIELDS.remainingGemulim]),
     remainingRoles: num(f[BUDGET_FIELDS.remainingRoles]),
@@ -120,6 +123,7 @@ const fetchBudgetForInstitution = unstable_cache(
         BUDGET_FIELDS.role,
         BUDGET_FIELDS.category,
         BUDGET_FIELDS.scheduleType,
+        BUDGET_FIELDS.isBiweekly,
         BUDGET_FIELDS.remainingHours,
         BUDGET_FIELDS.remainingGemulim,
         BUDGET_FIELDS.remainingRoles,
@@ -146,7 +150,7 @@ const fetchBudgetForInstitution = unstable_cache(
       return arr.some((v) => (typeof v === 'string' ? v : (v as any)?.id) === mosadId);
     });
   },
-  ['budget-for-institution-v5'], // bump when the fields[] list changes — cached rows are field-filtered
+  ['budget-for-institution-v6'], // bump when the fields[] list changes — cached rows are field-filtered
   { revalidate: 120, tags: [CACHE_TAGS.budget] },
 );
 

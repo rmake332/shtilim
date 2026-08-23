@@ -132,6 +132,7 @@ export async function loadPosition(
     roleTitle: strField(pf[POSITION_FIELDS.roleTitleText]),
     category,
     scheduleType: strField(budgetFields[BUDGET_FIELDS.scheduleType]) || null,
+    isBiweekly: Boolean(budgetFields[BUDGET_FIELDS.isBiweekly]),
     remainingHours: budgetRemaining + currentHours,
     layer: strField(pf[POSITION_FIELDS.layer]),
     subRole: strField(pf[POSITION_FIELDS.subRole]),

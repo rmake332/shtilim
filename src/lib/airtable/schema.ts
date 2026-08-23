@@ -17,6 +17,7 @@ export const TABLES = {
   invoicePositions: 'tblmRAd0fHuFBbTSj', // תקני חשבונית
   invoiceReports: 'tblTk6mYvK1iuC2XP', // דיווח חודשי חשבונית
   systemSettings: 'tblFzx04m2VgoeLhZ', // הגדרות מערכת (key/value, שורה בודדת לכל מפתח)
+  biweeklyTracks: 'tbl7jZA6nEQqDjuFA', // מסלולי מערכת דו-שבועית
 } as const;
 
 /** הגדרות מערכת fields (key/value, נערך ידנית ב-Airtable). */
@@ -42,6 +43,16 @@ export const MOSAD_FIELDS = {
   payrollEmail: 'fldSSieNcnGfsePGa', // מייל חשבת שכר
   requireViolenceCert: 'fldzSemUnwkFqqZk3', // אישורי משטרה לשכבה שאינה גנים (checkbox, חריג ידני)
   paymentRequestCcEmails: 'fldjbzkovukmhn9D3', // כתובות מייל נוספות לבקשת תשלום (multilineText, כתובת אחת בכל שורה)
+  biweeklyTrackLink: 'fldeCLkqJRzuOr3bL', // → מסלולי מערכת דו-שבועית (קישור יחיד, לא בחירה מרובה)
+  biweeklyThuEnd: 'fldXqZFCTWu4oy8u1', // lookup: מסלול - שעת סיום חמישי (שניות מחצות)
+  biweeklySunStart: 'fldhXNEPBvzfwCUii', // lookup: מסלול - שעת התחלת ראשון (שניות מחצות)
+} as const;
+
+/** מסלולי מערכת דו-שבועית fields (פנימיות: שבוע מקוצר שחוזר כל שבועיים) */
+export const BIWEEKLY_TRACK_FIELDS = {
+  name: 'fldrMaLTOWYtpCOcG', // שם מסלול (primary)
+  thuEnd: 'fldsQvTOvbqirmzCn', // שעת סיום יום חמישי (duration)
+  sunStart: 'fldOvtfAdFWPE1wrd', // שעת התחלת יום ראשון (duration)
 } as const;
 
 /** רשימת עובדים fields */
@@ -318,6 +329,7 @@ export const BUDGET_FIELDS = {
   layer: 'fld73g5XuRBvVSdRR', // שכבה (multipleSelects)
   remainingHours: 'fldIQkVfVbYWRh7KT', // שעות שנותרו (formula)
   scheduleType: 'fldGS2hMdyzpoJXyG', // סוג מערכת שעות (singleSelect)
+  isBiweekly: 'fldv3XLFCYAMhAg9g', // מערכת דו-שבועית (checkbox) — המסלול עצמו נגזר מהמוסד
   remainingGemulim: 'fldNkctOqCocC2nAs', // יתרת גמולים לניצול (formula)
   remainingRoles: 'fldAVzTMiDkiDpMKh',  // יתרת תפקידים לניצול (formula)
   salaryType: 'fldwRQWa4elIIZ8zc',  // סוג שכר (singleSelect)
@@ -389,6 +401,9 @@ export const SCHEDULE_TYPE = {
   para: 'פרא',
   /** הוראה - לוח פרא: הזנת שעות והזנת מערכת כמו פרא (הקלדה + נוסחת ÷45), אך אופק מחושב כמו הוראה. */
   teachingParaSchedule: 'הוראה - לוח פרא',
+  /** הוראה ללא שהייה: הזנה בלוח צלצולים כמו הוראה, אך אופק נבדק מול קטגוריה נפרדת
+   * ("הוראה_ללא_שהייה"), ניצול התקציב הוא פרונטלי+פרטני בלבד, ושהייה תמיד "מהבית". */
+  teachingNoStay: 'הוראה ללא שהייה',
   deputy1: 'סגן ראשון',
   deputy2: 'סגן שני',
   manager: 'מנהל/ת',

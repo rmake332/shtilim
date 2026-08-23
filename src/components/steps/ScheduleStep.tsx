@@ -47,6 +47,7 @@ import {
   type BreakPolicy,
 } from '@/lib/schedule/breaks';
 import { isParaEntry } from '@/lib/schedule/ofek';
+import { computeBiweeklyDeductionHours, type BiweeklyTrack } from '@/lib/schedule/biweekly';
 import { POSITION_FIELDS } from '@/lib/airtable/schema';
 
 // ── Overlap-check types & helper ─────────────────────────────────────────────
@@ -390,6 +391,7 @@ const SCHEDULE_TYPE = {
   teaching: 'הוראה',
   para: 'פרא',
   teachingParaSchedule: 'הוראה - לוח פרא',
+  teachingNoStay: 'הוראה ללא שהייה',
   deputy1: 'סגן ראשון',
   deputy2: 'סגן שני',
   manager: 'מנהל/ת',
@@ -404,6 +406,7 @@ export function ScheduleStep({
   initial,
   positionId,
   prevYear,
+  biweeklyTrack,
   onNext,
   onBack,
   onEditEmployee,
@@ -415,6 +418,8 @@ export function ScheduleStep({
   initial?: ScheduleData;
   positionId?: string;
   prevYear?: PrevYearPosition;
+  /** מסלול מערכת דו-שבועית של המוסד (פנימיות), אם קיים — ראה src/lib/schedule/biweekly.ts. */
+  biweeklyTrack?: { thuEndSec: number; sunStartSec: number };
   onNext: (data: ScheduleData) => void;
   onBack?: () => void;
   onEditEmployee?: () => void;
@@ -472,13 +477,15 @@ export function ScheduleStep({
   }
 
   // ----- teaching staff: pick bell-schedule slots instead of typing times -----
-  // Only for the full-timetable teaching type (scheduleType "הוראה"). Roles that are
-  // category=הוראה but use a different entry mechanism — סגן ראשון (37.5/40 picker),
-  // מנהל/ת & סגן שני (handled above), "הוראה - לוח פרא" (typed grid, below), or רגיל
-  // (manual grid) — must NOT land here even if they happen to carry a bell-schedule number.
-  // A teaching role with no לוח צלצולים of its own still lands here: the grid then asks
-  // the user to pick one from the existing schedules before showing any slots.
-  if (type === SCHEDULE_TYPE.teaching) {
+  // For the full-timetable teaching types (scheduleType "הוראה" or "הוראה ללא שהייה" -
+  // same entry mechanism, only the ofek category / stay handling differs downstream).
+  // Roles that are category=הוראה but use a different entry mechanism — סגן ראשון
+  // (37.5/40 picker), מנהל/ת & סגן שני (handled above), "הוראה - לוח פרא" (typed grid,
+  // below), or רגיל (manual grid) — must NOT land here even if they happen to carry a
+  // bell-schedule number. A teaching role with no לוח צלצולים of its own still lands
+  // here: the grid then asks the user to pick one from the existing schedules before
+  // showing any slots.
+  if (type === SCHEDULE_TYPE.teaching || type === SCHEDULE_TYPE.teachingNoStay) {
     return (
       <BellScheduleGrid
         token={token}
@@ -488,6 +495,7 @@ export function ScheduleStep({
         setData={setData}
         positionId={positionId}
         prevYear={prevYear}
+        biweeklyTrack={biweeklyTrack}
         onBack={onBack}
         onEditEmployee={onEditEmployee}
         onEditRole={onEditRole}
@@ -509,6 +517,7 @@ export function ScheduleStep({
       setData={setData}
       positionId={positionId}
       prevYear={prevYear}
+      biweeklyTrack={biweeklyTrack}
       onBack={onBack}
       onEditEmployee={onEditEmployee}
       onEditRole={onEditRole}
@@ -624,6 +633,7 @@ function GridSchedule({
   setData,
   positionId,
   prevYear,
+  biweeklyTrack,
   onBack,
   onEditEmployee,
   onEditRole,
@@ -638,6 +648,7 @@ function GridSchedule({
   setData: React.Dispatch<React.SetStateAction<ScheduleData>>;
   positionId?: string;
   prevYear?: PrevYearPosition;
+  biweeklyTrack?: { thuEndSec: number; sunStartSec: number };
   onBack?: () => void;
   onEditEmployee?: () => void;
   onEditRole?: () => void;
@@ -769,6 +780,15 @@ function GridSchedule({
     DAYS.filter((d) => requiredBreak[d] > 0 && breaks[d]).map((d) => [d, breaks[d]!]),
   );
   const utilizedHours = isDeputy1 ? deputyWeekly : isPara ? paraHours : netHours;
+
+  // מערכת דו-שבועית (פנימיות): חצי מהשעות העודפות בשבוע המלא שהוזן לעומת מסלול
+  // המוסד, מנוכה רק מ"ניצול השעות בתקציב" — ראה src/lib/schedule/biweekly.ts.
+  const biweeklyDeductionHours = role.isBiweekly && biweeklyTrack
+    ? computeBiweeklyDeductionHours(week, {
+        thuEndMinutes: biweeklyTrack.thuEndSec / 60,
+        sunStartMinutes: biweeklyTrack.sunStartSec / 60,
+      })
+    : 0;
 
   const dayErrors: Partial<Record<Day, string>> = {};
   for (const d of gridDays) {
@@ -970,7 +990,7 @@ function GridSchedule({
       const overlapOk = await runOverlapCheckIfNeeded(week);
       if (!overlapOk) return;
       if (!(await runWeeklyTotalCheckIfNeeded(deputyWeekly))) return;
-      onNext({ ...data, breaks: prunedBreaks, weeklyHours: deputyWeekly });
+      onNext({ ...data, breaks: prunedBreaks, weeklyHours: deputyWeekly, biweeklyDeductionHours });
       return;
     }
 
@@ -978,7 +998,8 @@ function GridSchedule({
     // frontal/individual/stay breakdown. Zero those out. Block if over budget.
     if (!needsOfek) {
       const hours = Math.round(netHours * 100) / 100;
-      if (hours > role.remainingHours) errs.push(overBudgetMessage(hours, role.remainingHours));
+      const effectiveHours = Math.max(0, hours - biweeklyDeductionHours);
+      if (effectiveHours > role.remainingHours) errs.push(overBudgetMessage(effectiveHours, role.remainingHours));
       if (errs.length) { setErrors(errs); return; }
       // Overlap check for regular roles before proceeding.
       const overlapOk = await runOverlapCheckIfNeeded(week);
@@ -993,6 +1014,7 @@ function GridSchedule({
         stayHoursInstitution: 0,
         stayHoursHome: 0,
         jobPercent: 0,
+        biweeklyDeductionHours,
       });
       return;
     }
@@ -1013,7 +1035,10 @@ function GridSchedule({
     }
     // Use step-3 result when it exists, otherwise step-1 result.
     const j = (existing.count > 0 ? ofek : ofek1)!;
-    if (j.overBudget) errs.push(overBudgetMessage(j.utilizedHours, role.remainingHours));
+    // j.overBudget מחושב בשרת בלי לדעת על ניכוי דו-שבועי — נבדק כאן מחדש מול הניצול בפועל.
+    const effectiveUtilizedHours = Math.max(0, j.utilizedHours - biweeklyDeductionHours);
+    if (effectiveUtilizedHours > role.remainingHours)
+      errs.push(overBudgetMessage(effectiveUtilizedHours, role.remainingHours));
     if (j.reducedVsLastYear && !data.reductionReason) {
       warns.push('מספר השעות שהוזן קטן ממספר השעות בשנה הקודמת — יש לבחור סיבה להמשך.');
     }
@@ -1043,6 +1068,7 @@ function GridSchedule({
       motherPosition: j.motherPosition,
       ofekRecordId: j.ofekRecordId,
       ofekAllRolesRecordId: j.ofekAllRolesRecordId,
+      biweeklyDeductionHours,
     });
   }
 
@@ -1114,6 +1140,7 @@ function GridSchedule({
             } else {
               displayHours = utilizedHours;
             }
+            displayHours = Math.max(0, displayHours - biweeklyDeductionHours);
             const displayOverCap = displayHours > weeklyCap;
             return (
               <>
@@ -1135,6 +1162,14 @@ function GridSchedule({
               </>
             );
           })()}
+          {biweeklyDeductionHours > 0 && (
+            <div className="mt-3 rounded-lg bg-surface-container-low p-3 flex justify-between text-label-sm text-on-surface-variant">
+              <span className="flex items-center gap-1">
+                <Icon name="event_repeat" className="text-[16px]" /> ניכוי מערכת דו-שבועית (חצי מהעודף, כל שבועיים):
+              </span>
+              <span className="font-bold text-primary">-{formatNum(biweeklyDeductionHours)}</span>
+            </div>
+          )}
           {isDeputy1 && (
             <div className="mt-3 text-label-sm flex justify-between text-on-surface-variant">
               <span>סה״כ שעות שהוזנו במערכת:</span>
@@ -1550,6 +1585,7 @@ function BellScheduleGrid({
   setData,
   positionId,
   prevYear,
+  biweeklyTrack,
   onBack,
   onEditEmployee,
   onEditRole,
@@ -1562,6 +1598,7 @@ function BellScheduleGrid({
   setData: React.Dispatch<React.SetStateAction<ScheduleData>>;
   positionId?: string;
   prevYear?: PrevYearPosition;
+  biweeklyTrack?: { thuEndSec: number; sunStartSec: number };
   onBack?: () => void;
   onEditEmployee?: () => void;
   onEditRole?: () => void;
@@ -1742,6 +1779,15 @@ function BellScheduleGrid({
     (acc, d) => acc + picks[d].reduce((s, p) => s + (p?.dailyHours ?? 0), 0),
     0,
   );
+
+  // מערכת דו-שבועית (פנימיות): הרצועות נכנסות ל-data.week ככניסה/יציאה לכל דבר,
+  // ולכן אותה נוסחה בדיוק כמו ב-GridSchedule — ראה src/lib/schedule/biweekly.ts.
+  const biweeklyDeductionHours = role.isBiweekly && biweeklyTrack
+    ? computeBiweeklyDeductionHours(data.week, {
+        thuEndMinutes: biweeklyTrack.thuEndSec / 60,
+        sunStartMinutes: biweeklyTrack.sunStartSec / 60,
+      })
+    : 0;
 
   /** כל שינוי ברצועות מבטל את הבדיקות שנעשות מול תקניו האחרים של העובד. */
   function bellInvalidateCrossChecks() {
@@ -1990,7 +2036,10 @@ function BellScheduleGrid({
     const j = (existing.count > 0 ? ofek : ofek1)!;
     // Collect all blocking alerts together.
     const errs: string[] = [];
-    if (j.overBudget) errs.push(overBudgetMessage(j.utilizedHours, role.remainingHours));
+    // j.overBudget מחושב בשרת בלי לדעת על ניכוי דו-שבועי — נבדק כאן מחדש מול הניצול בפועל.
+    const effectiveUtilizedHours = Math.max(0, j.utilizedHours - biweeklyDeductionHours);
+    if (effectiveUtilizedHours > role.remainingHours)
+      errs.push(overBudgetMessage(effectiveUtilizedHours, role.remainingHours));
     if (j.reducedVsLastYear && !data.reductionReason) {
       errs.push('מספר השעות שהוזן קטן ממספר השעות בשנה הקודמת — יש לבחור סיבה להמשך.');
     }
@@ -2015,6 +2064,7 @@ function BellScheduleGrid({
       motherPosition: j.motherPosition,
       ofekRecordId: j.ofekRecordId,
       ofekAllRolesRecordId: j.ofekAllRolesRecordId,
+      biweeklyDeductionHours,
     });
   }
 
@@ -2037,6 +2087,7 @@ function BellScheduleGrid({
             } else {
               displayHours = weeklyHours;
             }
+            displayHours = Math.max(0, displayHours - biweeklyDeductionHours);
             const displayOverCap = displayHours > weeklyCap;
             return (
               <>
@@ -2058,6 +2109,14 @@ function BellScheduleGrid({
               </>
             );
           })()}
+          {biweeklyDeductionHours > 0 && (
+            <div className="mt-1 mb-3 rounded-lg bg-surface-container-low p-3 flex justify-between text-label-sm text-on-surface-variant">
+              <span className="flex items-center gap-1">
+                <Icon name="event_repeat" className="text-[16px]" /> ניכוי מערכת דו-שבועית (חצי מהעודף, כל שבועיים):
+              </span>
+              <span className="font-bold text-primary">-{formatNum(biweeklyDeductionHours)}</span>
+            </div>
+          )}
 
           {/* עובד נוער — המכסה השבועית נמדדת בשעות שעון בפועל */}
           {youth && (

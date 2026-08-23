@@ -133,11 +133,11 @@ export async function POST(req: NextRequest) {
     const otherScopeHours = existing ? totalHours(existing.allRoles) : 0;
     const otherPositionsCount = existing ? existing.allRoles.count : 0;
 
-    const notFoundResponse = (k: string) =>
+    const notFoundResponse = (k: string, hint?: string) =>
       NextResponse.json({
         ok: false,
         reason: 'ofek_not_found',
-        message: 'אין מבנה שבוע עבודה בהתאם למערכת השעות שהוזנה',
+        message: 'אין מבנה שבוע עבודה בהתאם למערכת השעות שהוזנה' + (hint ? ` (${hint})` : ''),
         key: k,
         finalHours,
         bonus,
@@ -156,7 +156,23 @@ export async function POST(req: NextRequest) {
     });
 
     const preliminaryRow = await lookupOfek(preliminaryKey, gate.requestId);
-    if (!preliminaryRow) return notFoundResponse(preliminaryKey);
+    if (!preliminaryRow) {
+      // מלכודת ידועה: לפעמים הצירוף קיים במחשבון רק תחת דגל "משרת אם" ההפוך
+      // מזה שחושב כרגע (למשל עובדת עם כמה תקנים קטנים שרק ביחד חוצים 79%).
+      // בדיקה שקטה נוספת רק כדי לתת רמז שימושי בהודעת השגיאה, לא כדי לשנות תוצאה.
+      const altKey = buildOfekKey({
+        layer,
+        ageHours,
+        motherPosition: !preliminaryMother,
+        category: ofekCategory,
+        totalHours: finalHours,
+      });
+      const altRow = await lookupOfek(altKey, gate.requestId);
+      const hint = altRow
+        ? `קיים צירוף תואם במחשבון עבור "משרת אם = ${!preliminaryMother ? 'כן' : 'לא'}" - בדקו את שדה הילדים מתחת לגיל 14 ואת יתר התקנים של העובד/ת במערכת, ייתכן שהיקף המשרה הכולל שלו/ה עדיין לא נכנס לחישוב`
+        : undefined;
+      return notFoundResponse(preliminaryKey, hint);
+    }
 
     // בדיקה שנייה — הקובעת: היקף התקן הנוכחי לפי פלט המחשבון, ועליו יתר התקנים.
     const resolved = await resolveByOfekOutput({
@@ -246,12 +262,16 @@ export async function POST(req: NextRequest) {
       isBehaviorAnalyst: Boolean(body.isBehaviorAnalyst),
     });
     const teaching = ofekCategory === 'הוראה';
-    const stayInstitution = teaching || split === 'institution' ? stay : 0;
-    const stayHome = !teaching && split === 'home' ? stay : 0;
+    // "הוראה ללא שהייה": שהייה תמיד "מהבית", ואינה נכללת בניצול התקציב, ללא תלות
+    // בשכבה / paraBoard / behavior-analyst - עוקף את paraStaySplit ואת teaching הרגיל.
+    const teachingNoStay = ofekCategory === 'הוראה_ללא_שהייה';
+    const stayInstitution = teaching || (!teachingNoStay && split === 'institution') ? stay : 0;
+    const stayHome = teachingNoStay || (!teaching && split === 'home') ? stay : 0;
 
-    // סה"כ שעות לניצול: גנים כולל שהייה, יסודי/חטיבה בלעדיה - כמו computeUtilizedHours בסאבמיט.
+    // סה"כ שעות לניצול: גנים כולל שהייה, יסודי/חטיבה בלעדיה - כמו computeUtilizedHours
+    // בסאבמיט. "הוראה ללא שהייה" לעולם בלעדיה, ללא תלות בשכבה.
     const isGanimLayer = layer === 'גנים';
-    const utilizedHours = frontal + individual + (isGanimLayer ? stayInstitution + stayHome : 0);
+    const utilizedHours = frontal + individual + (isGanimLayer && !teachingNoStay ? stayInstitution + stayHome : 0);
 
     // Budget over-limit check against סה"כ שעות לניצול, לא מול השעות שהוזנו במערכת השעות.
     const budgetRemaining = Number(body.budgetRemaining ?? Infinity);

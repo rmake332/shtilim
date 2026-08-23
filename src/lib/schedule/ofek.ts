@@ -161,18 +161,29 @@ export function isParaEntry(scheduleType: string | null | undefined): boolean {
 
 /**
  * קטגוריית מחשבון אופק חדש הנגזרת מסוג מערכת השעות, או null כשהתקן אינו נדרש לאופק.
- * "הוראה - לוח פרא" מוזן כמו פרא אך מחושב באופק כמו הוראה.
+ * "הוראה - לוח פרא" מוזן כמו פרא אך מחושב באופק כמו הוראה. "הוראה ללא שהייה" מוזן
+ * כמו הוראה (לוח צלצולים) אך נבדק מול קטגוריית אופק נפרדת - ראה paraStaySplit
+ * ו-computeUtilizedHours להבדלים בטיפול בשהייה ובניצול התקציב.
  */
-export function ofekCategoryFor(scheduleType: string | null | undefined): 'פרא' | 'הוראה' | null {
+export function ofekCategoryFor(
+  scheduleType: string | null | undefined,
+): 'פרא' | 'הוראה' | 'הוראה_ללא_שהייה' | null {
   if (scheduleType === 'פרא') return 'פרא';
   if (scheduleType === 'הוראה' || scheduleType === 'הוראה - לוח פרא') return 'הוראה';
+  if (scheduleType === 'הוראה ללא שהייה') return 'הוראה_ללא_שהייה';
   return null;
 }
 
 /**
  * סה"כ שעות לניצול = frontal + individual + stay.
  * גנים (הוראה ופרא): כולל שהייה. יסודי / חטיבה: ללא שהייה → frontal + individual בלבד.
+ * "הוראה ללא שהייה": שהייה לעולם לא נכללת בניצול, ללא תלות בשכבה.
  * נופל חזרה ל-weeklyHours כשהאופק עדיין לא חושב (למשל מערכת שעות "רגיל").
+ *
+ * `biweeklyDeductionHours` (מערכת דו-שבועית בפנימיות, ראה biweekly.ts) מנוכה
+ * כאן בלבד — אחרי הנפילה חזרה ל-weeklyHours — כדי שגם תפקידים עם אופק וגם
+ * בלעדיו יקבלו את הניכוי, בלי לגעת ב-weeklyHours/frontalHours/individualHours/
+ * stayHours* עצמם (אלה נשארים השעות המלאות, נדרשות כך גם לאכיפת חוק).
  */
 export function computeUtilizedHours(
   layer: string | null | undefined,
@@ -182,11 +193,15 @@ export function computeUtilizedHours(
     individualHours?: number;
     stayHoursInstitution?: number;
     stayHoursHome?: number;
+    biweeklyDeductionHours?: number;
   },
+  scheduleType?: string | null,
 ): number {
   const { frontalHours = 0, individualHours = 0, stayHoursInstitution = 0, stayHoursHome = 0 } = hours;
-  const isGanim = layer === 'גנים';
+  const excludeStay = ofekCategoryFor(scheduleType) === 'הוראה_ללא_שהייה';
+  const isGanim = layer === 'גנים' && !excludeStay;
   const stay = isGanim ? stayHoursInstitution + stayHoursHome : 0;
   const total = frontalHours + individualHours + stay;
-  return total > 0 ? total : (hours.weeklyHours ?? 0);
+  const base = total > 0 ? total : (hours.weeklyHours ?? 0);
+  return Math.max(0, base - (hours.biweeklyDeductionHours ?? 0));
 }

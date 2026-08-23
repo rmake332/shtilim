@@ -24,6 +24,11 @@ export interface Institution {
   requireViolenceCert?: boolean;
   /** כתובות מייל נוספות שמקבלות עותק מ"בקשת תשלום" בכל דיווח חודשי (אחת בכל שורה). */
   paymentRequestCcEmails: string[];
+  /**
+   * מסלול מערכת דו-שבועית של המוסד (פנימיות): שעת סיום יום חמישי ושעת התחלת
+   * יום ראשון בשבוע המקוצר. undefined כשלמוסד אין מסלול מקושר.
+   */
+  biweeklyTrack?: { thuEndSec: number; sunStartSec: number };
 }
 
 const FORM_TOKEN_FIELD = 'form_token';
@@ -72,6 +77,16 @@ export async function resolveInstitutionByToken(
     ? String((layerRaw as { name: string }).name)
     : layerRaw ? String(layerRaw) : undefined;
 
+  // Lookup fields (multipleLookupValues) come back as arrays even for a single link.
+  const thuEndRaw = f[MOSAD_FIELDS.biweeklyThuEnd];
+  const sunStartRaw = f[MOSAD_FIELDS.biweeklySunStart];
+  const thuEndSec = Array.isArray(thuEndRaw) ? Number(thuEndRaw[0]) : undefined;
+  const sunStartSec = Array.isArray(sunStartRaw) ? Number(sunStartRaw[0]) : undefined;
+  const biweeklyTrack =
+    thuEndSec != null && !Number.isNaN(thuEndSec) && sunStartSec != null && !Number.isNaN(sunStartSec)
+      ? { thuEndSec, sunStartSec }
+      : undefined;
+
   return {
     mosadId: rec.id,
     name: String(f[MOSAD_FIELDS.name] ?? ''),
@@ -84,5 +99,6 @@ export async function resolveInstitutionByToken(
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean),
+    biweeklyTrack,
   };
 }
