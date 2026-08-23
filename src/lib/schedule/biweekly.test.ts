@@ -59,14 +59,19 @@ describe('computeBiweeklyExcessHours', () => {
 });
 
 describe('computeBiweeklyDeductionHours', () => {
-  it('is half the excess, rounded to the nearest half hour', () => {
+  it('is exactly half the excess when that divides evenly', () => {
     const w = week({ thu: [{ in: '08:00', out: '15:00' }] }); // excess 2h → deduction 1h
     expect(computeBiweeklyDeductionHours(w, track)).toBe(1);
   });
 
-  it('rounds an odd excess to the nearest half hour', () => {
-    const w = week({ thu: [{ in: '08:00', out: '14:20' }] }); // excess 1h20 → /2 = 0.333 → rounds to 0.5
-    expect(computeBiweeklyDeductionHours(w, track)).toBe(0.5);
+  it('is exactly half the excess, not rounded to the nearest half hour', () => {
+    const w = week({ thu: [{ in: '08:00', out: '14:20' }] }); // excess 1h20 = 80min → /2 = 40min = 0.67h
+    expect(computeBiweeklyDeductionHours(w, track)).toBe(0.67);
+  });
+
+  it('matches a real report: thu exit 14:40 against a 13:00 track (excess 100min → deduction 50min)', () => {
+    const w = week({ thu: [{ in: '07:30', out: '14:40' }] });
+    expect(computeBiweeklyDeductionHours(w, track)).toBe(0.83);
   });
 
   it('is 0 when there is no excess', () => {

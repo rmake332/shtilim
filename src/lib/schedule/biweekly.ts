@@ -9,7 +9,7 @@
  *
  * Pure — נבדק ב-biweekly.test.ts.
  */
-import { toMinutes, shiftMinutes, roundToHalf, type Shift } from './time';
+import { toMinutes, shiftMinutes, type Shift } from './time';
 
 export interface BiweeklyTrack {
   /** שעת סיום יום חמישי בשבוע המקוצר, בדקות מחצות. */
@@ -42,12 +42,13 @@ export function computeBiweeklyExcessHours(
 }
 
 /**
- * הניכוי בפועל מ"ניצול השעות בתקציב": חצי מהשעות העודפות, מעוגל לחצי השעה
- * הקרובה.
+ * הניכוי בפועל מ"ניצול השעות בתקציב": בדיוק חצי מהשעות העודפות, מעוגל לשתי
+ * ספרות עשרוניות (כמו formatNum) כדי להימנע מרעש נקודה-צפה - בלי עיגול לחצי
+ * שעה, כי זהו מספר ניצול תקציב ולא שעת כניסה/יציאה.
  */
 export function computeBiweeklyDeductionHours(
   week: Record<string, Shift[]>,
   track: BiweeklyTrack,
 ): number {
-  return roundToHalf(computeBiweeklyExcessHours(week, track) / 2);
+  return Math.round((computeBiweeklyExcessHours(week, track) / 2) * 100) / 100;
 }
