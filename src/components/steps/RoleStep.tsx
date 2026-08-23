@@ -1091,16 +1091,36 @@ function CheckboxLine({
   checked: boolean;
   onToggle: (checked: boolean) => void;
 }) {
-  const countLabel = kind === 'gemul'
-    ? `${formatNum(line.remainingCount)} גמולים`
-    : `${formatNum(line.remainingCount)} תפקידים`;
+  const noBalance = line.remainingCount <= 0;
+  // Never disable a line that's already checked: in edit mode the position's own
+  // usage can be exactly what brought this line's remaining balance to 0, and the
+  // user must still be able to uncheck it.
+  const disabled = noBalance && !checked;
+  const countLabel = noBalance
+    ? 'אין יתרה'
+    : kind === 'gemul'
+      ? `${formatNum(line.remainingCount)} גמולים`
+      : `${formatNum(line.remainingCount)} תפקידים`;
   return (
-    <label className="flex items-center justify-between gap-2 p-3 rounded-lg border border-outline-variant cursor-pointer hover:bg-surface-container-low">
+    <label
+      className={`flex items-center justify-between gap-2 p-3 rounded-lg border border-outline-variant ${
+        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-surface-container-low'
+      }`}
+    >
       <span className="flex items-center gap-2 text-body-md">
-        <input type="checkbox" checked={checked} onChange={(e) => onToggle(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onToggle(e.target.checked)}
+        />
         {line.title}
       </span>
-      <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-label-sm font-bold">
+      <span
+        className={`px-2 py-0.5 rounded-full text-label-sm font-bold ${
+          noBalance ? 'bg-surface-container-high text-on-surface-variant' : 'bg-tertiary-fixed text-on-tertiary-fixed'
+        }`}
+      >
         {countLabel}
       </span>
     </label>

@@ -26,11 +26,14 @@ export interface RoleOption {
   seniority: string | null;
 }
 
-/** A selectable gemul / extra-role line (category = גמול / תפקידים, remaining > 0). */
+/** A selectable gemul / extra-role line (category = גמול / תפקידים). Includes
+ *  lines with no remaining balance: the UI shows those disabled rather than
+ *  hiding them, so the user sees every line defined for the institution. */
 export interface ExtraBudgetLine {
   id: string;
   title: string;
-  /** For gemul lines: number of remaining gemulim (not hours). For roles lines: remaining count. */
+  /** For gemul lines: number of remaining gemulim (not hours). For roles lines: remaining count.
+   *  0 (or less) means no balance left to select. */
   remainingCount: number;
 }
 
@@ -195,10 +198,14 @@ export async function getRoleById(
   return rec ? mapRole(rec) : null;
 }
 
-/** Gemul / extra-role lines (category match) with remaining > 0, for the institution.
- *  - גמול: filters by יתרת גמולים לניצול > 0
- *  - תפקידים: filters by יתרת תפקידים לניצול > 0
- *  No symbol filter — all lines across symbols for the institution are returned.
+/** Gemul / extra-role lines (category match) for the institution, including lines
+ *  with no remaining balance (remainingCount <= 0): the client displays those as
+ *  disabled rather than dropping them, so the user still sees every line that
+ *  exists for the institution, not just the ones currently usable.
+ *  - גמול: יתרת גמולים לניצול
+ *  - תפקידים: יתרת תפקידים לניצול
+ *  No symbol filter, all lines across symbols for the institution are returned.
+ *  Sorted so lines with remaining balance come first, then alphabetically.
  */
 export async function getExtraLines(
   mosadId: string,
@@ -213,14 +220,16 @@ export async function getExtraLines(
 
   return budget
     .map(mapRole)
-    .filter((r) => {
-      if (!wanted.has(r.category)) return false;
-      const remaining = category === 'gemul' ? r.remainingGemulim : r.remainingRoles;
-      return remaining > 0;
-    })
+    .filter((r) => wanted.has(r.category))
     .map((r) => ({
       id: r.id,
       title: r.title,
       remainingCount: category === 'gemul' ? r.remainingGemulim : r.remainingRoles,
-    }));
+    }))
+    .sort((a, b) => {
+      const aAvail = a.remainingCount > 0 ? 0 : 1;
+      const bAvail = b.remainingCount > 0 ? 0 : 1;
+      if (aAvail !== bAvail) return aAvail - bAvail;
+      return a.title.localeCompare(b.title, 'he');
+    });
 }
