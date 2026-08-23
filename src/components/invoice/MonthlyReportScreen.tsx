@@ -126,6 +126,8 @@ export function MonthlyReportScreen({
   const [positions, setPositions] = useState<InvoicePosition[]>([]);
   const [reports, setReports] = useState<Record<string, InvoiceMonthlyReport>>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
+  /** יתרת שעות שהועברה מחודשים קודמים (0 אם אין) - ראו src/lib/invoice/monthlyBalance.ts. */
+  const [carriedInBalance, setCarriedInBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [finishing, setFinishing] = useState(false);
@@ -144,6 +146,7 @@ export function MonthlyReportScreen({
       if (!json.ok) { setError(json.message || 'שגיאה בטעינת הנתונים.'); setLoading(false); return; }
       setBudgetRow(json.budgetRow);
       setPositions(json.positions);
+      setCarriedInBalance(Number(json.carriedInBalance) || 0);
       const byPosition: Record<string, InvoiceMonthlyReport> = {};
       for (const r of json.reports as InvoiceMonthlyReport[]) byPosition[r.positionId] = r;
       setReports(byPosition);
@@ -291,6 +294,8 @@ export function MonthlyReportScreen({
 
   const totalReported = Object.values(reports).reduce((s, r) => s + r.reportedHours, 0);
   const totalSpent = Object.values(reports).reduce((s, r) => s + r.totalPay, 0);
+  // מכסת השעות הזמינה לחודש = המכסה החודשית הרגילה + יתרה שהועברה מחודשים קודמים.
+  const availableQuota = (budgetRow?.monthlyHoursQuota ?? 0) + carriedInBalance;
   // חודש שכבר "סיום דיווח חודשי" נלחץ עבורו ננעל לצמיתות - אין עריכה חוזרת/שליחה חוזרת (v1).
   const monthLocked = Object.values(reports).some((r) => r.monthlyTransferDocGenerated);
   // אם כבר קיים קישור מטעינה קודמת (למשל טעינה מחדש של העמוד) - מוצג מיד, בלי צורך ללחוץ שוב.
@@ -327,10 +332,14 @@ export function MonthlyReportScreen({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <BudgetStatCard
               icon="schedule"
-              label={`שעות מדווחות - ${month}`}
-              valueLabel={`${formatNum(totalReported)} מתוך ${formatNum(budgetRow?.monthlyHoursQuota ?? 0)} שעות`}
+              label={
+                carriedInBalance > 0
+                  ? `שעות מדווחות - ${month} (כולל ${formatNum(carriedInBalance)} יתרה מועברת)`
+                  : `שעות מדווחות - ${month}`
+              }
+              valueLabel={`${formatNum(totalReported)} מתוך ${formatNum(availableQuota)} שעות`}
               current={totalReported}
-              max={budgetRow?.monthlyHoursQuota ?? 0}
+              max={availableQuota}
               color="primary"
             />
             <BudgetStatCard

@@ -5,6 +5,7 @@ import { listPositionsForBudgetRow } from '@/lib/invoice/positions';
 import { markMonthFinished, saveDocUrlForMonth, listReportsForPositions } from '@/lib/invoice/reports';
 import { getEmployeeById } from '@/lib/employees';
 import { generatePaymentRequestDoc, type PaymentRequestRow } from '@/lib/invoice/paymentRequestDoc';
+import { finalizeMonthBalance } from '@/lib/invoice/monthlyBalance';
 import { notifyPaymentRequestEmail } from '@/lib/makeWebhook';
 import { logger } from '@/lib/logger';
 
@@ -13,14 +14,19 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /**
  * POST /api/invoice/budget-rows/[id]/finish-report - מפיק מסמך "בקשת תשלום" אמיתי
  * בגוגל דוקס + PDF מאוחד עם כל החשבוניות (ראו src/lib/invoice/paymentRequestDoc.ts),
- * שולח אותו במייל (Make webhook) לכתובת שהוזנה + רשימת ההעתקים של המוסד, ורק לאחר
- * מכן מסמן שהדיווח החודשי לתקן זה (לחודש הנתון) הושלם (checkbox על כל שורות הדיווח).
+ * קובע את יתרת השעות הזמינה להעברה לחודש הבא (finalizeMonthBalance, ראו
+ * src/lib/invoice/monthlyBalance.ts), שולח את המסמך במייל (Make webhook) לכתובת
+ * שהוזנה + רשימת ההעתקים של המוסד, ורק לאחר מכן מסמן שהדיווח החודשי לתקן זה
+ * (לחודש הנתון) הושלם (checkbox על כל שורות הדיווח).
  *
  * **סדר הפעולות קריטי**: הפקת המסמך קודמת לנעילה בכוונה - אם ההפקה נכשלת (Drive/
- * quota/auth), החודש **לא** ננעל, כדי שאפשר יהיה לנסות "סיום דיווח" שוב. נעילה
- * (v1, מלאה, בלי אפשרות פתיחה מחדש) קורית רק אחרי שהמסמך אכן נוצר בהצלחה ונשמר.
- * שליחת המייל בסוף היא לא-חוסמת (emailError נפרד) - כשל בה לא מבטל את הנעילה, כי
- * המסמך כבר קיים ונשמר; המשתמשת יכולה לפתוח אותו ידנית מהקישור המוצג ב-UI.
+ * quota/auth), החודש **לא** ננעל, כדי שאפשר יהיה לנסות "סיום דיווח" שוב. קביעת
+ * יתרת השעות קודמת גם היא לנעילה (ולא הפוך) - אם היא נכשלת, החודש נשאר פתוח,
+ * כדי שלעולם לא ייווצר מצב של חודש נעול בלי שורת יתרה תואמת (שהייתה גורמת
+ * לחודש הבא "לדלג" עליו כאילו לא דווח בכלל). נעילה (v1, מלאה, בלי אפשרות פתיחה
+ * מחדש) קורית רק אחרי שהמסמך אכן נוצר בהצלחה, נשמר, והיתרה נקבעה. שליחת המייל
+ * בסוף היא לא-חוסמת (emailError נפרד) - כשל בה לא מבטל את הנעילה, כי המסמך כבר
+ * קיים ונשמר; המשתמשת יכולה לפתוח אותו ידנית מהקישור המוצג ב-UI.
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
@@ -106,6 +112,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let count: number;
   let emailError: string | null = null;
   try {
+    const reportedHoursTotal = existingReports.reduce((sum, r) => sum + r.reportedHours, 0);
+    await finalizeMonthBalance(
+      { budgetRowId: params.id, budgetRowTitle: row.title, month, quotaSnapshot: row.monthlyHoursQuota, reportedHoursTotal },
+      gate.requestId,
+    );
     await saveDocUrlForMonth(positionIds, month, { docUrl, folderUrl, mergedPdfUrl }, gate.requestId);
     count = await markMonthFinished(positionIds, month, gate.requestId);
 
@@ -123,8 +134,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!emailResult.ok) emailError = emailResult.message ?? 'שליחת המייל נכשלה.';
   } catch (e) {
     // המסמך כבר נוצר ונשמר בהצלחה (docUrl/folderUrl/mergedPdfUrl תקינים) - רק
-    // הנעילה/השמירה נכשלה. לא ננעל, כדי שניסיון חוזר יגלה את previousDocUrl וידרוס
-    // אותו במקום ליצור כפילות (ראו הערת "דריסה" ב-generatePaymentRequestDoc).
+    // קביעת היתרה/הנעילה/השמירה נכשלה. לא ננעל, כדי שניסיון חוזר יגלה את
+    // previousDocUrl וידרוס אותו במקום ליצור כפילות (ראו הערת "דריסה" ב-
+    // generatePaymentRequestDoc), ו-finalizeMonthBalance עצמו אידמפוטנטי (upsert)
+    // כך שקריאה חוזרת לו לא יוצרת שורת יתרה כפולה.
     logger.error(
       { requestId: gate.requestId, budgetRowId: params.id, month, err: String(e) },
       'finish-report lock/save failed after doc generation succeeded',

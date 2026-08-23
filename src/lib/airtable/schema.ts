@@ -16,6 +16,7 @@ export const TABLES = {
   institutionSymbols: 'tbl4BCMW4gwsIPxG7', // סמלי מוסד
   invoicePositions: 'tblmRAd0fHuFBbTSj', // תקני חשבונית
   invoiceReports: 'tblTk6mYvK1iuC2XP', // דיווח חודשי חשבונית
+  invoiceMonthlyBalances: 'tblZdHEwYx9BUqzD4', // יתרות חודשיות חשבונית (העברת יתרה בין חודשים)
   systemSettings: 'tblFzx04m2VgoeLhZ', // הגדרות מערכת (key/value, שורה בודדת לכל מפתח)
   biweeklyTracks: 'tbl7jZA6nEQqDjuFA', // מסלולי מערכת דו-שבועית
 } as const;
@@ -379,6 +380,20 @@ export const INVOICE_REPORT_FIELDS = {
   paymentRequestDocUrl: 'fldcqwPUdruKSg7df', // קישור למסמך בקשת תשלום (url, נכתב על כל שורות הדיווח של החודש)
   paymentRequestFolderUrl: 'fldINfwz3GfUo6AcO', // קישור לתיקיית בקשת תשלום (url) - כולל המסמך, החשבוניות בנפרד, וה-PDF המאוחד
   mergedPdfUrl: 'fldz07h00rSM9WY0b', // קישור ל-PDF מאוחד עם חשבוניות (url)
+} as const;
+
+/**
+ * יתרות חודשיות חשבונית fields: שורה אחת = שורת תקציב+חודש, נכתבת רק בעת נעילת
+ * החודש (finish-report). ראו src/lib/invoice/monthlyBalance.ts.
+ */
+export const INVOICE_BALANCE_FIELDS = {
+  label: 'fldmIYJn7oaLh3D8y', // מזהה (text, עותק תצוגתי "שורת תקציב - חודש")
+  budgetLink: 'fldo1ijvTE72sJt8l', // → תקציב התחלתי
+  month: 'fldjtphFS2RXecarx', // חודש (text, פורמט "YYYY-MM")
+  quotaSnapshot: 'fldhXDuv0wwIi6Qcl', // מכסה חודשית (סנאפשוט) - BUDGET_FIELDS.totalBudgetHours בעת הנעילה
+  carriedIn: 'fld7FOYDVqoDWq6qV', // יתרה נכנסת (number) - מיתרה יוצאת של החודש הנעול הקודם, 0 אם אין
+  reportedHoursTotal: 'fldodB944qE4vFmXf', // סה"כ שעות מדווחות (number) - סכום כלל העובדים בתקן לחודש זה
+  carriedOut: 'fldSwZrmgAQXBFPin', // יתרה יוצאת (formula) = quotaSnapshot + carriedIn - reportedHoursTotal
 } as const;
 
 /** קטגוריה / סוג מערכת שעות choice names (from live schema). */

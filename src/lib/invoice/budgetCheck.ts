@@ -2,6 +2,7 @@ import 'server-only';
 import { getRecord, listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, BUDGET_FIELDS, INVOICE_POSITION_FIELDS, INVOICE_REPORT_FIELDS } from '@/lib/airtable/schema';
 import { formatNum } from '@/lib/formatNum';
+import { getCarryInBalance } from '@/lib/invoice/monthlyBalance';
 
 export interface InvoiceCheckResult {
   ok: boolean;
@@ -70,8 +71,10 @@ export async function checkLiveAnnualAllocation(
 /**
  * בדיקת חריגה מול הערך החי באיירטייבל בזמן דיווח שעות חודשי: התעריף המדווח לא חורג
  * מהתעריף שנקבע לעובד בהקצאה השנתית, וסה"כ השעות המדווחות של כלל העובדים בתקן
- * לחודש הנתון לא חורג מהמכסה החודשית המשותפת. מותר לעובד בודד לדווח יותר שעות
- * ממה שהוקצה לו אישית - אין בדיקה פר-עובד על שעות, רק על הסכום המצטבר.
+ * לחודש הנתון לא חורג מהמכסה **הזמינה** לחודש - המכסה החודשית הרגילה + יתרה
+ * שהועברה מחודשים קודמים (ראו getCarryInBalance, monthlyBalance.ts). מותר לעובד
+ * בודד לדווח יותר שעות ממה שהוקצה לו אישית - אין בדיקה פר-עובד על שעות, רק על
+ * הסכום המצטבר.
  */
 export async function checkLiveMonthlyQuota(
   params: {
@@ -95,10 +98,13 @@ export async function checkLiveMonthlyQuota(
   }
 
   // מותר לעובד לדווח יותר שעות ממה שהוקצה לו אישית - הבדיקה היחידה על שעות היא
-  // הסכום המצטבר של כלל העובדים בתקן מול המכסה החודשית המשותפת (למטה).
+  // הסכום המצטבר של כלל העובדים בתקן מול המכסה הזמינה המשותפת (למטה).
   const budget = await getRecord(TABLES.budget, params.budgetRowId, requestId);
   const quota = budget ? Number(budget.fields[BUDGET_FIELDS.totalBudgetHours]) : NaN;
   if (!Number.isFinite(quota)) return { ok: true, message: null };
+
+  const carriedIn = await getCarryInBalance(params.budgetRowId, params.month, requestId);
+  const availableQuota = quota + carriedIn;
 
   const positions = await positionsForBudgetRow(params.budgetRowId, requestId);
   const positionIds = new Set(positions.map((p) => p.id));
@@ -114,10 +120,11 @@ export async function checkLiveMonthlyQuota(
     .reduce((sum, r) => sum + (Number(r.fields[INVOICE_REPORT_FIELDS.reportedHours]) || 0), 0);
 
   const total = existingSum + params.reportedHours;
-  if (total > quota) {
+  if (total > availableQuota) {
+    const carryNote = carriedIn > 0 ? `, כולל ${formatNum(carriedIn)} שעות יתרה שהועברו מחודשים קודמים` : '';
     return {
       ok: false,
-      message: `סה"כ השעות המדווחות לחודש זה (${formatNum(total)}) חורג מהמכסה החודשית של התקן (${formatNum(quota)}). ייתכן שעובד אחר דיווח ממש עכשיו - יש לרענן ולנסות שוב.`,
+      message: `סה"כ השעות המדווחות לחודש זה (${formatNum(total)}) חורג מהמכסה הזמינה לתקן (${formatNum(availableQuota)}${carryNote}). ייתכן שעובד אחר דיווח ממש עכשיו - יש לרענן ולנסות שוב.`,
     };
   }
   return { ok: true, message: null };
