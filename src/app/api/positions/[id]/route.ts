@@ -375,16 +375,12 @@ function buildScheduleFields(schedule: ScheduleData): Record<string, number | nu
     const def = SCHEDULE_FIELDS[day];
     const slots = def.in.length; // מוצ"ש has 1 slot; weekdays have 3
     const shifts = (schedule.week?.[day] ?? []).slice(0, slots);
-    shifts.forEach((s, idx) => {
-      const inSec = hhmmToSeconds(s.in);
-      const outSec = hhmmToSeconds(s.out);
-      if (inSec != null) out[def.in[idx]] = inSec;
-      if (outSec != null) out[def.out[idx]] = outSec;
-    });
-    // Clear any slots beyond what was submitted (nulls for remaining shifts)
-    for (let idx = shifts.length; idx < slots; idx++) {
-      out[def.in[idx]] = 0;
-      out[def.out[idx]] = 0;
+    // כל משבצת שלא הוזנה (כולל משבצות מעבר למה שנשלח) מתנקה ל-null, לא 0 —
+    // 0 באיירטייבל מציג "0:00" ומזהם את הנתונים כאילו הוזנה משמרת אמיתית.
+    for (let idx = 0; idx < slots; idx++) {
+      const s = shifts[idx];
+      out[def.in[idx]] = s ? hhmmToSeconds(s.in) : null;
+      out[def.out[idx]] = s ? hhmmToSeconds(s.out) : null;
     }
   }
   // הפסקה יומית — א'–ו' בלבד. יום ללא הפסקה מנוקה ל-null, כדי שהסרת הפסקה בעריכה
@@ -439,15 +435,18 @@ async function updatePosition(
     [POSITION_FIELDS.symbolLink]: role.symbolId ? [role.symbolId] : undefined,
     [POSITION_FIELDS.layer]: role.layer || undefined,
     [POSITION_FIELDS.subRole]: role.subRole || undefined,
-    [POSITION_FIELDS.weeklyHours]: schedule.weeklyHours || undefined,
-    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role.layer, schedule, role.scheduleType) || undefined,
+    // שעות אלו נגזרות ישירות ממערכת השעות ותמיד מוגדרות (0 כברירת מחדל) — יש לכתוב
+    // אותן תמיד, כולל כשהערך הוא 0, אחרת || undefined מדלג על השדה ב-Airtable משאיר
+    // ערך ישן מעריכה קודמת (ראה fldOijiio8e3LTzr3 שנתקע על 5.5 אחרי מחיקת כל השעות).
+    [POSITION_FIELDS.weeklyHours]: schedule.weeklyHours,
+    [POSITION_FIELDS.totalUtilizedHours]: computeUtilizedHours(role.layer, schedule, role.scheduleType),
     [POSITION_FIELDS.motherPosition]: schedule.motherPosition ? 'כן' : 'לא',
-    [POSITION_FIELDS.frontalHours]: schedule.frontalHours || undefined,
-    [POSITION_FIELDS.individualHours]: schedule.individualHours || undefined,
-    [POSITION_FIELDS.stayHours]: schedule.stayHoursInstitution || undefined,
-    [POSITION_FIELDS.stayHoursHome]: schedule.stayHoursHome || undefined,
-    [POSITION_FIELDS.severeDisabilityBonus]: schedule.severeDisabilityBonus || undefined,
-    [POSITION_FIELDS.worksElsewherePara]: schedule.worksElsewherePara || undefined,
+    [POSITION_FIELDS.frontalHours]: schedule.frontalHours,
+    [POSITION_FIELDS.individualHours]: schedule.individualHours,
+    [POSITION_FIELDS.stayHours]: schedule.stayHoursInstitution,
+    [POSITION_FIELDS.stayHoursHome]: schedule.stayHoursHome,
+    [POSITION_FIELDS.severeDisabilityBonus]: schedule.severeDisabilityBonus,
+    [POSITION_FIELDS.worksElsewherePara]: schedule.worksElsewherePara,
     [POSITION_FIELDS.updateStatus]: 'ממתין לעדכון',
     [POSITION_FIELDS.submittedAt]: new Date().toISOString(),
     ...(role.selectedGemulIds.length ? { [POSITION_FIELDS.bonusesLink]: role.selectedGemulIds } : { [POSITION_FIELDS.bonusesLink]: [] }),

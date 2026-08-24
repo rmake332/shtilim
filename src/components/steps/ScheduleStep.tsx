@@ -253,6 +253,8 @@ function overBudgetMessage(hours: number, remaining: number): string {
 const NON_INTEGER_HOURS_ERROR =
   'סה"כ שעות המערכת יהיו במספר עגול בלבד!\nלא ניתן להתקדם בתהליך בהזנת מערכת שכוללת מספר עשרוני';
 
+const EMPTY_SCHEDULE_ERROR = 'סה"כ שעות המערכת הוא 0 — יש להזין שעות עבודה לפני המשך';
+
 /**
  * Render all blocking errors (red) and non-blocking warnings (amber) together.
  * Each list shows every message so the user sees all problems at once.
@@ -565,6 +567,10 @@ function ManualHoursSchedule({
   async function validateAndNext() {
     setErrors([]);
     setWeeklyTotal(null);
+    if (!value) {
+      setErrors([EMPTY_SCHEDULE_ERROR]);
+      return;
+    }
     setChecking(true);
     try {
       const result = await checkWeeklyTotal(token, employee.tz, value, role.layer, positionId);
@@ -998,6 +1004,9 @@ function GridSchedule({
     // frontal/individual/stay breakdown. Zero those out. Block if over budget.
     if (!needsOfek) {
       const hours = Math.round(netHours * 100) / 100;
+      // בכוונה בלי לעגל ל-0 שעות שלמות: תקן של פחות משעה (0.02, 0.1...) תקין ואסור
+      // לחסום אותו — רק 0 ממש (מערכת ריקה) חוסם.
+      if (hours === 0) errs.push(EMPTY_SCHEDULE_ERROR);
       const effectiveHours = Math.max(0, hours - biweeklyDeductionHours);
       if (effectiveHours > role.remainingHours) errs.push(overBudgetMessage(effectiveHours, role.remainingHours));
       if (errs.length) { setErrors(errs); return; }
@@ -1035,6 +1044,7 @@ function GridSchedule({
     }
     // Use step-3 result when it exists, otherwise step-1 result.
     const j = (existing.count > 0 ? ofek : ofek1)!;
+    if (j.finalHours === 0) errs.push(EMPTY_SCHEDULE_ERROR);
     // j.overBudget מחושב בשרת בלי לדעת על ניכוי דו-שבועי — נבדק כאן מחדש מול הניצול בפועל.
     const effectiveUtilizedHours = Math.max(0, j.utilizedHours - biweeklyDeductionHours);
     if (effectiveUtilizedHours > role.remainingHours)
@@ -2036,6 +2046,7 @@ function BellScheduleGrid({
     const j = (existing.count > 0 ? ofek : ofek1)!;
     // Collect all blocking alerts together.
     const errs: string[] = [];
+    if (j.finalHours === 0) errs.push(EMPTY_SCHEDULE_ERROR);
     // j.overBudget מחושב בשרת בלי לדעת על ניכוי דו-שבועי — נבדק כאן מחדש מול הניצול בפועל.
     const effectiveUtilizedHours = Math.max(0, j.utilizedHours - biweeklyDeductionHours);
     if (effectiveUtilizedHours > role.remainingHours)
