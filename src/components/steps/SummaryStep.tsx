@@ -42,7 +42,7 @@ export function SummaryStep({
   const [consent, setConsent] = useState(isEdit); // edit mode: pre-consent (already acknowledged)
   const [submitting, setSubmitting] = useState(false);
   const [uploadNote, setUploadNote] = useState('');
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; message: string; editUrl?: string } | null>(null);
 
   // Edit mode: default "תאריך עדכון מערכת" to today if it wasn't already set.
   useEffect(() => {
@@ -145,7 +145,7 @@ export function SummaryStep({
     setResult(null);
     try {
       let res: Response;
-      let j: { ok: boolean; positionId?: string; employeeId?: string; message?: string };
+      let j: { ok: boolean; positionId?: string; employeeId?: string; message?: string; editUrl?: string };
 
       if (isEdit && positionId) {
         res = await fetch(`/api/positions/${positionId}?token=${encodeURIComponent(token)}`, {
@@ -171,7 +171,7 @@ export function SummaryStep({
           const failed = await uploadDocuments(j.positionId, j.employeeId);
           setResult({ ok: true, message: resultMessage('הטופס נשלח בהצלחה! התקן נוצר במערכת.', failed) });
         } else {
-          setResult({ ok: false, message: j.message || 'שגיאה בשליחת הטופס.' });
+          setResult({ ok: false, message: j.message || 'שגיאה בשליחת הטופס.', editUrl: j.editUrl });
         }
       }
     } catch {
@@ -472,8 +472,13 @@ export function SummaryStep({
       )}
 
       {result && !result.ok && (
-        <div className="mt-4 p-3 rounded-lg bg-error-container text-on-error-container text-body-md flex items-center gap-2">
+        <div className="mt-4 p-3 rounded-lg bg-error-container text-on-error-container text-body-md flex items-center gap-2 flex-wrap">
           <Icon name="error" /> {result.message}
+          {result.editUrl && (
+            <a href={result.editUrl} className="underline font-bold hover:opacity-80">
+              מעבר לעריכת התקן הקיים
+            </a>
+          )}
         </div>
       )}
 

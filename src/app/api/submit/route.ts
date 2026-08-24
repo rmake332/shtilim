@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
-import { submitForm } from '@/lib/submit';
+import { submitForm, DuplicateSubmissionError } from '@/lib/submit';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 import { isValidForeignId } from '@/lib/validation/foreignId';
 import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
@@ -90,7 +90,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const out = await submitForm(
-      { institutionMosadId: gate.institution.mosadId, employee, role, schedule },
+      {
+        institutionMosadId: gate.institution.mosadId,
+        institutionName: gate.institution.name,
+        employee,
+        role,
+        schedule,
+      },
       gate.requestId,
     );
     await notifySubmitWebhook(
@@ -105,6 +111,10 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json({ ok: true, ...out });
   } catch (e) {
+    if (e instanceof DuplicateSubmissionError) {
+      const editUrl = `/form/${encodeURIComponent(body.token)}/edit/${e.existingPositionId}`;
+      return NextResponse.json({ ok: false, message: e.message, editUrl }, { status: 409 });
+    }
     logger.error({ requestId: gate.requestId, err: String(e) }, 'submit failed');
     await notifyError(
       {

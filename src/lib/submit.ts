@@ -1,5 +1,5 @@
 import 'server-only';
-import { createRecord, updateRecord, getRecord } from '@/lib/airtable/client';
+import { createRecord, updateRecord, getRecord, listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import {
   TABLES,
   EMPLOYEE_FIELDS,
@@ -10,12 +10,33 @@ import {
   BREAK_DAY_KEYS,
 } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
+import { notifyError } from '@/lib/makeWebhook';
 import { findEmployeeByExactId } from '@/lib/employees';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
 // Includes מוצ"ש — only populated for regular-type schedules; other types never set week.motzash.
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'motzash'] as const;
+
+/** A second submit for the same employee + role within this window is treated as an
+ *  accidental double-submit (e.g. a slow first response made the secretary unsure it
+ *  went through), not a genuine second position. */
+const DUPLICATE_SUBMIT_WINDOW_MINUTES = 10;
+
+/** Thrown when submitForm blocks an accidental double-submit. Callers should surface
+ *  `message` to the user directly (with a link to `existingPositionId`'s edit form)
+ *  rather than the generic save-failed error. */
+export class DuplicateSubmissionError extends Error {
+  constructor(public readonly existingPositionId: string) {
+    super('קיים כבר תקן לעובד/ת זה בתפקיד זה.');
+    this.name = 'DuplicateSubmissionError';
+  }
+}
+
+function recordLinks(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => (typeof x === 'string' ? x : (x as { id?: string })?.id ?? '')).filter(Boolean);
+}
 
 /** "HH:MM" → fractional hours for Airtable duration fields (stored as seconds). */
 function hhmmToSeconds(hhmm: string): number | null {
@@ -57,13 +78,14 @@ function scheduleFields(schedule: ScheduleData): Record<string, number> {
 export async function submitForm(
   params: {
     institutionMosadId: string;
+    institutionName: string;
     employee: EmployeeData;
     role: RoleData;
     schedule: ScheduleData;
   },
   requestId?: string,
 ): Promise<{ positionId: string; employeeId: string }> {
-  const { employee, role, schedule, institutionMosadId } = params;
+  const { employee, role, schedule, institutionMosadId, institutionName } = params;
 
   // 1. Employee record (create if new, update if existing).
   let employeeId = employee.recordId ?? '';
@@ -121,6 +143,31 @@ export async function submitForm(
     }
   }
 
+  // Guard against an accidental double-submit (e.g. the secretary wasn't sure the first
+  // click went through, or a slow response looked like a failure, and sent the form again
+  // moments later) — skip creating a second position for the same employee + role.
+  if (role.roleId) {
+    const recentPositions = await listRecords(
+      TABLES.activePositions,
+      {
+        filterByFormula: `FIND("${escapeFormulaValue(employee.tz)}", {${POSITION_FIELDS.tzLookup}})`,
+        maxRecords: 20,
+      },
+      requestId,
+    );
+    const dup = recentPositions.find((r) => {
+      if (!recordLinks(r.fields[POSITION_FIELDS.roleLink]).includes(role.roleId!)) return false;
+      const submittedAt = r.fields[POSITION_FIELDS.submittedAt];
+      if (!submittedAt) return false;
+      const ageMinutes = (Date.now() - new Date(String(submittedAt)).getTime()) / 60000;
+      return ageMinutes >= 0 && ageMinutes < DUPLICATE_SUBMIT_WINDOW_MINUTES;
+    });
+    if (dup) {
+      logger.warn({ requestId, existingPositionId: dup.id }, 'blocked duplicate submission');
+      throw new DuplicateSubmissionError(dup.id);
+    }
+  }
+
   // 2. תקנים פעילים record.
   const fields: Record<string, unknown> = {
     [POSITION_FIELDS.employeeLink]: [employeeId],
@@ -168,16 +215,37 @@ export async function submitForm(
   // Mark the prior-year (תשפ"ו) source record.
   // Same role as last year → "הועלה תקן משנה קודמת"; a different role (or none resolved
   // from the budget, so the secretary picked another) → "נוסף תקן חדש".
+  // Best-effort: the position above is already saved, so a failure here must not fail the
+  // whole submission (the secretary would otherwise see an error despite success, and could
+  // create a duplicate position by retrying). Failures are still surfaced to the developer.
   if (schedule.prevYearRecordId) {
     const sameRole = Boolean(schedule.prevYearRoleId) && schedule.prevYearRoleId === role.roleId;
     const status = sameRole ? 'הועלה תקן משנה קודמת' : 'נוסף תקן חדש';
-    await updateRecord(
-      TABLES.prevYearPositions,
-      schedule.prevYearRecordId,
-      { [PREV_YEAR_FIELDS.updateStatusTshapaz]: status },
-      requestId,
-    );
-    logger.info({ requestId, prevYearRecordId: schedule.prevYearRecordId, status }, 'prev-year record marked');
+    try {
+      await updateRecord(
+        TABLES.prevYearPositions,
+        schedule.prevYearRecordId,
+        { [PREV_YEAR_FIELDS.updateStatusTshapaz]: status },
+        requestId,
+      );
+      logger.info({ requestId, prevYearRecordId: schedule.prevYearRecordId, status }, 'prev-year record marked');
+    } catch (e) {
+      logger.error(
+        { requestId, prevYearRecordId: schedule.prevYearRecordId, err: String(e) },
+        'prev-year status update failed',
+      );
+      await notifyError(
+        {
+          stage: 'airtable_write',
+          name: employee.name,
+          tz: employee.tz,
+          role: role.roleTitle,
+          institution: institutionName,
+          detail: `עדכון סטטוס תשפ"ו נכשל עבור ${schedule.prevYearRecordId} (positionId ${position.id}): ${String(e)}`,
+        },
+        requestId,
+      );
+    }
   }
 
   // Youth-document attachments are uploaded by the client after submit, one request
