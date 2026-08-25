@@ -12,6 +12,7 @@ import {
   motherPositionFromOfekRow,
   jobPercentBase,
   computeUtilizedHours,
+  includeExistingStayInCombinedKey,
 } from './ofek';
 
 describe('jobPercent', () => {
@@ -204,6 +205,25 @@ describe('ofekCategoryFor', () => {
     expect(ofekCategoryFor('סגן ראשון')).toBeNull();
     expect(ofekCategoryFor('מילוי מקום')).toBeNull();
     expect(ofekCategoryFor(null)).toBeNull();
+  });
+});
+
+describe('includeExistingStayInCombinedKey', () => {
+  it('הוראה והוראה - לוח פרא: שהיית התקנים הקיימים נכנסת בכל שכבה', () => {
+    expect(includeExistingStayInCombinedKey('הוראה', 'יסודי')).toBe(true);
+    expect(includeExistingStayInCombinedKey('הוראה', 'חטיבה')).toBe(true);
+    expect(includeExistingStayInCombinedKey('הוראה', 'גנים')).toBe(true);
+    expect(includeExistingStayInCombinedKey('הוראה - לוח פרא', 'חטיבה')).toBe(true);
+    expect(includeExistingStayInCombinedKey('הוראה - לוח פרא', 'גנים')).toBe(true);
+  });
+  it('הוראה ללא שהייה: לעולם לא, גם בגנים', () => {
+    expect(includeExistingStayInCombinedKey('הוראה ללא שהייה', 'יסודי')).toBe(false);
+    expect(includeExistingStayInCombinedKey('הוראה ללא שהייה', 'גנים')).toBe(false);
+  });
+  it('פרא: רק בגנים', () => {
+    expect(includeExistingStayInCombinedKey('פרא', 'גנים')).toBe(true);
+    expect(includeExistingStayInCombinedKey('פרא', 'יסודי')).toBe(false);
+    expect(includeExistingStayInCombinedKey('פרא', 'חטיבה')).toBe(false);
   });
 });
 

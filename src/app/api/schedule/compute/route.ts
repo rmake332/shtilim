@@ -10,6 +10,7 @@ import {
   severeDisabilityBonus,
   paraStaySplit,
   ofekCategoryFor,
+  includeExistingStayInCombinedKey,
   motherPositionFromOfekRow,
   ofekRowHoursSum,
   type MotherEmployeeInput,
@@ -211,9 +212,11 @@ export async function POST(req: NextRequest) {
     if (existing && !body.skipExisting) {
       additionalRoles = existing.count;
       if (existing.count > 0) {
-        // גנים: כולל שהייה בחישוב משולב. יסודי/חטיבה: שהייה לא נספרת בניצול.
-        const isGanim = layer === 'גנים';
-        const existingStayForCombined = isGanim ? existing.stayHours : 0;
+        // הוראה / הוראה - לוח פרא: שהיית התקנים הקיימים נכנסת לסכום המשולב בכל
+        // שכבה. הוראה ללא שהייה: לעולם לא. פרא: רק בגנים.
+        const existingStayForCombined = includeExistingStayInCombinedKey(scheduleType, layer)
+          ? existing.stayHours
+          : 0;
         const combinedHours = finalHours + existing.frontalHours + existing.individualHours + existingStayForCombined;
         // משרת אם כבר הוכרעה על היקף כל התקנים, ולכן היא נכנסת למפתח כמות שהיא.
         const combinedKey = buildOfekKey({

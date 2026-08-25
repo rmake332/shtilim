@@ -175,6 +175,26 @@ export function ofekCategoryFor(
 }
 
 /**
+ * האם שעות השהייה של התקנים הקיימים נכנסות לסכום השעות שנשלח כמפתח חיפוש
+ * למחשבון בבדיקה המשולבת (הבדיקה השלישית).
+ *
+ * "הוראה" ו"הוראה - לוח פרא": תמיד, בכל שכבה. מבנה שבוע העבודה של מורה במחשבון
+ * נגזר מהיקף ההעסקה המלא שלו, שכולל שהייה, גם ביסודי ובחטיבה שבהן השהייה עצמה
+ * אינה נספרת בניצול התקציב.
+ * "הוראה ללא שהייה": לעולם לא.
+ * פרא: רק בגנים, כמו בניצול - ראה computeUtilizedHours.
+ */
+export function includeExistingStayInCombinedKey(
+  scheduleType: string | null | undefined,
+  layer: string | null | undefined,
+): boolean {
+  const category = ofekCategoryFor(scheduleType);
+  if (category === 'הוראה') return true;
+  if (category === 'הוראה_ללא_שהייה') return false;
+  return layer === 'גנים';
+}
+
+/**
  * סה"כ שעות לניצול = frontal + individual + stay.
  * גנים (הוראה ופרא): כולל שהייה. יסודי / חטיבה: ללא שהייה → frontal + individual בלבד.
  * "הוראה ללא שהייה": שהייה לעולם לא נכללת בניצול, ללא תלות בשכבה.
