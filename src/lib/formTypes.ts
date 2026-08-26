@@ -210,6 +210,13 @@ export interface RoleData {
   seniority: string | null;
   /** האם קיים תיק במשרד החינוך — רלוונטי לעובד חדש בפרא/הוראה כשסוג השכר הוא דירוג וותק. */
   hasMinistryFile: YesNoUnset;
+  /**
+   * שתי שאלות חובה שמוצגות רק כשאין תיק במשרד החינוך
+   * (hasMinistryFile === 'לא'). די בתשובה "כן" באחת מהן כדי להמשיך;
+   * "לא" בשתיהן חוסם את המשך הטופס.
+   */
+  finishingStudiesThisYear: YesNoUnset;
+  hasTeachingCertificate: YesNoUnset;
   /** מס' רישיון — required when subRole is קלינאות תקשורת / ריפוי בעיסוק; '' until entered. */
   licenseNumber: string;
   /** תאריך סיום העסקה — required when category is "מילוי מקום לתקופה מוגבלת" (YYYY-MM-DD). */
@@ -243,6 +250,8 @@ export function emptyRole(): RoleData {
     ranking: null,
     seniority: null,
     hasMinistryFile: '',
+    finishingStudiesThisYear: '',
+    hasTeachingCertificate: '',
     licenseNumber: '',
     contractEndDate: '',
   };

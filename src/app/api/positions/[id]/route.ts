@@ -157,6 +157,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ranking: null,
       seniority: null,
       hasMinistryFile: '',
+      finishingStudiesThisYear: '',
+      hasTeachingCertificate: '',
       licenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
       contractEndDate: strField(pf[POSITION_FIELDS.contractEndDate]),
     };

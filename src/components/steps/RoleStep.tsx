@@ -54,6 +54,24 @@ interface ExtraLine {
 const LAYER_OPTIONS = ['גנים', 'יסודי', 'חטיבה', 'שכר יסוד'];
 const GEMUL_ALLOWED_CATEGORIES = new Set(['הוראה', 'פרא רפואי']);
 /** תת-תפקיד שדורש אישור אפרת ולנדברג לפני המשך. */
+/**
+ * אין תיק במשרד החינוך: שתי שאלות חובה נוספות. די בתשובה "כן" באחת מהן כדי להמשיך;
+ * "לא" בשתיהן חוסם את המשך הטופס.
+ */
+const TEACHING_ELIGIBILITY_QUESTIONS = [
+  {
+    key: 'finishingStudiesThisYear',
+    label: 'האם העובד/ת מסיים/ת לימודים בשנה זו?',
+    error: 'יש לציין האם העובד/ת מסיים/ת לימודים בשנה זו',
+  },
+  {
+    key: 'hasTeachingCertificate',
+    label: 'האם לעובד/ת קיימת תעודת הוראה?',
+    error: 'יש לציין האם לעובד/ת קיימת תעודת הוראה',
+  },
+] as const;
+const TEACHING_ELIGIBILITY_MSG = 'משרת עובד/ת הוראה מצריכה תעודת הוראה או לימודים בפועל.';
+
 const LANDBERG_SUB_ROLES = new Set(['מטפל/ת רגשית', 'מטפל/ת באומנות']);
 
 export function RoleStep({
@@ -352,6 +370,12 @@ export function RoleStep({
       (data.category === 'פרא רפואי' || data.category === 'הוראה') &&
       data.salaryType === 'דירוג וותק',
   );
+  // אין תיק במשרד החינוך: מציגים את שאלות זכאות ההוראה, וחוסמים רק אם ענו "לא" בשתיהן.
+  const showTeachingEligibility = showMinistryFileQuestion && data.hasMinistryFile === 'לא';
+  const teachingEligibilityBlocked =
+    showTeachingEligibility &&
+    data.finishingStudiesThisYear === 'לא' &&
+    data.hasTeachingCertificate === 'לא';
   const showEmploymentDoc = showMinistryFileQuestion && data.hasMinistryFile === 'כן';
 
   // Professional-license documents tied to the chosen תת-תפקיד, filed on the EMPLOYEE
@@ -394,6 +418,18 @@ export function RoleStep({
     if (showMinistryFileQuestion && !data.hasMinistryFile) {
       setError('יש לציין האם קיים תיק במשרד החינוך');
       return;
+    }
+    if (showTeachingEligibility) {
+      for (const q of TEACHING_ELIGIBILITY_QUESTIONS) {
+        if (!data[q.key]) {
+          setError(q.error);
+          return;
+        }
+      }
+      if (teachingEligibilityBlocked) {
+        setError(TEACHING_ELIGIBILITY_MSG);
+        return;
+      }
     }
     if (showContractEndDate && !data.contractEndDate) {
       setError('יש להזין את תאריך סיום מילוי המקום');
@@ -1015,7 +1051,14 @@ export function RoleStep({
                   key={opt}
                   type="button"
                   onClick={() => {
-                    setData((d) => ({ ...d, hasMinistryFile: opt }));
+                    setData((d) => ({
+                      ...d,
+                      hasMinistryFile: opt,
+                      // "כן" מסתיר את שאלות ההוראה - מאפסים כדי שלא ייחסמו ברקע.
+                      finishingStudiesThisYear: opt === 'כן' ? '' : d.finishingStudiesThisYear,
+                      hasTeachingCertificate: opt === 'כן' ? '' : d.hasTeachingCertificate,
+                    }));
+                    if (opt === 'כן' && error === TEACHING_ELIGIBILITY_MSG) setError('');
                     if (error === 'יש לציין האם קיים תיק במשרד החינוך') setError('');
                     if (opt === 'לא') onDocsChange({ ...docs, docEmployment: undefined });
                   }}
@@ -1035,6 +1078,49 @@ export function RoleStep({
               </p>
             )}
           </div>
+
+          {showTeachingEligibility && (
+            <div className="space-y-5">
+              {TEACHING_ELIGIBILITY_QUESTIONS.map((q) => (
+                <div key={q.key}>
+                  <p className="text-label-lg font-bold text-on-surface mb-3">{q.label}</p>
+                  <div className="flex gap-3">
+                    {(['כן', 'לא'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => {
+                          setData((d) => ({ ...d, [q.key]: opt }));
+                          if (error === q.error || error === TEACHING_ELIGIBILITY_MSG) setError('');
+                        }}
+                        className={`px-6 py-2 rounded-xl border-2 font-bold text-label-lg transition-colors ${
+                          data[q.key] === opt
+                            ? 'bg-primary text-on-primary border-primary'
+                            : 'bg-white text-on-surface border-outline hover:border-primary'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  {error === q.error && (
+                    <p className="mt-2 text-body-sm text-error flex items-center gap-1">
+                      <Icon name="error" className="text-[16px]" /> {error}
+                    </p>
+                  )}
+                </div>
+              ))}
+
+              {teachingEligibilityBlocked && (
+                <div className="flex gap-3 p-4 rounded-xl bg-error-container border border-error/40">
+                  <Icon name="error" className="text-error text-[22px] shrink-0 mt-0.5" fill />
+                  <p className="text-body-md text-on-error-container leading-relaxed font-bold">
+                    {TEACHING_ELIGIBILITY_MSG}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {data.hasMinistryFile === 'כן' && (
             <div className="space-y-4">
@@ -1074,7 +1160,14 @@ export function RoleStep({
         subtitle="לאחר המעבר לשלב הבא, תגדירו את מערכת השעות עבור התפקיד הנבחר."
         onBack={onBack}
         onNext={() => validateAndNext(loadedPrevYear)}
-        nextDisabled={symbolsLoading || rolesLoading || prevYearLoading || gemulLoading || extraRolesLoading}
+        nextDisabled={
+          symbolsLoading ||
+          rolesLoading ||
+          prevYearLoading ||
+          gemulLoading ||
+          extraRolesLoading ||
+          teachingEligibilityBlocked
+        }
       />
     </>
   );
