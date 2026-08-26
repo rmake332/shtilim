@@ -172,6 +172,21 @@ export interface EmployeeData {
   existingYouthDocs: string[];
 }
 
+/**
+ * האם שאלת "ילדים מתחת לגיל 14" רלוונטית: אישה שאינה רווקה בלבד.
+ *
+ * התשובה היא הקלט היחיד ל"משרת אם" שאינו נגזר מהמערכת (ראה isMotherPosition
+ * ב-src/lib/schedule/ofek.ts), ולכן היא חייבת להישאל בכל מסלול שפותח תקן חדש -
+ * גם במסלול שמדלג על שלב פרטי העובד. תשובה חסרה נספרת כ"לא" ומייצרת משרת אם
+ * שגויה לתקן, בסתירה ליתר תקני אותו עובד.
+ */
+export function showChildrenUnder14Question(employee: {
+  gender: GenderUnset;
+  maritalStatus: MaritalStatus | '';
+}): boolean {
+  return employee.gender === 'נקבה' && Boolean(employee.maritalStatus) && !employee.maritalStatus.includes('רווק');
+}
+
 /** Step 2 — role selection. */
 export interface RoleData {
   symbolId: string;

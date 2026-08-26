@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import { resolveInstitutionByToken } from '@/lib/institution';
-import { getEmployeeById } from '@/lib/employees';
+import { getEmployeeById, childrenUnder14FromPositions } from '@/lib/employees';
 import { Wizard } from '@/components/Wizard';
-import { DEFAULT_CONTRACT_START_DATE, type EmployeeData } from '@/lib/formTypes';
+import { DEFAULT_CONTRACT_START_DATE, showChildrenUnder14Question, type EmployeeData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 /**
@@ -25,6 +25,9 @@ export default async function NewPositionPage({
   if (employeeId) {
     const details = await getEmployeeById(employeeId);
     if (details) {
+      // "ילדים מתחת לגיל 14" נטענת מתקן קיים של אותו/ה עובד/ת: המסלול הזה מדלג על שלב
+      // פרטי העובד, ותשובה ריקה נספרת כ"לא" ומייצרת משרת אם שונה מיתר תקניו/ה.
+      const childrenUnder14 = await childrenUnder14FromPositions(details.tz);
       initialEmployee = {
         recordId: details.id,
         name: details.name,
@@ -35,7 +38,7 @@ export default async function NewPositionPage({
         phone: details.phone,
         gender: details.gender as EmployeeData['gender'],
         maritalStatus: details.maritalStatus as EmployeeData['maritalStatus'],
-        childrenUnder14: '',
+        childrenUnder14,
         birthDate: details.birthDate,
         ageHours: details.ageHours,
         contractStartDate: DEFAULT_CONTRACT_START_DATE,
@@ -49,13 +52,19 @@ export default async function NewPositionPage({
     }
   }
 
+  // דילוג לשלב התפקיד רק כשאין שאלה פתוחה בשלב פרטי העובד. כשהשאלה "ילדים מתחת
+  // לגיל 14" רלוונטית ולא נענתה באף תקן קיים - נפתחים בשלב העובד כדי שתישאל, אחרת
+  // התקן ייווצר עם משרת אם "לא" בלי שאיש נשאל.
+  const childrenAnswerMissing =
+    !!initialEmployee && showChildrenUnder14Question(initialEmployee) && !initialEmployee.childrenUnder14;
+
   return (
     <Wizard
       token={token}
       institution={institution}
       mode="new"
       initialEmployee={initialEmployee}
-      startStep={initialEmployee ? 'role' : undefined}
+      startStep={initialEmployee && !childrenAnswerMissing ? 'role' : undefined}
     />
   );
 }

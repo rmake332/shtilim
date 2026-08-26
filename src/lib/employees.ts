@@ -1,6 +1,6 @@
 import 'server-only';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
-import { TABLES, EMPLOYEE_FIELDS, SUB_ROLE_DOC_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
+import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, SUB_ROLE_DOC_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
 import { maskTz } from '@/lib/logger';
 import { buildTzExactMatchFormula } from '@/lib/airtable/tzMatch';
 
@@ -167,4 +167,46 @@ export async function findEmployeeByExactId(
     name: String(r.fields[EMPLOYEE_FIELDS.name] ?? ''),
     maskedTz: maskTz(String(r.fields[EMPLOYEE_FIELDS.tz] ?? '')),
   };
+}
+
+/**
+ * "ילדים מתחת לגיל 14" כפי שכבר נענתה באחד מתקני העובד/ת הפעילים.
+ *
+ * השדה נשמר על התקן אך הוא עובדה ברמת העובד/ת: ממנו נגזרת "משרת אם", ומשרת אם
+ * נקבעת לפי היקף ההעסקה הכולל ולכן חייבת לצאת זהה בכל תקני אותו עובד. תקן שנפתח
+ * בלי התשובה נספר כ"לא", שולף שורת מחשבון אחרת מזו של יתר התקנים, ואז הפיצול
+ * פרונטלי/שהייה של שני התקנים סוחף שעה בכל שמירה (בדיקה משולבת גורעת את שעות
+ * התקן האחר משורה אחרת). לכן מסלול "הוספת תפקיד לעובד קיים" טוען את התשובה מכאן,
+ * ורק כשאין ממה לטעון חוזר לשאול אותה בשלב פרטי העובד.
+ *
+ * מוחזרת התשובה מהתקן שהוגש אחרון; '' כשאין אף תקן עם תשובה.
+ */
+export async function childrenUnder14FromPositions(
+  tz: string,
+  requestId?: string,
+): Promise<'' | 'כן' | 'לא'> {
+  const trimmed = String(tz).trim();
+  if (!trimmed) return '';
+  // FIND על שדה ה-lookup (כמו ב-existingPositions), ואז השוואה מדויקת בזיכרון כדי
+  // שת.ז. שהיא תת-מחרוזת של אחרת לא תגרור תשובה של עובד/ת אחר/ת.
+  const records = await listRecords(
+    TABLES.activePositions,
+    {
+      filterByFormula: `FIND("${escapeFormulaValue(trimmed)}", {${POSITION_FIELDS.tzLookup}})`,
+      maxRecords: 50,
+      fields: [POSITION_FIELDS.tzLookup, POSITION_FIELDS.childrenUnder14, POSITION_FIELDS.submittedAt],
+    },
+    requestId,
+  );
+
+  const answered = records
+    .filter((r) => str(r.fields[POSITION_FIELDS.tzLookup]) === trimmed)
+    .map((r) => ({
+      value: str(r.fields[POSITION_FIELDS.childrenUnder14]),
+      submittedAt: String(r.fields[POSITION_FIELDS.submittedAt] ?? ''),
+    }))
+    .filter((r) => r.value === 'כן' || r.value === 'לא')
+    .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+
+  return (answered[0]?.value as 'כן' | 'לא') ?? '';
 }

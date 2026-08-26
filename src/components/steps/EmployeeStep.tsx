@@ -12,6 +12,7 @@ import {
   isUnder16,
   isUnderEmploymentAge,
   MaritalStatus,
+  showChildrenUnder14Question,
   YesNo,
   YouthDocs,
   type Gender,
@@ -248,7 +249,7 @@ export function EmployeeStep({
 
   const selectedExisting = Boolean(data.recordId);
   // ילדים מתחת לגיל 14 is only relevant for a woman who is not single.
-  const showChildrenField = data.gender === 'נקבה' && Boolean(data.maritalStatus) && !data.maritalStatus.includes('רווק');
+  const showChildrenField = showChildrenUnder14Question(data);
 
   // Documents applicable right now: youth (age 15-17) + male + גנים (institution layer),
   // excluding מעון for the docs flagged menoExcluded and minors for those flagged adultOnly.
@@ -292,10 +293,19 @@ export function EmployeeStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.birthDate, data.gender, institutionLayer, institutionRequireViolenceCert, docs]);
 
-  // Sync childrenUnder14 when visibility changes:
+  // Sync childrenUnder14 when visibility CHANGES:
   // hidden → force "לא" so it doesn't submit a stale value.
   // shown → clear to '' so the user must actively choose.
+  // הרינדור הראשון מוחרג בכוונה: ערך שנטען מראש (עריכת תקן, או הוספת תפקיד לעובד
+  // קיים שהתשובה שלו נלקחה מתקן אחר) הוא תשובה קיימת ואין למחוק אותה בכניסה לשלב.
+  const childrenSyncMounted = useRef(false);
   useEffect(() => {
+    if (!childrenSyncMounted.current) {
+      childrenSyncMounted.current = true;
+      // עדיין נדרש לאכוף "לא" כשהשאלה כלל אינה רלוונטית, גם בטעינה ראשונה.
+      if (!showChildrenField) setData((d) => (d.childrenUnder14 !== 'לא' ? { ...d, childrenUnder14: 'לא' } : d));
+      return;
+    }
     if (!showChildrenField) {
       setData((d) => (d.childrenUnder14 !== 'לא' ? { ...d, childrenUnder14: 'לא' } : d));
     } else {
