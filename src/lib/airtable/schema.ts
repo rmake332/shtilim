@@ -19,6 +19,7 @@ export const TABLES = {
   invoiceMonthlyBalances: 'tblZdHEwYx9BUqzD4', // יתרות חודשיות חשבונית (העברת יתרה בין חודשים)
   systemSettings: 'tblFzx04m2VgoeLhZ', // הגדרות מערכת (key/value, שורה בודדת לכל מפתח)
   biweeklyTracks: 'tbl7jZA6nEQqDjuFA', // מסלולי מערכת דו-שבועית
+  subRoles: 'tblIEck6VDcpdfLFZ', // תת-תפקידים (רשימה קנונית + התנאים הנגזרים מכל ערך)
 } as const;
 
 /** הגדרות מערכת fields (key/value, נערך ידנית ב-Airtable). */
@@ -161,6 +162,11 @@ export const POSITION_FIELDS = {
   // עצמו לא ימחק את המידע מי מהתקנים לא הוזן נכון. ראו src/lib/subRole.ts.
   subRoleOriginal: 'fldQHyD3Vdg49JSDd', // תת-תפקיד מקורי (singleLineText): הערך הגולמי, נכתב פעם אחת ולא נדרס
   subRoleFixStatus: 'fldPcX2EzrntmAXGV', // סטטוס תיקון תת-תפקיד (singleSelect: דורש תיקון / טופל)
+  // מעבר לטבלת תת-תפקידים: בתקופת המעבר שני השדות נכתבים יחד (dual-write), והקוד
+  // עדיין קורא מה-singleSelect למעלה. אחרי שכל התקנים המסומנים יטופלו אפשר להעביר
+  // את הקריאה ל-subRoleText ולהסיר את ה-singleSelect. ראו src/lib/subRoleTable.ts.
+  subRoleLink: 'fldlJGG4FwuaoorSh', // → תת-תפקידים (multipleRecordLinks)
+  subRoleText: 'fldT0LOwmaZ3p4vf4', // שם תת-התפקיד מהקישור (lookup), כי שדה קישור מחזיר מזהים ולא שמות
   weeklyHours: 'fldd2cW5PIKabwmMv', // שעות שבועיות
   totalUtilizedHours: 'fldOijiio8e3LTzr3', // סה"כ שעות לניצול מהתקציב
   motherPosition: 'fldD59TOuspojEHZV', // משרת אם (singleLineText — "כן"/"לא")
@@ -435,6 +441,35 @@ export const SCHEDULE_TYPE = {
   substitute: 'מילוי מקום',
   invoice: 'חשבונית',
 } as const;
+
+/**
+ * תת-תפקידים fields: הרשימה הקנונית והתנאים הנגזרים מכל ערך. מחליפה את הרשימות
+ * שהיו מקודדות בקוד, כך שהוספת תת-תפקיד היא שורה בטבלה ולא שינוי ב-3 קבצים ופריסה.
+ */
+export const SUB_ROLE_FIELDS = {
+  name: 'fldTXHG1J31sYiPr3', // שם תת-תפקיד (primary)
+  active: 'fld351rhXriWm9WEg', // פעיל (checkbox): כבוי מסתיר מהתפריט בלי למחוק
+  requiresLandberg: 'fldzZpJtsOTP5K3TX', // דורש אישור ולנדברג (checkbox)
+  requiresLicenseNumber: 'fldoottjXQuAGFNdX', // דורש מספר רישיון (checkbox)
+  requiredDocs: 'fld2kQeXUZvVf7ui6', // מסמכים נדרשים (multipleSelects): ראו SUB_ROLE_DOC_CHOICES
+  availableInHativa: 'fldQnVhsfS8BkpPFV', // זמין בחטיבה (checkbox): מחליף את סינון המחרוזת 'הדרכ'
+  displayOrder: 'fldcw3JKMIq60sDiS', // סדר תצוגה (number)
+  positionsLink: 'fldHPTZvSiPPkpjyo', // קישור חוזר לתקנים פעילים
+} as const;
+
+/**
+ * מיפוי בחירת 'מסמכים נדרשים' בטבלת תת-תפקידים לשדה הקובץ בפועל על העובד.
+ * שם הבחירה הוא מה שנבחר באיירטייבל; `label` הוא מה שמוצג למזכירה בטופס.
+ * שני רישיונות משרד הבריאות חולקים תווית תצוגה אבל נשמרים בשדות נפרדים, ולכן
+ * שמות הבחירה שלהם מובחנים.
+ */
+export const SUB_ROLE_DOC_CHOICES: Record<string, { fieldId: string; label: string }> = {
+  'רישיון משרד הבריאות (קלינאות תקשורת)': { fieldId: EMPLOYEE_FIELDS.docHealthLicenseClinic, label: 'רישיון משרד הבריאות' },
+  'רישיון משרד הבריאות (ריפוי בעיסוק)': { fieldId: EMPLOYEE_FIELDS.docHealthLicenseOT, label: 'רישיון משרד הבריאות' },
+  'אישור תואר שני בטיפול': { fieldId: EMPLOYEE_FIELDS.docArtTherapyMasters, label: 'אישור תואר שני בטיפול' },
+  "אישור 960 שעות סטאז'": { fieldId: EMPLOYEE_FIELDS.docArtTherapyInternship, label: "אישור 960 שעות סטאז'" },
+  'תעודת רישום משרד הרווחה': { fieldId: EMPLOYEE_FIELDS.docSocialWorkerReg, label: 'תעודת רישום משרד הרווחה' },
+};
 
 /** תקנים תשפו fields (prior year, read-only) */
 export const PREV_YEAR_FIELDS = {

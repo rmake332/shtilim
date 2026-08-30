@@ -17,6 +17,7 @@ import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { checkLiveBudget } from '@/lib/schedule/budgetCheck';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
+import { subRoleLinkFor } from '@/lib/subRoleTable';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
@@ -437,6 +438,10 @@ async function updatePosition(
     [POSITION_FIELDS.symbolLink]: role.symbolId ? [role.symbolId] : undefined,
     [POSITION_FIELDS.layer]: role.layer || undefined,
     [POSITION_FIELDS.subRole]: role.subRole || undefined,
+    // dual-write בתקופת המעבר לטבלת תת-תפקידים: הקוד עדיין קורא מה-singleSelect,
+    // אבל כל כתיבה ממלאת גם את שדה הקישור, כך שכשהמעבר יושלם השדה כבר מלא.
+    // ערך שאינו בטבלה מקבל undefined ולא נכתב, במקום ליצור שורה חדשה בטבלה.
+    [POSITION_FIELDS.subRoleLink]: await subRoleLinkFor(role.subRole),
     // שעות אלו נגזרות ישירות ממערכת השעות ותמיד מוגדרות (0 כברירת מחדל) — יש לכתוב
     // אותן תמיד, כולל כשהערך הוא 0, אחרת || undefined מדלג על השדה ב-Airtable משאיר
     // ערך ישן מעריכה קודמת (ראה fldOijiio8e3LTzr3 שנתקע על 5.5 אחרי מחיקת כל השעות).

@@ -7,6 +7,7 @@ import {
   requiresLicenseNumber,
   suggestCanonicalSubRole,
 } from './subRole';
+import { SUB_ROLE_DOC_FIELDS, SUB_ROLE_DOC_CHOICES } from './airtable/schema';
 
 describe('isCanonicalSubRole', () => {
   it('מקבל את 8 הערכים הקנוניים', () => {
@@ -155,5 +156,40 @@ describe('suggestCanonicalSubRole', () => {
       const s = suggestCanonicalSubRole(raw);
       if (s !== null) expect(isCanonicalSubRole(s)).toBe(true);
     }
+  });
+});
+
+// ── שמירה על סנכרון בין הקוד לטבלת תת-תפקידים ──────────────────────────────
+// בתקופת המעבר יש שני מקורות: הרשימות בקובץ הזה, ושורות הטבלה באיירטייבל.
+// הבדיקות האלה מוודאות שהמיפוי החדש (SUB_ROLE_DOC_CHOICES) מכסה בדיוק את מה
+// שהקוד אוכף היום, כדי ששינוי באחד לא ייסחף מהשני בלי שמישהו ישים לב.
+describe('סנכרון עם טבלת תת-תפקידים', () => {
+  it('SUB_ROLE_DOC_CHOICES מכסה בדיוק את שדות המסמכים ש-SUB_ROLE_DOC_FIELDS אוכף', () => {
+    const fromChoices = new Set(Object.values(SUB_ROLE_DOC_CHOICES).map((d) => d.fieldId));
+    const fromCode = new Set(SUB_ROLE_DOC_FIELDS.map((d) => d.fieldId));
+    expect([...fromChoices].sort()).toEqual([...fromCode].sort());
+  });
+
+  it('כל בחירה ממופה לתווית התצוגה שהמזכירה רואה היום', () => {
+    for (const { fieldId, label } of Object.values(SUB_ROLE_DOC_CHOICES)) {
+      const def = SUB_ROLE_DOC_FIELDS.find((d) => d.fieldId === fieldId);
+      expect(def, `אין הגדרה בקוד לשדה ${fieldId}`).toBeDefined();
+      expect(label).toBe(def!.label);
+    }
+  });
+
+  it('דרישת מספר הרישיון בקוד תואמת את מה שסומן בטבלה (קלינאות + ריפוי בעיסוק)', () => {
+    const needLicense = CANONICAL_SUB_ROLES.filter((r) => requiresLicenseNumber(r));
+    expect(needLicense).toEqual(['קלינאות תקשורת', 'ריפוי בעיסוק']);
+  });
+
+  it('שער ולנדברג בקוד תואם את מה שסומן בטבלה (רגשית + אומנות)', () => {
+    const needLandberg = CANONICAL_SUB_ROLES.filter((r) => requiresLandbergApproval(r));
+    expect(needLandberg).toEqual(['מטפל/ת באומנות', 'מטפל/ת רגשית']);
+  });
+
+  it('זמינות בחטיבה בקוד תואמת את מה שסומן בטבלה (שני ערכי ההדרכה)', () => {
+    const inHativa = CANONICAL_SUB_ROLES.filter((r) => r.includes('הדרכ'));
+    expect(inHativa).toEqual(['הדרכה קלינאות', 'הדרכה ריפוי בעיסוק']);
   });
 });

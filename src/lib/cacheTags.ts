@@ -18,6 +18,8 @@ export const CACHE_TAGS = {
   prevYear: 'airtable-prev-year',
   /** singleSelect / multipleSelects choices from the Meta API (all tables). */
   fieldChoices: 'airtable-field-choices',
+  /** תת-תפקידים: הרשימה הקנונית והתנאים הנגזרים מכל ערך. */
+  subRoles: 'airtable-sub-roles',
 } as const;
 
 export type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS];
@@ -33,9 +35,11 @@ const TABLE_TAGS: Record<string, CacheTag[]> = {
   [TABLES.budget]: [CACHE_TAGS.budget, CACHE_TAGS.symbols, CACHE_TAGS.fieldChoices],
   [TABLES.institutionSymbols]: [CACHE_TAGS.symbols, CACHE_TAGS.fieldChoices],
   [TABLES.prevYearPositions]: [CACHE_TAGS.prevYear, CACHE_TAGS.fieldChoices],
+  [TABLES.subRoles]: [CACHE_TAGS.subRoles, CACHE_TAGS.fieldChoices],
   budget: [CACHE_TAGS.budget, CACHE_TAGS.symbols, CACHE_TAGS.fieldChoices],
   symbols: [CACHE_TAGS.symbols, CACHE_TAGS.fieldChoices],
   'prev-year': [CACHE_TAGS.prevYear, CACHE_TAGS.fieldChoices],
+  'sub-roles': [CACHE_TAGS.subRoles, CACHE_TAGS.fieldChoices],
   choices: [CACHE_TAGS.fieldChoices],
 };
 

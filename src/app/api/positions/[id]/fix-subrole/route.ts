@@ -10,6 +10,7 @@ import {
   requiresLicenseNumber,
   subRoleDocsFor,
 } from '@/lib/subRole';
+import { subRoleLinkFor } from '@/lib/subRoleTable';
 import { logger } from '@/lib/logger';
 
 const SUB_ROLE_FIX_HANDLED = 'טופל';
@@ -96,6 +97,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         positionId,
         {
           [POSITION_FIELDS.subRole]: null,
+          [POSITION_FIELDS.subRoleLink]: [],
           [POSITION_FIELDS.subRoleFixStatus]: SUB_ROLE_FIX_HANDLED,
         },
         gate.requestId,
@@ -150,6 +152,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       positionId,
       {
         [POSITION_FIELDS.subRole]: chosen,
+        // dual-write: כל תיקון ממלא גם את הקישור לטבלת תת-תפקידים, כך שבסוף
+        // 155 התיקונים השדה יהיה מלא והמעבר יהיה החלפת קריאה בלבד.
+        [POSITION_FIELDS.subRoleLink]: (await subRoleLinkFor(chosen)) ?? [],
         [POSITION_FIELDS.subRoleFixStatus]: SUB_ROLE_FIX_HANDLED,
       },
       gate.requestId,
