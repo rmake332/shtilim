@@ -198,7 +198,10 @@
       "Bash(curl -s -o /dev/null -w \"prod: %{http_code}\\\\n\" --max-time 10 https://shtilim-ten.vercel.app/)",
       "Bash(curl -s --max-time 15 \"https://shtilim-ten.vercel.app/form/shtilim-123423/new\" -o /tmp/prod.html -w \"%{http_code}\\\\n\")",
       "Bash(node -e *)",
-      "Bash(curl -s -o /dev/null -w \"dev: %{http_code}\\\\n\" --max-time 60 --retry 10 --retry-delay 3 --retry-all-errors http://localhost:3010/)"
+      "Bash(curl -s -o /dev/null -w \"dev: %{http_code}\\\\n\" --max-time 60 --retry 10 --retry-delay 3 --retry-all-errors http://localhost:3010/)",
+      "mcp__claude_ai_Google_Drive__create_file",
+      "Bash(echo \"EXIT:$?\")",
+      "mcp__claude_ai_Airtable__create_field"
     ],
     "additionalDirectories": [
       "\\tmp",
