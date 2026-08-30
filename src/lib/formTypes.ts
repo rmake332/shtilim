@@ -1,7 +1,6 @@
 /** Shared form state types for the multi-step wizard. */
 
 import type { Day } from '@/lib/schedule/time';
-import { SUB_ROLE_DOC_FIELDS, type SubRoleDocDef } from '@/lib/airtable/schema';
 export type { Day };
 
 export type Gender = 'זכר' | 'נקבה';
@@ -94,12 +93,6 @@ export function isDocVisible(
     case 'newEmployeeParaOrTeaching':
       return Boolean(ctx.isNewEmployee) && PARA_OR_TEACHING_CATEGORIES.has(ctx.category ?? '');
   }
-}
-
-/** Document/license requirements for a given תת-תפקיד (empty array if none apply). */
-export function subRoleDocsFor(subRole: string): readonly SubRoleDocDef[] {
-  if (!subRole) return [];
-  return SUB_ROLE_DOC_FIELDS.filter((d) => d.subRole === subRole);
 }
 
 /** Under 14 → employment forbidden outright; the form must not continue. */

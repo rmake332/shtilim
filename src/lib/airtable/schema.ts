@@ -155,6 +155,12 @@ export const POSITION_FIELDS = {
   childrenUnder14: 'fld4tBs8ZD7meiFG6', // singleSelect כן/לא
   layer: 'fldcbVOaF1RXu7Lrb', // שכבה (manual fallback)
   subRole: 'fldo5YfqMeJSd9e4W', // תת-תפקיד (singleSelect: קלינאות תקשורת / ריפוי בעיסוק / מטפל-ת באומנות / מטפל-ת רגשית / פיזיו / עובדת סוציאלית / הדרכה קלינאות / הדרכה ריפוי בעיסוק)
+  // תיקון תת-תפקיד: השדה subRole למעלה נכתב שנים מטקסט חופשי של תשפ"ו דרך
+  // typecast, ולכן צבר 40 ערכי כתיב שגויים שעקפו את שער ולנדברג ואת מסמכי
+  // ההסמכה. שני השדות הבאים מקפיאים את הראיה לפני התיקון, כדי שתיקון הערך
+  // עצמו לא ימחק את המידע מי מהתקנים לא הוזן נכון. ראו src/lib/subRole.ts.
+  subRoleOriginal: 'fldQHyD3Vdg49JSDd', // תת-תפקיד מקורי (singleLineText): הערך הגולמי, נכתב פעם אחת ולא נדרס
+  subRoleFixStatus: 'fldPcX2EzrntmAXGV', // סטטוס תיקון תת-תפקיד (singleSelect: דורש תיקון / טופל)
   weeklyHours: 'fldd2cW5PIKabwmMv', // שעות שבועיות
   totalUtilizedHours: 'fldOijiio8e3LTzr3', // סה"כ שעות לניצול מהתקציב
   motherPosition: 'fldD59TOuspojEHZV', // משרת אם (singleLineText — "כן"/"לא")

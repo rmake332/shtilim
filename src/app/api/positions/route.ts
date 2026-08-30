@@ -11,6 +11,10 @@ export interface PositionSummary {
   roleTitle: string;
   category: string;
   subRole: string;
+  /** 'דורש תיקון' / 'טופל' / '' - תור השלמת תת-תפקיד, ראו src/lib/subRole.ts */
+  subRoleFixStatus: string;
+  /** הערך הגולמי שנקלט משנה קודמת, מוקפא לפני התיקון */
+  subRoleOriginal: string;
   weeklyHours: number;
   frontalHours: number;
   individualHours: number;
@@ -51,6 +55,8 @@ export async function GET(req: NextRequest) {
           POSITION_FIELDS.roleTitleText,
           POSITION_FIELDS.category,
           POSITION_FIELDS.subRole,
+          POSITION_FIELDS.subRoleFixStatus,
+          POSITION_FIELDS.subRoleOriginal,
           POSITION_FIELDS.weeklyHours,
           POSITION_FIELDS.frontalHours,
           POSITION_FIELDS.individualHours,
@@ -74,6 +80,8 @@ export async function GET(req: NextRequest) {
         roleTitle: strField(f[POSITION_FIELDS.roleTitleText]),
         category,
         subRole: strField(f[POSITION_FIELDS.subRole]),
+        subRoleFixStatus: strField(f[POSITION_FIELDS.subRoleFixStatus]),
+        subRoleOriginal: strField(f[POSITION_FIELDS.subRoleOriginal]),
         weeklyHours: Number(f[POSITION_FIELDS.weeklyHours]) || 0,
         frontalHours: Number(f[POSITION_FIELDS.frontalHours]) || 0,
         individualHours: Number(f[POSITION_FIELDS.individualHours]) || 0,

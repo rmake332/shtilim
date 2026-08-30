@@ -3,6 +3,7 @@ import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, PREV_YEAR_FIELDS } from '@/lib/airtable/schema';
 import { CACHE_TAGS } from '@/lib/cacheTags';
 import { durationToHHMM } from '@/lib/schedule/time';
+import { suggestCanonicalSubRole } from '@/lib/subRole';
 import type { ShiftData } from '@/lib/formTypes';
 
 export interface PrevYearPosition {
@@ -124,7 +125,8 @@ export async function getPrevYearPosition(
     return {
       recordId: row.id,
       week: extractWeek(f),
-      subRole: str(f[PREV_YEAR_FIELDS.subRole]),
+      // טקסט חופשי בתשפ"ו. מנורמל לערך קנוני, או ריק כשאין ודאות (ראו subRole.ts).
+      subRole: suggestCanonicalSubRole(str(f[PREV_YEAR_FIELDS.subRole])) ?? '',
       notes: str(f[PREV_YEAR_FIELDS.notes]),
       hoursForBudget: numOrNull(f[PREV_YEAR_FIELDS.hoursForBudget]),
       frontalHours: numOrNull(f[PREV_YEAR_FIELDS.frontalHours]),

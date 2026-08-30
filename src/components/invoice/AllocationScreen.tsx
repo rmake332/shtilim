@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
 import { formatNum } from '@/lib/formatNum';
-import { subRoleDocsFor } from '@/lib/formTypes';
+import { canonicalSubRoleChoices, subRoleDocsFor } from '@/lib/subRole';
 import type { UploadedDoc } from '@/lib/formTypes';
 import { DocUpload } from '@/components/steps/DocUpload';
 import { BudgetStatCard } from '@/components/invoice/BudgetStatCard';
@@ -181,7 +181,7 @@ export function AllocationScreen({
       `/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${INVOICE_POSITION_FIELDS.subRole}&tableId=${TABLES.invoicePositions}`,
     )
       .then((r) => r.json())
-      .then((j) => setSubRoleChoices(j.choices ?? []))
+      .then((j) => setSubRoleChoices(canonicalSubRoleChoices(j.choices ?? [])))
       .catch(() => {});
   }, [token]);
 

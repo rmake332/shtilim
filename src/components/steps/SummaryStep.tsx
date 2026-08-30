@@ -9,7 +9,7 @@ import { maskTzClient } from '@/lib/maskClient';
 import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
 import { ofekCategoryFor, computeUtilizedHours } from '@/lib/schedule/ofek';
 import { DOC_FIELDS, UPDATE_REASON_OPTIONS } from '@/lib/airtable/schema';
-import { subRoleDocsFor } from '@/lib/formTypes';
+import { subRoleDocsFor } from '@/lib/subRole';
 
 export function SummaryStep({
   token,

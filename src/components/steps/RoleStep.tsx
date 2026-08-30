@@ -4,7 +4,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import { formatNum } from '@/lib/formatNum';
-import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate, subRoleDocsFor } from '@/lib/formTypes';
+import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate } from '@/lib/formTypes';
+import {
+  canonicalSubRoleChoices,
+  isCanonicalSubRole,
+  requiresLandbergApproval,
+  subRoleDocsFor,
+} from '@/lib/subRole';
 import { CATEGORY, DOC_FIELDS, POSITION_FIELDS } from '@/lib/airtable/schema';
 import { DocUpload } from '@/components/steps/DocUpload';
 import type { PrevYearPosition } from '@/lib/prevYearPosition';
@@ -53,7 +59,6 @@ interface ExtraLine {
 
 const LAYER_OPTIONS = ['גנים', 'יסודי', 'חטיבה', 'שכר יסוד'];
 const GEMUL_ALLOWED_CATEGORIES = new Set(['הוראה', 'פרא רפואי']);
-/** תת-תפקיד שדורש אישור אפרת ולנדברג לפני המשך. */
 /**
  * אין תיק במשרד החינוך: שתי שאלות חובה נוספות. די בתשובה "כן" באחת מהן כדי להמשיך;
  * "לא" בשתיהן חוסם את המשך הטופס.
@@ -71,8 +76,6 @@ const TEACHING_ELIGIBILITY_QUESTIONS = [
   },
 ] as const;
 const TEACHING_ELIGIBILITY_MSG = 'משרת עובד/ת הוראה מצריכה תעודת הוראה או לימודים בפועל.';
-
-const LANDBERG_SUB_ROLES = new Set(['מטפל/ת רגשית', 'מטפל/ת באומנות']);
 
 export function RoleStep({
   token,
@@ -201,7 +204,10 @@ export function RoleStep({
     fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${POSITION_FIELDS.subRole}`)
       .then((r) => r.json())
       .then((j) => {
-        const choices: string[] = j.choices ?? [];
+        // סינון קנוני קודם: השדה באיירטייבל צבר 40 אופציות שנוצרו ע"י typecast
+        // מטקסט חופשי של תשפ"ו, ובלעדיו גם 'הדרכות' ו'הדרכה מהבית' היו נכנסות
+        // לסינון החטיבה למטה. ראו src/lib/subRole.ts.
+        const choices = canonicalSubRoleChoices(j.choices ?? []);
         setSubRoleChoices(
           data.layer === 'חטיבה' ? choices.filter((c) => c.includes('הדרכ')) : choices,
         );
@@ -443,7 +449,7 @@ export function RoleStep({
       setError('יש לבחור תת-תפקיד');
       return;
     }
-    if (showSubRole && LANDBERG_SUB_ROLES.has(data.subRole)) {
+    if (showSubRole && requiresLandbergApproval(data.subRole)) {
       if (!data.landbergApproval) {
         setError('יש לציין האם עבר אישור של אפרת ולנדברג');
         return;
@@ -463,11 +469,16 @@ export function RoleStep({
         return;
       }
     }
-    const finalData = withPrevYear?.subRole?.trim()
+    // תקן שנה קודמת גובר על הבחירה רק כשהערך שלו קנוני. ערך שאינו קנוני נשאר
+    // ריק ב-prevYear (ראו prevYearPosition.ts), אבל הבדיקה כאן היא הרשת השנייה:
+    // בלעדיה טקסט חופשי גולמי דורס בחירה שכבר עברה ולידציה, ומדלג על שער
+    // ולנדברג ועל מסמכי ההסמכה שנגזרים מהערך שנבחר.
+    const prevYearSubRole = withPrevYear?.subRole?.trim() ?? '';
+    const finalData = isCanonicalSubRole(prevYearSubRole)
       ? {
           ...data,
-          subRole: withPrevYear.subRole.trim(),
-          landbergApproval: LANDBERG_SUB_ROLES.has(withPrevYear.subRole.trim())
+          subRole: prevYearSubRole,
+          landbergApproval: requiresLandbergApproval(prevYearSubRole)
             ? ('כן' as const)
             : data.landbergApproval,
         }
@@ -736,7 +747,7 @@ export function RoleStep({
                   setData((d) => ({
                     ...d,
                     subRole: prevYear.subRole,
-                    landbergApproval: LANDBERG_SUB_ROLES.has(prevYear.subRole) ? 'כן' : '',
+                    landbergApproval: requiresLandbergApproval(prevYear.subRole) ? 'כן' : '',
                   }));
                 }
               }}
@@ -853,7 +864,7 @@ export function RoleStep({
           )}
 
           {/* אישור אפרת ולנדברג — נדרש למטפל/ת רגשית או מטפל/ת באומנות */}
-          {showSubRole && LANDBERG_SUB_ROLES.has(data.subRole) && (
+          {showSubRole && requiresLandbergApproval(data.subRole) && (
             <div>
               <p className="text-label-lg font-bold text-on-surface mb-3">
                 האם עבר אישור של אפרת ולנדברג?

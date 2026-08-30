@@ -54,6 +54,8 @@ const COLUMNS: ColDef[] = [
   { key: 'stayHoursHome',      label: 'שהייה מהבית',    type: 'number' },
   { key: 'stayHoursInstitution', label: 'שהייה מהמוסד', type: 'number' },
   { key: 'submittedAt',        label: 'תאריך הגשה',     type: 'date' },
+  { key: 'subRoleFixStatus',   label: 'תיקון תת-תפקיד', type: 'select',
+    options: ['דורש תיקון', 'טופל'] },
 ];
 
 type TextOp   = 'contains' | 'not_contains' | 'equals' | 'not_equals' | 'starts_with';
@@ -419,7 +421,7 @@ function WeekGrid({ week }: { week: WeekData }) {
 
 // ── top nav (matches form TopNav) ────────────────────────────────────────────
 
-function DashboardTopNav({ institution, onBack }: { institution: string; onBack: () => void }) {
+export function DashboardTopNav({ institution, onBack }: { institution: string; onBack: () => void }) {
   const [now, setNow] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -554,6 +556,7 @@ export function InstitutionDashboard({
           !p.employeeName.toLowerCase().includes(q) &&
           !p.category.toLowerCase().includes(q) &&
           !p.subRole.toLowerCase().includes(q) &&
+          !p.subRoleOriginal.toLowerCase().includes(q) &&
           !p.roleTitle.toLowerCase().includes(q)
         ) return false;
       }
@@ -575,6 +578,19 @@ export function InstitutionDashboard({
     });
 
   const totalHours = positions.reduce((s, p) => s + p.weeklyHours, 0);
+  const needsSubRoleFix = positions.filter((p) => p.subRoleFixStatus === 'דורש תיקון');
+  const subRoleFilterOn = filterRules.some(
+    (r) => r.col === 'subRoleFixStatus' && r.value === 'דורש תיקון',
+  );
+
+  /** מציג בטבלה רק את התקנים שממתינים להשלמת תת-תפקיד. */
+  function filterToSubRoleFix() {
+    setFilterRules([
+      ...filterRules.filter((r) => r.col !== 'subRoleFixStatus'),
+      { id: `subrolefix-${Date.now()}`, col: 'subRoleFixStatus', op: 'is', value: 'דורש תיקון' },
+    ]);
+    setShowFilters(true);
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-bright" dir="rtl">
@@ -640,6 +656,32 @@ export function InstitutionDashboard({
               <StatCard icon="timer"           label="שעות שבועיות"   value={totalHours}       color="secondary" />
               <StatCard icon="pending_actions" label="ממתין לאישור"   value="—"                color="tertiary" />
               <StatCard icon="warning"         label="חריגות שעות"    value="—"                color="error" />
+            </div>
+          )}
+
+          {/* תור השלמת תת-תפקיד */}
+          {needsSubRoleFix.length > 0 && (
+            <div className="mb-6 bg-error-container/25 border border-error/30 rounded-xl p-4 flex items-center justify-between gap-4">
+              <div className="flex items-start gap-3 text-right">
+                <Icon name="assignment_late" className="text-error text-[22px] mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-label-lg font-bold text-on-surface">
+                    {needsSubRoleFix.length} תקנים דורשים השלמת תת-תפקיד ומסמכים
+                  </p>
+                  <p className="text-body-md text-on-surface-variant">
+                    תת-התפקיד שלהם נקלט משנה קודמת כטקסט חופשי ולא נבחר מהרשימה, ולכן לא נדרשו
+                    מסמכי ההסמכה ומספר הרישיון. יש לפתוח כל תקן ולבחור את תת-התפקיד הנכון.
+                  </p>
+                </div>
+              </div>
+              {!subRoleFilterOn && (
+                <button
+                  onClick={filterToSubRoleFix}
+                  className="px-4 py-2.5 rounded-lg bg-error text-on-error text-label-lg font-bold hover:bg-error/90 transition-colors shrink-0 whitespace-nowrap"
+                >
+                  הצג רק אותם
+                </button>
+              )}
             </div>
           )}
 
@@ -715,7 +757,16 @@ export function InstitutionDashboard({
                             <td className="p-4">
                               <div className="flex flex-col gap-1">
                                 {pos.roleTitle && <span className="text-body-md text-on-surface font-bold">{pos.roleTitle}</span>}
-                                {pos.subRole   && <span className="text-body-md text-on-surface-variant">{pos.subRole}</span>}
+                                {pos.subRole && (
+                                  pos.subRoleFixStatus === 'דורש תיקון' ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-error-container/40 text-error rounded-full text-[12px] font-bold w-fit">
+                                      <Icon name="assignment_late" className="text-[14px]" />
+                                      {pos.subRole}
+                                    </span>
+                                  ) : (
+                                    <span className="text-body-md text-on-surface-variant">{pos.subRole}</span>
+                                  )
+                                )}
                                 {pos.category  && (
                                   <span className="inline-block px-2 py-0.5 bg-secondary-container text-on-secondary-container rounded-full text-[12px] font-bold w-fit">
                                     {pos.category}
@@ -731,6 +782,15 @@ export function InstitutionDashboard({
                             <td className="p-4 text-on-surface-variant text-body-md">{formatDate(pos.submittedAt)}</td>
                             <td className="p-4" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-2">
+                                {pos.subRoleFixStatus === 'דורש תיקון' && (
+                                  <button
+                                    onClick={() => router.push(`/form/${encodeURIComponent(token)}/fix-subrole/${pos.id}`)}
+                                    className="w-8 h-8 flex items-center justify-center rounded hover:bg-error-container/20 text-error transition-colors"
+                                    title="השלמת תת-תפקיד"
+                                  >
+                                    <Icon name="assignment_late" className="text-[20px]" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => router.push(`/form/${encodeURIComponent(token)}/edit/${pos.id}`)}
                                   className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container text-primary transition-colors"
