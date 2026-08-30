@@ -1,10 +1,12 @@
 import 'server-only';
-import { getRecord } from '@/lib/airtable/client';
-import { TABLES, POSITION_FIELDS, EMPLOYEE_FIELDS, BUDGET_FIELDS } from '@/lib/airtable/schema';
+import { getRecord, listRecords, escapeFormulaValue } from '@/lib/airtable/client';
+import { TABLES, POSITION_FIELDS, EMPLOYEE_FIELDS, BUDGET_FIELDS, MOSAD_FIELDS } from '@/lib/airtable/schema';
 import { existingSubRoleDocsFromFields } from '@/lib/employees';
 import { suggestCanonicalSubRole } from '@/lib/subRole';
 
 export interface SubRoleFixContext {
+  /** טוקן המוסד, נגזר בשרת מהתקן עצמו ולעולם לא מגיע מה-URL. */
+  token: string;
   positionId: string;
   employeeId: string;
   employeeName: string;
@@ -43,13 +45,17 @@ function linkIds(v: unknown): string[] {
 }
 
 /**
- * טוען את ההקשר למסך תיקון תת-תפקיד. מחזיר null כשהתקן לא נמצא או אינו שייך
- * למוסד (mosadName נבדק מול שם המוסד שהטוקן פותר אליו, אותו פרדיקט כמו
- * GET /api/positions).
+ * טוען את ההקשר למסך תיקון תת-תפקיד לפי מזהה התקן בלבד.
+ *
+ * הטוקן **נגזר בשרת** משם המוסד של התקן ולא מתקבל ב-URL, כך שהקישור שניתן
+ * להדביק בכפתור באיירטייבל לא חושף אותו (אותו דפוס כמו /form/from-prev-year/[id]).
+ * הכתיבה עצמה עדיין עוברת דרך POST /api/positions/[id]/fix-subrole שמאמת את
+ * הטוקן ואת בעלות המוסד על התקן.
+ *
+ * מחזיר null כשהתקן לא נמצא, כשאין לו שם מוסד, או כשהמוסד אינו פעיל בטפסים.
  */
 export async function loadSubRoleFix(
   positionId: string,
-  institutionName: string,
   requestId?: string,
 ): Promise<SubRoleFixContext | null> {
   const position = await getRecord(TABLES.activePositions, positionId, requestId);
@@ -58,7 +64,21 @@ export async function loadSubRoleFix(
 
   const mosadRaw = pf[POSITION_FIELDS.mosadNameText];
   const mosadNames = Array.isArray(mosadRaw) ? mosadRaw.map((v) => String(v)) : [strField(mosadRaw)];
-  if (!mosadNames.includes(institutionName)) return null;
+  const mosadName = mosadNames.find((n) => n) ?? '';
+  if (!mosadName) return null;
+
+  // שם המוסד -> טוקן, בדיוק כמו ב-loadPrevYearFull. מוסד שאינו פעיל בטפסים חוסם.
+  const mosadRecs = await listRecords(
+    TABLES.mosadot,
+    {
+      filterByFormula: `AND({${MOSAD_FIELDS.name}}="${escapeFormulaValue(mosadName)}", {${MOSAD_FIELDS.formActive}}=TRUE())`,
+      maxRecords: 1,
+      fields: [MOSAD_FIELDS.formToken],
+    },
+    requestId,
+  );
+  const token = strField(mosadRecs[0]?.fields[MOSAD_FIELDS.formToken]);
+  if (!token) return null;
 
   const employeeId = linkIds(pf[POSITION_FIELDS.employeeLink])[0] ?? '';
   const employee = employeeId ? await getRecord(TABLES.employees, employeeId, requestId) : null;
@@ -74,11 +94,12 @@ export async function loadSubRoleFix(
   const originalSubRole = strField(pf[POSITION_FIELDS.subRoleOriginal]) || currentSubRole;
 
   return {
+    token,
     positionId,
     employeeId,
     employeeName: strField(pf[POSITION_FIELDS.employeeNameText]),
     roleTitle: strField(pf[POSITION_FIELDS.roleTitleText]),
-    mosadName: mosadNames[0] ?? '',
+    mosadName,
     originalSubRole,
     currentSubRole,
     fixStatus: strField(pf[POSITION_FIELDS.subRoleFixStatus]),

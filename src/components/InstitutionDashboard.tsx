@@ -784,7 +784,7 @@ export function InstitutionDashboard({
                               <div className="flex items-center justify-center gap-2">
                                 {pos.subRoleFixStatus === 'דורש תיקון' && (
                                   <button
-                                    onClick={() => router.push(`/form/${encodeURIComponent(token)}/fix-subrole/${pos.id}`)}
+                                    onClick={() => router.push(`/form/fix-subrole/${pos.id}`)}
                                     className="w-8 h-8 flex items-center justify-center rounded hover:bg-error-container/20 text-error transition-colors"
                                     title="השלמת תת-תפקיד"
                                   >

@@ -25,8 +25,9 @@ import {
  * 126 מתוך 155 התקנים ניתנים למיפוי אוטומטי, ובלי אישור מפורש זה היה הופך
  * לאישור גורף שמפספס בדיוק את המקרים שדורשים עין אנושית.
  */
-export function FixSubRoleScreen({ token, ctx }: { token: string; ctx: SubRoleFixContext }) {
+export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
   const router = useRouter();
+  const { token } = ctx;
   const backToList = `/form/${encodeURIComponent(token)}/positions`;
 
   const [subRole, setSubRole] = useState(ctx.suggestion);
@@ -46,6 +47,7 @@ export function FixSubRoleScreen({ token, ctx }: { token: string; ctx: SubRoleFi
   const needsLicense = requiresLicenseNumber(subRole);
   const needsLandberg = requiresLandbergApproval(subRole);
   const alreadyHandled = ctx.fixStatus === 'טופל';
+  const needsConfirm = ctx.suggestion !== '';
   // אותו כלל כמו ב-RoleStep: בחטיבה מוצעים רק ערכי ההדרכה.
   const choices = ctx.layer === 'חטיבה'
     ? CANONICAL_SUB_ROLES.filter((c) => c.includes('הדרכ'))
@@ -64,7 +66,7 @@ export function FixSubRoleScreen({ token, ctx }: { token: string; ctx: SubRoleFi
 
     if (ctx.showsSubRole) {
       if (!subRole) return setError('יש לבחור תת-תפקיד.');
-      if (!confirmed) return setError('יש לאשר את הבחירה לפני השמירה.');
+      if (needsConfirm && !confirmed) return setError('יש לאשר את הבחירה לפני השמירה.');
       if (needsLandberg && landberg !== 'כן') {
         return setError(
           landberg === 'לא'
@@ -214,7 +216,7 @@ export function FixSubRoleScreen({ token, ctx }: { token: string; ctx: SubRoleFi
                 </p>
               </div>
 
-              {subRole && (
+              {needsConfirm && subRole && (
                 <label className="flex items-start gap-2.5 cursor-pointer text-right bg-surface rounded-lg p-3.5 border border-outline-variant">
                   <input
                     type="checkbox"
@@ -306,7 +308,7 @@ export function FixSubRoleScreen({ token, ctx }: { token: string; ctx: SubRoleFi
               <div className="flex items-center gap-3 pt-1">
                 <button
                   onClick={save}
-                  disabled={saving || !confirmed}
+                  disabled={saving || !subRole || (needsConfirm && !confirmed)}
                   className="px-5 py-2.5 rounded-lg bg-primary text-on-primary text-label-lg font-bold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {saving ? 'שומר…' : 'שמירה וסימון כטופל'}
