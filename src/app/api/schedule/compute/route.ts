@@ -9,6 +9,8 @@ import {
   buildOfekKey,
   severeDisabilityBonus,
   paraStaySplit,
+  splitStayHours,
+  computeUtilizedHours,
   ofekCategoryFor,
   includeExistingStayInCombinedKey,
   motherPositionFromOfekRow,
@@ -257,24 +259,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Stay split (applies to the current position's stay hours).
+    // Stay split (applies to the current position's stay hours). הלוגיקה עצמה
+    // חולצה ל-splitStayHours ב-ofek.ts (מכוסה בטסטים), כדי לא לשכפל כאן.
     const split = paraStaySplit({
       paraBoard: Boolean(body.paraBoard),
       layer,
       category: ofekCategory,
       isBehaviorAnalyst: Boolean(body.isBehaviorAnalyst),
     });
-    const teaching = ofekCategory === 'הוראה';
-    // "הוראה ללא שהייה": שהייה תמיד "מהבית", ואינה נכללת בניצול התקציב, ללא תלות
-    // בשכבה / paraBoard / behavior-analyst - עוקף את paraStaySplit ואת teaching הרגיל.
-    const teachingNoStay = ofekCategory === 'הוראה_ללא_שהייה';
-    const stayInstitution = teaching || (!teachingNoStay && split === 'institution') ? stay : 0;
-    const stayHome = teachingNoStay || (!teaching && split === 'home') ? stay : 0;
+    const { stayInstitution, stayHome } = splitStayHours(stay, ofekCategory, split);
 
-    // סה"כ שעות לניצול: גנים כולל שהייה, יסודי/חטיבה בלעדיה - כמו computeUtilizedHours
-    // בסאבמיט. "הוראה ללא שהייה" לעולם בלעדיה, ללא תלות בשכבה.
-    const isGanimLayer = layer === 'גנים';
-    const utilizedHours = frontal + individual + (isGanimLayer && !teachingNoStay ? stayInstitution + stayHome : 0);
+    // סה"כ שעות לניצול דרך אותה פונקציה משותפת שסאבמיט/positions משתמשים בה
+    // (computeUtilizedHours), במקום חישוב מוטבע כפול: גנים כולל שהייה,
+    // יסודי/חטיבה בלעדיה, "הוראה ללא שהייה" לעולם בלעדיה.
+    const utilizedHours = computeUtilizedHours(
+      layer,
+      { frontalHours: frontal, individualHours: individual, stayHoursInstitution: stayInstitution, stayHoursHome: stayHome },
+      scheduleType,
+    );
 
     // Budget over-limit check against סה"כ שעות לניצול, לא מול השעות שהוזנו במערכת השעות.
     const budgetRemaining = Number(body.budgetRemaining ?? Infinity);
