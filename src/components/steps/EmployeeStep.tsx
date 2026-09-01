@@ -755,9 +755,9 @@ export function EmployeeStep({
             const age = ageFromBirthDate(data.birthDate);
             return (
               <div
-                // 4 עמודות במסך רחב: 10 השדות נכנסים ל-3 שורות במקום 4, וכל עמודה צרה
-                // יותר - מה שנראה כ"רווח בין העמודות" היה בעיקר עמודה רחבה עם ערך קצר.
-                className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-5 ${
+                // 5 עמודות במסך רחב: בדיוק 10 שדות = 2 שורות. מה שנראה כ"רווח בין
+                // העמודות" היה בעיקר עמודה רחבה מדי עם ערך קצר, ולא ה-gap עצמו.
+                className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-5 ${
                   locked ? 'cursor-pointer' : ''
                 }`}
                 onClick={locked ? () => setEditing(true) : undefined}
@@ -1164,6 +1164,9 @@ function Input({
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
+      // בעמודה צרה ערך ארוך (מייל, כתובת) נחתך בתוך ה-input ואין לו סימן; title
+      // מאפשר לראות אותו במלואו בריחוף, במיוחד בתצוגה לקריאה בלבד.
+      title={value || undefined}
       className="w-full bg-surface-container-low border-transparent rounded-lg py-3 px-3 focus:bg-white focus:border-primary focus:ring-0 text-body-md disabled:bg-transparent disabled:text-on-background disabled:font-bold disabled:px-0 disabled:cursor-default"
     />
   );
