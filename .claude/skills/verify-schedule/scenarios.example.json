@@ -1,0 +1,52 @@
+[
+  {
+    "name": "הוראה יסודי, אישה נשואה עם ילדים, 30 שעות",
+    "body": {
+      "category": "הוראה",
+      "scheduleType": "הוראה",
+      "layer": "יסודי",
+      "ageHours": 0,
+      "enteredHours": 30,
+      "gender": "נקבה",
+      "maritalStatus": "נשוי/ה",
+      "hasChildrenUnder14": true,
+      "paraBoard": false,
+      "severeDisabilityFlag": false,
+      "isBehaviorAnalyst": false,
+      "budgetRemaining": 200
+    },
+    "expect": {
+      "ok": true,
+      "finalHours": 30
+    }
+  },
+  {
+    "name": "פרא יסודי, גבר נשוי, שהייה מהבית",
+    "body": {
+      "category": "פרא רפואי",
+      "scheduleType": "פרא",
+      "layer": "יסודי",
+      "ageHours": 0,
+      "enteredHours": 14,
+      "gender": "זכר",
+      "maritalStatus": "נשוי/ה",
+      "hasChildrenUnder14": false,
+      "paraBoard": false,
+      "budgetRemaining": 40
+    }
+  },
+  {
+    "name": "סוג מערכת שעות שאינו נמדד באופק — צפוי ok:false",
+    "body": {
+      "category": "מילוי מקום לתקופה מוגבלת",
+      "scheduleType": "רגיל",
+      "layer": "יסודי",
+      "enteredHours": 15,
+      "budgetRemaining": 100
+    },
+    "expect": {
+      "ok": false,
+      "reason": "ofek_not_applicable"
+    }
+  }
+]
