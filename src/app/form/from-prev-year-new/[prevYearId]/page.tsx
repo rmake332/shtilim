@@ -3,7 +3,7 @@ import { resolveInstitutionByToken } from '@/lib/institution';
 import { loadPrevYearForNewRole } from '@/lib/loadPrevYearForNewRole';
 import { getEmployeeById } from '@/lib/employees';
 import { Wizard } from '@/components/Wizard';
-import { DEFAULT_CONTRACT_START_DATE, type EmployeeData } from '@/lib/formTypes';
+import { DEFAULT_CONTRACT_START_DATE, splitFullName, type EmployeeData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 /**
@@ -36,6 +36,7 @@ export default async function FromPrevYearNewRolePage({
       initialEmployee = {
         recordId: details.id,
         name: details.name,
+        ...splitFullName(details.name),
         tz: details.tz,
         noIsraeliId: !isValidIsraeliId(details.tz),
         address: details.address,

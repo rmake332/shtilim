@@ -7,6 +7,7 @@ import { listPositionsForBudgetRow, createPosition } from '@/lib/invoice/positio
 import { checkLiveAnnualAllocation } from '@/lib/invoice/budgetCheck';
 import { findEmployeeByExactId } from '@/lib/employees';
 import { logger } from '@/lib/logger';
+import { joinFullName } from '@/lib/formTypes';
 
 /** GET /api/invoice/positions?token=&budgetRowId= - כל העובדים המוקצים תחת שורת תקציב חשבונית. */
 export async function GET(req: NextRequest) {
@@ -27,7 +28,10 @@ export async function GET(req: NextRequest) {
 }
 
 interface NewEmployeeInput {
+  /** נגזר מ-lastName+firstName בלקוח; נשמר כ-fallback למסלולים שאינם שולחים חלקים. */
   name: string;
+  lastName?: string;
+  firstName?: string;
   tz: string;
   address: string;
   email: string;
@@ -106,6 +110,8 @@ export async function POST(req: NextRequest) {
       employeeName = String(body.employeeName || '');
     } else {
       // Defense-in-depth: never create a duplicate. If the ID already exists, reuse it.
+      const employeeFullName =
+        joinFullName(newEmployee!.lastName ?? '', newEmployee!.firstName ?? '') || newEmployee!.name;
       const existing = await findEmployeeByExactId(newEmployee!.tz, gate.requestId);
       if (existing) {
         employeeId = existing.id;
@@ -114,7 +120,8 @@ export async function POST(req: NextRequest) {
         const created = await createRecord(
           TABLES.employees,
           {
-            [EMPLOYEE_FIELDS.name]: newEmployee!.name,
+            // שם משפחה ואז שם פרטי - אותו מבנה כמו בטופס הקליטה (ראו joinFullName).
+            [EMPLOYEE_FIELDS.name]: employeeFullName,
             [EMPLOYEE_FIELDS.tz]: newEmployee!.tz,
             [EMPLOYEE_FIELDS.address]: newEmployee!.address,
             [EMPLOYEE_FIELDS.email]: newEmployee!.email,
@@ -127,7 +134,7 @@ export async function POST(req: NextRequest) {
           gate.requestId,
         );
         employeeId = created.id;
-        employeeName = newEmployee!.name;
+        employeeName = employeeFullName;
       }
     }
 

@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
 import { formatNum } from '@/lib/formatNum';
 import { canonicalSubRoleChoices, subRoleDocsFor } from '@/lib/subRole';
-import type { UploadedDoc } from '@/lib/formTypes';
+import { joinFullName, splitFullName, type UploadedDoc } from '@/lib/formTypes';
 import { DocUpload } from '@/components/steps/DocUpload';
 import { BudgetStatCard } from '@/components/invoice/BudgetStatCard';
 import { INVOICE_POSITION_FIELDS, TABLES } from '@/lib/airtable/schema';
@@ -41,7 +41,8 @@ interface SearchResult {
 }
 
 const EMPTY_NEW_EMPLOYEE = {
-  name: '', tz: '', address: '', email: '', phone: '', maritalStatus: '', gender: '', birthDate: '',
+  // name נגזר מ-lastName+firstName (שם משפחה ואז שם פרטי) - אותו מבנה כמו בטופס הקליטה.
+  name: '', lastName: '', firstName: '', tz: '', address: '', email: '', phone: '', maritalStatus: '', gender: '', birthDate: '',
 };
 
 function TopNav({
@@ -144,7 +145,7 @@ export function AllocationScreen({
   // ── edit-employee-details panel state (existing position, not the add form above) ──
   const [editingEmployeeFor, setEditingEmployeeFor] = useState<string | null>(null); // positionId
   const [empForm, setEmpForm] = useState({
-    name: '', tz: '', address: '', email: '', phone: '', gender: '', maritalStatus: '', birthDate: '',
+    name: '', lastName: '', firstName: '', tz: '', address: '', email: '', phone: '', gender: '', maritalStatus: '', birthDate: '',
     subRole: '', licenseNumber: '', bankName: '', bankBranch: '', bankAccountNumber: '', vatNumber: '',
   });
   const [empExistingSubRoleDocs, setEmpExistingSubRoleDocs] = useState<string[]>([]);
@@ -242,7 +243,8 @@ export function AllocationScreen({
   async function submitAddEmployee() {
     setFormError('');
     if (!selectedEmployeeId && !newEmployee.tz) { setFormError('יש לבחור עובד קיים או להזין עובד חדש.'); return; }
-    if (!selectedEmployeeId && !newEmployee.name) { setFormError('יש להזין שם עובד.'); return; }
+    if (!selectedEmployeeId && !newEmployee.lastName.trim()) { setFormError('יש להזין שם משפחה.'); return; }
+    if (!selectedEmployeeId && !newEmployee.firstName.trim()) { setFormError('יש להזין שם פרטי.'); return; }
     if (!selectedEmployeeId && !newEmployee.phone) { setFormError('יש להזין טלפון.'); return; }
     if (!selectedEmployeeId && !newEmployee.email) { setFormError('יש להזין אימייל.'); return; }
     if (!selectedEmployeeId && !newEmployee.gender) { setFormError('יש לבחור מין.'); return; }
@@ -373,7 +375,7 @@ export function AllocationScreen({
     setEmpLicenseDocs({});
     setEmpExistingSubRoleDocs([]);
     setEmpForm({
-      name: p.employeeName, tz: '', address: '', email: '', phone: '', gender: '', maritalStatus: '', birthDate: '',
+      name: p.employeeName, ...splitFullName(p.employeeName), tz: '', address: '', email: '', phone: '', gender: '', maritalStatus: '', birthDate: '',
       subRole: p.subRole, licenseNumber: '', bankName: '', bankBranch: '', bankAccountNumber: '', vatNumber: '',
     });
     setEmpLoading(true);
@@ -384,6 +386,7 @@ export function AllocationScreen({
       if (e) {
         setEmpForm({
           name: e.name ?? p.employeeName,
+          ...splitFullName(e.name ?? p.employeeName),
           tz: e.tz ?? '',
           address: e.address ?? '',
           email: e.email ?? '',
@@ -414,7 +417,8 @@ export function AllocationScreen({
 
   async function saveEditEmployee(p: InvoicePosition) {
     setEmpError('');
-    if (!empForm.name.trim()) { setEmpError('יש להזין שם עובד.'); return; }
+    if (!empForm.lastName.trim()) { setEmpError('יש להזין שם משפחה.'); return; }
+    if (!empForm.firstName.trim()) { setEmpError('יש להזין שם פרטי.'); return; }
     if (!empForm.phone.trim()) { setEmpError('יש להזין טלפון.'); return; }
     if (!empForm.email.trim()) { setEmpError('יש להזין אימייל.'); return; }
     if (!empForm.gender) { setEmpError('יש לבחור מין.'); return; }
@@ -441,6 +445,8 @@ export function AllocationScreen({
           token,
           employee: {
             name: empForm.name,
+            lastName: empForm.lastName,
+            firstName: empForm.firstName,
             address: empForm.address,
             email: empForm.email,
             phone: empForm.phone,
@@ -712,11 +718,21 @@ export function AllocationScreen({
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl">
                       <div>
                         <label className="text-label-lg text-on-surface block mb-2">
-                          שם מלא <span className="text-error">*</span>
+                          שם משפחה <span className="text-error">*</span>
                         </label>
                         <input
-                          value={empForm.name}
-                          onChange={(e) => setEmpForm((v) => ({ ...v, name: e.target.value }))}
+                          value={empForm.lastName}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, lastName: e.target.value, name: joinFullName(e.target.value, v.firstName) }))}
+                          className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-label-lg text-on-surface block mb-2">
+                          שם פרטי <span className="text-error">*</span>
+                        </label>
+                        <input
+                          value={empForm.firstName}
+                          onChange={(e) => setEmpForm((v) => ({ ...v, firstName: e.target.value, name: joinFullName(v.lastName, e.target.value) }))}
                           className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         />
                       </div>
@@ -962,11 +978,21 @@ export function AllocationScreen({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                   <div>
                     <label className="text-label-lg text-on-surface block mb-2">
-                      שם מלא <span className="text-error">*</span>
+                      שם משפחה <span className="text-error">*</span>
                     </label>
                     <input
-                      value={newEmployee.name}
-                      onChange={(e) => setNewEmployee((v) => ({ ...v, name: e.target.value }))}
+                      value={newEmployee.lastName}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, lastName: e.target.value, name: joinFullName(e.target.value, v.firstName) }))}
+                      className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-lg text-on-surface block mb-2">
+                      שם פרטי <span className="text-error">*</span>
+                    </label>
+                    <input
+                      value={newEmployee.firstName}
+                      onChange={(e) => setNewEmployee((v) => ({ ...v, firstName: e.target.value, name: joinFullName(v.lastName, e.target.value) }))}
                       className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                     />
                   </div>

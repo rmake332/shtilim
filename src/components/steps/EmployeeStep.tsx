@@ -12,7 +12,9 @@ import {
   isUnder16,
   isUnderEmploymentAge,
   MaritalStatus,
+  joinFullName,
   showChildrenUnder14Question,
+  splitFullName,
   YesNo,
   YouthDocs,
   type Gender,
@@ -113,7 +115,13 @@ export function EmployeeStep({
 
   /** Load full details for a selected employee. Shown read-only by default. */
   async function loadAndSelect(recordId: string, fallbackName: string) {
-    setData((d) => ({ ...emptyEmployee(), contractStartDate: d.contractStartDate, recordId, name: fallbackName }));
+    setData((d) => ({
+      ...emptyEmployee(),
+      contractStartDate: d.contractStartDate,
+      recordId,
+      name: fallbackName,
+      ...splitFullName(fallbackName),
+    }));
     setErrors({});
     setEditing(false);
     setLoadingEmployee(true);
@@ -126,6 +134,7 @@ export function EmployeeStep({
         const loaded = {
           recordId,
           name: (e.name ?? fallbackName) as string,
+          ...splitFullName((e.name ?? fallbackName) as string),
           tz: (e.tz ?? '') as string,
           // אין שדה מאוחסן לכך - נגזר מחדש מפורמט ה-tz בכל טעינה.
           noIsraeliId: !isValidIsraeliId(e.tz ?? ''),
@@ -194,6 +203,17 @@ export function EmployeeStep({
 
   function set<K extends keyof EmployeeData>(key: K, value: EmployeeData[K]) {
     setData((d) => ({ ...d, [key]: value }));
+  }
+
+  /**
+   * שם משפחה/שם פרטי מוזנים בנפרד, אבל באיירטייבל יש שדה שם אחד. כל שינוי בשדות
+   * מרכיב מחדש את `name`, שנשאר מקור האמת היחיד לכל מה שמציג או שומר שם.
+   */
+  function setNamePart(key: 'lastName' | 'firstName', value: string) {
+    setData((d) => {
+      const next = { ...d, [key]: value };
+      return { ...next, name: joinFullName(next.lastName, next.firstName) };
+    });
   }
 
   /**
@@ -278,7 +298,7 @@ export function EmployeeStep({
    */
   function personalSnapshot(e: EmployeeData): string {
     return JSON.stringify([
-      e.name.trim(), e.tz.trim(), e.address.trim(), e.email.trim(), e.phone.trim(),
+      e.lastName.trim(), e.firstName.trim(), e.tz.trim(), e.address.trim(), e.email.trim(), e.phone.trim(),
       e.gender, e.maritalStatus, e.birthDate,
     ]);
   }
@@ -419,7 +439,8 @@ export function EmployeeStep({
     const e: Record<string, string> = {};
     // Validate employee fields whenever the detail form is shown (new OR editable existing).
     if (showNewForm || selectedExisting) {
-      if (!data.name.trim()) e.name = 'שדה חובה';
+      if (!data.lastName.trim()) e.lastName = 'שדה חובה';
+      if (!data.firstName.trim()) e.firstName = 'שדה חובה';
       if (!tzOk) e.tz = tzErrorMessage(data);
       if (!data.address.trim()) e.address = 'שדה חובה';
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) e.email = 'מייל לא תקין';
@@ -446,7 +467,7 @@ export function EmployeeStep({
     setErrors(e);
     // An existing employee shows read-only; if a profile field is invalid (e.g. a
     // missing phone), open edit mode so the secretary can actually fix it.
-    const profileKeys = ['name', 'tz', 'address', 'email', 'phone', 'gender', 'maritalStatus', 'birthDate'];
+    const profileKeys = ['lastName', 'firstName', 'tz', 'address', 'email', 'phone', 'gender', 'maritalStatus', 'birthDate'];
     if (selectedExisting && !editing && profileKeys.some((k) => e[k])) {
       setEditing(true);
     }
@@ -505,7 +526,8 @@ export function EmployeeStep({
    * והם אלה שחסמו קודם את השמירה ולכן סיכנו את מה שכבר הוקלד.
    */
   const missingPersonalField = (() => {
-    if (!data.name.trim()) return 'שם מלא';
+    if (!data.lastName.trim()) return 'שם משפחה';
+    if (!data.firstName.trim()) return 'שם פרטי';
     if (!(data.noIsraeliId ? isValidForeignId(data.tz) : isValidIsraeliId(data.tz)))
       return isPlaceholderId(data.tz) ? 'מספר זיהוי אמיתי (המספר שהוקלד אינו מזהה תקין)' : data.noIsraeliId ? 'מספר זיהוי תקין' : 'ת.ז. תקינה';
     if (!data.address.trim()) return 'כתובת';
@@ -750,8 +772,12 @@ export function EmployeeStep({
                 onClick={locked ? () => setEditing(true) : undefined}
                 title={locked ? 'לחצו לעריכה' : undefined}
               >
-                <Field label="שם מלא" error={errors.name} locked={locked}>
-                  <Input value={data.name} onChange={(v) => set('name', v)} placeholder="הכנס שם מלא" disabled={locked} />
+                {/* שם משפחה לפני שם פרטי - זה גם הסדר שנכתב לשדה הבודד באיירטייבל. */}
+                <Field label="שם משפחה" error={errors.lastName} locked={locked}>
+                  <Input value={data.lastName} onChange={(v) => setNamePart('lastName', v)} placeholder="שם משפחה" disabled={locked} />
+                </Field>
+                <Field label="שם פרטי" error={errors.firstName} locked={locked}>
+                  <Input value={data.firstName} onChange={(v) => setNamePart('firstName', v)} placeholder="שם פרטי" disabled={locked} />
                 </Field>
                 <Field label="ת.ז." error={errors.tz} locked={locked}>
                   <Input

@@ -3,7 +3,7 @@ import { createRecord, updateRecord, getRecord } from '@/lib/airtable/client';
 import { TABLES, EMPLOYEE_FIELDS } from '@/lib/airtable/schema';
 import { findEmployeeByExactId } from '@/lib/employees';
 import { logger } from '@/lib/logger';
-import type { EmployeeData } from '@/lib/formTypes';
+import { joinFullName, type EmployeeData } from '@/lib/formTypes';
 
 export interface UpsertEmployeeResult {
   employeeId: string;
@@ -37,6 +37,9 @@ export async function upsertEmployee(
   requestId?: string,
 ): Promise<UpsertEmployeeResult> {
   const { employee, institutionMosadId, licenseNumber } = params;
+  // השם נכתב תמיד מהחלקים (שם משפחה ואז שם פרטי), כך שהמבנה בשדה הבודד של איירטייבל
+  // אחיד גם אם הלקוח שלח name לא מסונכרן. נפילה ל-name למסלולים שאינם מזינים חלקים.
+  const fullName = joinFullName(employee.lastName, employee.firstName) || employee.name;
 
   let employeeId = employee.recordId ?? '';
   let matchedName: string | undefined;
@@ -56,7 +59,7 @@ export async function upsertEmployee(
     const created = await createRecord(
       TABLES.employees,
       {
-        [EMPLOYEE_FIELDS.name]: employee.name,
+        [EMPLOYEE_FIELDS.name]: fullName,
         [EMPLOYEE_FIELDS.tz]: employee.tz,
         [EMPLOYEE_FIELDS.address]: employee.address,
         [EMPLOYEE_FIELDS.email]: employee.email,
@@ -79,7 +82,7 @@ export async function upsertEmployee(
 
   // Existing employee — update any fields that were edited.
   const empUpdate: Record<string, unknown> = {};
-  if (employee.name)          empUpdate[EMPLOYEE_FIELDS.name]          = employee.name;
+  if (fullName)               empUpdate[EMPLOYEE_FIELDS.name]          = fullName;
   if (employee.address)       empUpdate[EMPLOYEE_FIELDS.address]       = employee.address;
   if (employee.email)         empUpdate[EMPLOYEE_FIELDS.email]         = employee.email;
   if (employee.phone)         empUpdate[EMPLOYEE_FIELDS.phone]         = employee.phone;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
 import { upsertEmployee } from '@/lib/saveEmployee';
-import { isUnderEmploymentAge, type EmployeeData } from '@/lib/formTypes';
+import { isUnderEmploymentAge, joinFullName, type EmployeeData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 import { isValidForeignId } from '@/lib/validation/foreignId';
 import { logger } from '@/lib/logger';
@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  if (!employee.name?.trim()) {
+  // השם נבדק על החלקים, שהם מה שנכתב בפועל (ראו upsertEmployee); name לבדו הוא נגזרת.
+  if (!joinFullName(employee.lastName, employee.firstName).trim() && !employee.name?.trim()) {
     return NextResponse.json({ ok: false, message: 'חסר שם העובד.' }, { status: 400 });
   }
   // מתחת לגיל 14 - חסימה חוקית; אין ליצור לו רשומה גם אם הלקוח שלח בכל זאת.

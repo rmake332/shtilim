@@ -18,7 +18,7 @@ import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { checkLiveBudget } from '@/lib/schedule/budgetCheck';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
 import { subRoleLinkFor } from '@/lib/subRoleTable';
-import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
+import { joinFullName, splitFullName, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 // מוצ"ש included — regular schedules round-trip; other types simply have no shifts there.
@@ -98,6 +98,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const employee: EmployeeData = {
       recordId: employeeIds[0] ?? null,
       name: strField(empFields[EMPLOYEE_FIELDS.name]),
+      ...splitFullName(strField(empFields[EMPLOYEE_FIELDS.name])),
       tz: strField(empFields[EMPLOYEE_FIELDS.tz]),
       noIsraeliId: !isValidIsraeliId(strField(empFields[EMPLOYEE_FIELDS.tz])),
       address: strField(empFields[EMPLOYEE_FIELDS.address]),
@@ -410,7 +411,8 @@ async function updatePosition(
   const employeeId = employee.recordId ?? '';
   if (employeeId) {
     const empFields: Record<string, unknown> = {
-      [EMPLOYEE_FIELDS.name]:          employee.name          || undefined,
+      // השם נכתב מהחלקים (שם משפחה ואז שם פרטי); נפילה ל-name לתאימות.
+      [EMPLOYEE_FIELDS.name]:          joinFullName(employee.lastName, employee.firstName) || employee.name || undefined,
       [EMPLOYEE_FIELDS.address]:       employee.address       || undefined,
       [EMPLOYEE_FIELDS.email]:         employee.email         || undefined,
       [EMPLOYEE_FIELDS.maritalStatus]: employee.maritalStatus || undefined,

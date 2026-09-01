@@ -113,6 +113,27 @@ export function isMinor(birthDate: string): boolean {
   return age != null && age < 18;
 }
 
+/**
+ * השם ב"רשימת עובדים" הוא שדה טקסט בודד, והטופס מזין אותו כשני שדות נפרדים.
+ * המבנה המוסכם: **שם משפחה ואז שם פרטי**, מופרדים ברווח יחיד.
+ *
+ * הפיצול הוא על הרווח ה*ראשון* (ולא האחרון) כדי ש-`join(split(x)) === x` לכל שם קיים
+ * בטבלה - נבדק על כל 5,229 השמות. זה חשוב כי בנתונים ההיסטוריים יש גם סדר הפוך
+ * ("מרים הורביץ" לצד "הורביץ מרים"): הפיצול עלול לנחש לא נכון מי שם המשפחה, אבל
+ * טעינה ושמירה חוזרת לא משנות את הערך המאוחסן ולכן לא הורסות נתונים.
+ */
+export function splitFullName(full: string): { lastName: string; firstName: string } {
+  const trimmed = String(full ?? '').trim().replace(/\s+/g, ' ');
+  const i = trimmed.indexOf(' ');
+  if (i < 0) return { lastName: trimmed, firstName: '' };
+  return { lastName: trimmed.slice(0, i), firstName: trimmed.slice(i + 1) };
+}
+
+/** האיחוד שנכתב לאיירטייבל: שם משפחה, רווח, שם פרטי. חלק ריק אינו מוסיף רווח. */
+export function joinFullName(lastName: string, firstName: string): string {
+  return [String(lastName ?? '').trim(), String(firstName ?? '').trim()].filter(Boolean).join(' ');
+}
+
 /** Step 1 — selected or newly-entered employee. */
 export interface EmployeeData {
   /** Airtable record id if an existing employee was chosen; null if new. */
@@ -123,7 +144,16 @@ export interface EmployeeData {
    * רק על עובד שלא היה קיים - אין להסיק "עובד חדש" מ-recordId ריק.
    */
   newlyCreated?: boolean;
+  /**
+   * השם המלא כפי שהוא מאוחסן ב"רשימת עובדים" - שדה בודד באיירטייבל. **נגזר** מ-lastName
+   * ו-firstName דרך joinFullName, ואין להזין אותו ישירות; הוא נשאר מקור האמת היחיד לכל
+   * מה שמציג שם (כותרת האשף, סיכום, תקן).
+   */
   name: string;
+  /** שם משפחה - מוזן בנפרד בטופס. ראו splitFullName/joinFullName. */
+  lastName: string;
+  /** שם פרטי - מוזן בנפרד בטופס. */
+  firstName: string;
   tz: string;
   /**
    * "עובד/ת ללא תעודת זהות ישראלית" - כשמסומן, tz מוולד כמספר זיהוי/דרכון חופשי
@@ -354,6 +384,8 @@ export function emptyEmployee(): EmployeeData {
   return {
     recordId: null,
     name: '',
+    lastName: '',
+    firstName: '',
     tz: '',
     noIsraeliId: false,
     address: '',

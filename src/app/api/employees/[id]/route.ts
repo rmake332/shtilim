@@ -4,7 +4,7 @@ import { getEmployeeById } from '@/lib/employees';
 import { updateRecord } from '@/lib/airtable/client';
 import { TABLES, EMPLOYEE_FIELDS } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
-import type { EmployeeData } from '@/lib/formTypes';
+import { joinFullName, type EmployeeData } from '@/lib/formTypes';
 
 /** Subset of EmployeeData plus the invoice-only fields (license/bank) not part of the main wizard's step data. */
 interface EmployeePatchInput extends Partial<EmployeeData> {
@@ -32,8 +32,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ ok: false, message: 'מספר עוסק חייב להיות בן 9 ספרות.' }, { status: 400 });
   }
 
+  // השם נכתב מהחלקים (שם משפחה ואז שם פרטי); נפילה ל-name למסלולים שאינם מזינים חלקים.
+  const fullName = joinFullName(employee.lastName ?? '', employee.firstName ?? '') || employee.name;
+
   const fields: Record<string, unknown> = {};
-  if (employee.name)          fields[EMPLOYEE_FIELDS.name]          = employee.name;
+  if (fullName)               fields[EMPLOYEE_FIELDS.name]          = fullName;
   if (employee.address)       fields[EMPLOYEE_FIELDS.address]       = employee.address;
   if (employee.email)         fields[EMPLOYEE_FIELDS.email]         = employee.email;
   if (employee.phone)         fields[EMPLOYEE_FIELDS.phone]         = employee.phone;

@@ -11,7 +11,7 @@ import {
 } from '@/lib/airtable/schema';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { bellScheduleNumsFrom } from '@/lib/roles';
-import { DEFAULT_CONTRACT_START_DATE, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
+import { DEFAULT_CONTRACT_START_DATE, splitFullName, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 // מוצ"ש included so regular-type schedules round-trip in edit mode.
@@ -82,6 +82,7 @@ export async function loadPosition(
   const employee: EmployeeData = {
     recordId: employeeIds[0] ?? null,
     name: strField(empFields[EMPLOYEE_FIELDS.name]),
+    ...splitFullName(strField(empFields[EMPLOYEE_FIELDS.name])),
     tz: strField(empFields[EMPLOYEE_FIELDS.tz]),
     noIsraeliId: !isValidIsraeliId(strField(empFields[EMPLOYEE_FIELDS.tz])),
     address: strField(empFields[EMPLOYEE_FIELDS.address]),
