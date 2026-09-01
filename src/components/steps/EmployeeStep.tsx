@@ -109,26 +109,28 @@ export function EmployeeStep({
       if (json.employee) {
         const e = json.employee;
         const gender = (e.gender as Gender) || '';
-        setData((d) => ({
-          ...d,
+        const loaded = {
           recordId,
-          name: e.name ?? fallbackName,
-          tz: e.tz ?? '',
+          name: (e.name ?? fallbackName) as string,
+          tz: (e.tz ?? '') as string,
           // אין שדה מאוחסן לכך - נגזר מחדש מפורמט ה-tz בכל טעינה.
           noIsraeliId: !isValidIsraeliId(e.tz ?? ''),
-          address: e.address ?? '',
-          email: e.email ?? '',
-          phone: e.phone ?? '',
+          address: (e.address ?? '') as string,
+          email: (e.email ?? '') as string,
+          phone: (e.phone ?? '') as string,
           gender,
-          maritalStatus: (e.maritalStatus as EmployeeData['maritalStatus']) || '',
-          birthDate: e.birthDate ?? '',
+          maritalStatus: ((e.maritalStatus as EmployeeData['maritalStatus']) || '') as EmployeeData['maritalStatus'],
+          birthDate: (e.birthDate ?? '') as string,
           ageHours: Number(e.ageHours) || 0,
           fatherPosition: Boolean(e.fatherPosition),
           twelveHourEmployment: Boolean(e.twelveHourEmployment),
-          existingSubRoleDocs: e.existingSubRoleDocs ?? [],
-          existingLicenseNumber: e.licenseNumber ?? '',
-          existingYouthDocs: e.existingYouthDocs ?? [],
-        }));
+          existingSubRoleDocs: (e.existingSubRoleDocs ?? []) as string[],
+          existingLicenseNumber: (e.licenseNumber ?? '') as string,
+          existingYouthDocs: (e.existingYouthDocs ?? []) as string[],
+        };
+        setData((d) => ({ ...d, ...loaded }));
+        // מה שנטען מהשרת הוא בהגדרה מה ששמור - כדי שהחיווי לא יסמן עובד קיים כ"לא נשמר".
+        setSavedSnapshot(personalSnapshot({ ...emptyEmployee(), ...loaded }));
         // Gender is a new field — open edit mode automatically if it's missing.
         if (!gender) setEditing(true);
       }
@@ -253,6 +255,41 @@ export function EmployeeStep({
       return await run;
     } finally {
       if (persistInFlight.current === run) persistInFlight.current = null;
+    }
+  }
+
+  /**
+   * טביעת האצבע של השדות שנשמרים לרשומת העובד. משמשת להבחנה בין "נשמר" לבין "נשמר
+   * ומאז נערך", כדי שהחיווי לא יבטיח שמירה של ערכים שעדיין לא נכתבו.
+   */
+  function personalSnapshot(e: EmployeeData): string {
+    return JSON.stringify([
+      e.name.trim(), e.tz.trim(), e.address.trim(), e.email.trim(), e.phone.trim(),
+      e.gender, e.maritalStatus, e.birthDate,
+    ]);
+  }
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(() =>
+    initial?.recordId ? personalSnapshot(initial) : null,
+  );
+
+  /**
+   * שמירה מפורשת של פרטי העובד ל"רשימת עובדים", מכפתור "שמירת פרטי העובד".
+   *
+   * זהו השער לשאר השלב: כל עוד אין רשומה אי אפשר להעלות מסמכים (אין למה לצרף אותם)
+   * ואי אפשר להמשיך לשלב הבא. כך הפרטים נשמרים לפני שהמזכירה יוצאת לחפש אישור חסר,
+   * במקום להיתקע מאחורי חובת המסמכים.
+   */
+  async function saveEmployeeNow() {
+    setAdvancing(true);
+    try {
+      const outcome = await persistEmployee(data);
+      if (outcome.kind !== 'saved') return;
+      setSavedSnapshot(personalSnapshot(outcome.employee));
+      // בדרך כלל אין מה להעלות (המסמכים נעולים עד השמירה), אבל אם נשארו כאלה מניסיון
+      // קודם שנכשל - זו ההזדמנות שלהם.
+      await uploadPendingDocs(outcome.employee.recordId!, outcome.employee);
+    } finally {
+      setAdvancing(false);
     }
   }
 
@@ -449,19 +486,29 @@ export function EmployeeStep({
   const underEmploymentAge = isUnderEmploymentAge(data.birthDate);
 
   /**
-   * פרטי העובד עצמם מלאים ותקינים - התנאי ליצירה האוטומטית של הרשומה.
-   * מכוון: אינו כולל מסמכים, תאריך תחילת חוזה ושאלת ילדים - אלו שדות של התהליך
-   * ולא של זהות העובד, והם אלה שחוסמים את המעבר לשלב הבא ומסכנים את מה שהוקלד.
+   * פרטי העובד עצמם מלאים ותקינים - התנאי להפעלת כפתור "שמירת פרטי העובד".
+   * מכוון: אינו כולל מסמכים ושאלת ילדים - אלו שדות של התהליך ולא של זהות העובד,
+   * והם אלה שחסמו קודם את השמירה ולכן סיכנו את מה שכבר הוקלד.
    */
-  const personalFieldsValid =
-    data.name.trim().length > 0 &&
-    (data.noIsraeliId ? isValidForeignId(data.tz) : isValidIsraeliId(data.tz)) &&
-    data.address.trim().length > 0 &&
-    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email) &&
-    isValidIsraeliPhone(data.phone) &&
-    Boolean(data.gender) &&
-    Boolean(data.maritalStatus) &&
-    Boolean(data.birthDate);
+  const missingPersonalField = (() => {
+    if (!data.name.trim()) return 'שם מלא';
+    if (!(data.noIsraeliId ? isValidForeignId(data.tz) : isValidIsraeliId(data.tz)))
+      return data.noIsraeliId ? 'מספר זיהוי תקין' : 'ת.ז. תקינה';
+    if (!data.address.trim()) return 'כתובת';
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) return 'מייל תקין';
+    if (!data.phone.trim() || !isValidIsraeliPhone(data.phone)) return 'טלפון תקין';
+    if (!data.gender) return 'מין';
+    if (!data.maritalStatus) return 'מצב משפחתי';
+    if (!data.birthDate) return 'תאריך לידה';
+    return '';
+  })();
+  const personalFieldsValid = missingPersonalField === '';
+  /** העובד קיים באיירטייבל והערכים שעל המסך הם אלה שנשמרו. */
+  const employeeSaved = selectedExisting && savedSnapshot === personalSnapshot(data);
+  /** נשמר, ומאז נערך שדה - החיווי חייב לומר זאת ולא להבטיח שמירה שלא קרתה. */
+  const employeeDirty = selectedExisting && !employeeSaved;
+  /** אין רשומת עובד עדיין - אין למה לצרף מסמכים, וגם אי אפשר להמשיך לשלב הבא. */
+  const docsLocked = !selectedExisting;
 
   // Youth-employment warnings (by age) + a mandatory acknowledgement checkbox.
   // The working-hours limits differ between 14–16 and 16–18.
@@ -511,44 +558,11 @@ export function EmployeeStep({
 
   const isEditMode = mode === 'edit';
 
-  /**
-   * יצירה אוטומטית של רשומת העובד ברגע שפרטי העובד עצמם תקינים - בלי להמתין למסמכים
-   * ובלי להמתין ללחיצת "המשך".
-   *
-   * המסמכים הם שדה חובה וחוסמים את המעבר לשלב הבא, ולכן מזכירה שגילתה שחסר לה אישור
-   * ועזבה כדי להשיג אותו הייתה מאבדת גם את כל הפרטים שהקלידה. הרשומה נוצרת כאן, ומכאן
-   * ואילך כל מסמך שמצורף עולה אליה מיד (ראו attachDoc).
-   *
-   * ה-debounce נחוץ כדי שלא תיווצר רשומה מערך חלקי באמצע הקלדה.
-   */
-  const autoCreateTimer = useRef<ReturnType<typeof setTimeout>>();
-  const autoCreating = useRef(false);
-  useEffect(() => {
-    if (isEditMode || data.recordId || !showNewForm) return;
-    if (!personalFieldsValid || underEmploymentAge) return;
-    clearTimeout(autoCreateTimer.current);
-    autoCreateTimer.current = setTimeout(async () => {
-      if (autoCreating.current) return;
-      autoCreating.current = true;
-      try {
-        const outcome = await persistEmployee(data);
-        // מה שכבר צורף לפני שהרשומה נוצרה עולה עכשיו.
-        if (outcome.kind === 'saved') await uploadPendingDocs(outcome.employee.recordId!, outcome.employee);
-      } finally {
-        autoCreating.current = false;
-      }
-    }, 1200);
-    return () => clearTimeout(autoCreateTimer.current);
-    // data שלם בתלויות בכוונה: כל הקלדה מאפסת את הטיימר, כך שהרשומה נוצרת 1.2 שניות
-    // אחרי ההקלדה האחרונה ועם הערכים המעודכנים - ולא עם צילום ישן מרגע שהטופס נעשה תקין.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, personalFieldsValid, underEmploymentAge, showNewForm, isEditMode]);
-
 
   return (
     <>
       {/* Search — hidden in edit mode and once an employee is selected */}
-      {!isEditMode && !pickedExisting && (
+      {!isEditMode && !selectedExisting && (
       <div className="relative w-full md:w-1/2 lg:w-1/3 mb-6">
         <Icon
           name="search"
@@ -568,7 +582,7 @@ export function EmployeeStep({
       )}
 
       {/* Results */}
-      {!isEditMode && !pickedExisting && (results.length > 0 || searching) && (
+      {!isEditMode && !selectedExisting && (results.length > 0 || searching) && (
         <div className="bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant overflow-hidden mb-6">
           <div className="grid grid-cols-3 gap-4 p-4 border-b border-outline-variant bg-surface-container-low text-label-lg font-bold text-on-surface-variant">
             <div>שם העובד</div>
@@ -617,7 +631,7 @@ export function EmployeeStep({
       )}
 
       {/* Add new toggle — hidden in edit mode */}
-      {!isEditMode && !pickedExisting && (
+      {!isEditMode && !selectedExisting && (
         <button
           className="w-full py-3 px-4 border-2 border-dashed border-outline-variant rounded-xl flex items-center justify-center gap-2 text-on-surface-variant hover:border-primary hover:text-primary transition-all mb-6"
           onClick={() => setShowNewForm((v) => !v)}
@@ -646,6 +660,21 @@ export function EmployeeStep({
               {pickedExisting ? 'פרטי העובד' : 'פרטי עובד חדש'}
             </h3>
             <div className="flex items-center gap-4">
+              {/* עובד חדש: השמירה מפורשת. עד שהיא מתבצעת אין רשומה באיירטייבל, ולכן
+                  גם אי אפשר להעלות מסמכים (אין למה לצרף אותם) ולא להמשיך לשלב הבא. */}
+              {!pickedExisting && !isEditMode && (
+                <button
+                  className="px-5 py-2 bg-primary text-on-primary text-label-lg font-bold rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={saveEmployeeNow}
+                  disabled={!personalFieldsValid || underEmploymentAge || advancing || employeeSaved}
+                  title={
+                    personalFieldsValid ? undefined : `יש להשלים: ${missingPersonalField}`
+                  }
+                >
+                  <Icon name={employeeSaved ? 'check' : 'save'} className="text-[18px]" />
+                  {advancing ? 'שומר…' : employeeSaved ? 'נשמר' : employeeDirty ? 'שמירת השינויים' : 'שמירת פרטי העובד'}
+                </button>
+              )}
               {pickedExisting && !editing && (
                 <button
                   className="text-primary text-label-lg hover:underline flex items-center gap-1"
@@ -659,6 +688,7 @@ export function EmployeeStep({
                   className="text-on-surface-variant text-label-lg hover:underline"
                   onClick={() => {
                     setData((d) => ({ ...emptyEmployee(), contractStartDate: d.contractStartDate }));
+                    setSavedSnapshot(null);
                     setDupNotice('');
                     setErrors({});
                     setEditing(false);
@@ -669,6 +699,30 @@ export function EmployeeStep({
               )}
             </div>
           </div>
+
+          {/* חיווי מצב השמירה — רק לעובד חדש; לעובד קיים "עריכה/סיום עריכה" כבר משדר זאת. */}
+          {!pickedExisting && !isEditMode && (
+            <div
+              className={`mb-5 -mt-2 px-3 py-2 rounded-lg text-body-md flex items-center gap-2 ${
+                employeeSaved
+                  ? 'bg-tertiary-container/30 text-on-surface'
+                  : 'bg-secondary-container/40 text-on-secondary-container'
+              }`}
+            >
+              <Icon
+                name={employeeSaved ? 'check_circle' : 'info'}
+                className={employeeSaved ? 'text-tertiary text-[18px]' : 'text-[18px]'}
+                fill={employeeSaved}
+              />
+              {employeeSaved
+                ? 'פרטי העובד נשמרו במערכת. אפשר להעלות מסמכים ולהמשיך.'
+                : employeeDirty
+                  ? 'יש שינויים שטרם נשמרו - לחצו "שמירת השינויים".'
+                  : personalFieldsValid
+                    ? 'טרם נשמר - לחצו "שמירת פרטי העובד" כדי ליצור את העובד במערכת.'
+                    : `טרם נשמר - יש להשלים ${missingPersonalField}.`}
+            </div>
+          )}
 
           {/* Same layout always; fields are locked unless editing (new employee = always editable). */}
           {(() => {
@@ -926,6 +980,13 @@ export function EmployeeStep({
           <p className="text-body-md text-on-surface-variant mb-5">
             יש לצרף את המסמכים הבאים (PDF או תמונה, עד 5MB לקובץ).
           </p>
+          {/* אין רשומת עובד - אין למה לצרף את הקבצים, וההעלאה נעולה עד השמירה. */}
+          {docsLocked && (
+            <div className="mb-5 p-3 rounded-lg bg-secondary-container/40 text-on-secondary-container text-body-md flex items-center gap-2">
+              <Icon name="lock" />
+              יש לשמור תחילה את פרטי העובד. לאחר השמירה כל מסמך שיצורף יישמר מיד.
+            </div>
+          )}
           {alreadyOnFileDocs.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-5">
               {alreadyOnFileDocs.map((d) => (
@@ -948,6 +1009,7 @@ export function EmployeeStep({
                   required
                   value={docs[doc.key]}
                   error={errors[`doc_${doc.key}`]}
+                  disabled={docsLocked}
                   onChange={(uploaded) => void attachDoc(doc, uploaded)}
                 />
               ))}
@@ -974,7 +1036,9 @@ export function EmployeeStep({
         showBack={Boolean(onBack)}
         onBack={onBack}
         nextLabel={uploadNote ? 'מעלה מסמכים…' : advancing ? 'שומר…' : undefined}
-        nextDisabled={(!selectedExisting && !showNewForm) || underEmploymentAge || advancing}
+        // בלי רשומת עובד אין להמשיך: שלב התפקיד מניח שהעובד כבר קיים במערכת, וזה גם
+        // מה שמכריח את השמירה המפורשת לפני שממשיכים.
+        nextDisabled={!selectedExisting || underEmploymentAge || advancing}
         onNext={validateAndNext}
       />
     </>

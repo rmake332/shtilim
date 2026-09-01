@@ -27,12 +27,15 @@ export function DocUpload({
   required = false,
   value,
   error,
+  disabled = false,
   onChange,
 }: {
   label: string;
   required?: boolean;
   value?: UploadedDoc;
   error?: string;
+  /** נעול עד שיש רשומה לצרף אליה (ראו EmployeeStep.docsLocked). */
+  disabled?: boolean;
   onChange: (doc: UploadedDoc | undefined) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -95,7 +98,8 @@ export function DocUpload({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="mt-auto flex items-center justify-center gap-2 border-2 border-dashed border-outline-variant rounded-lg py-3 px-3 text-on-surface-variant hover:border-primary hover:text-primary transition-all"
+          disabled={disabled}
+          className="mt-auto flex items-center justify-center gap-2 border-2 border-dashed border-outline-variant rounded-lg py-3 px-3 text-on-surface-variant transition-all enabled:hover:border-primary enabled:hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Icon name="upload_file" className="text-[18px]" />
           <span className="text-body-md font-medium">העלאת קובץ</span>
