@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import {
@@ -16,6 +16,7 @@ import {
   YesNo,
   YouthDocs,
   type Gender,
+  type UploadedDoc,
 } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 import { isValidForeignId } from '@/lib/validation/foreignId';
@@ -53,7 +54,8 @@ export function EmployeeStep({
   /** חריג ידני מהמוסד: מציג את מסמך אישור-העדר אלימות גם כשהשכבה אינה גנים. */
   institutionRequireViolenceCert?: boolean;
   docs: YouthDocs;
-  onDocsChange: (docs: YouthDocs) => void;
+  /** Dispatch של ה-Wizard: מקבל גם updater, כדי שהעלאה אסינכרונית לא תדרוס צירוף מקביל. */
+  onDocsChange: React.Dispatch<React.SetStateAction<YouthDocs>>;
   mode?: 'new' | 'edit';
   /** from-prev-year flow: highlight the fields תשפ"ו couldn't supply (חוזה, ילדים). */
   highlightMissing?: boolean;
@@ -179,41 +181,117 @@ export function EmployeeStep({
   }
 
   /**
-   * שמירת עובד חדש ל"רשימת עובדים" מיד בסיום השלב, לפני בחירת תפקיד ולפני יצירת תקן -
-   * כך הפרטים לא הולכים לאיבוד כשהתהליך ננטש באמצע. השרת מחזיר את הרשומה הקיימת אם
-   * ת.ז. כבר קיימת, ולכן קריאה זו לעולם לא יוצרת כפילות גם אם בדיקת הכפילות שלמעלה כשלה.
-   * מחזירה את הנתונים עם recordId, או null כשהשמירה נכשלה (ואז נשארים בשלב).
+   * 'duplicate' - הת.ז. הובילה לרשומה קיימת אחרת; הטופס כבר נטען מחדש עליה ויש לעצור.
+   * 'error' - השמירה נכשלה; ההודעה כבר מוצגת ויש לעצור, אבל ניסיון חוזר מותר.
    */
-  async function saveNewEmployee(): Promise<EmployeeData | null> {
+  type PersistOutcome =
+    | { kind: 'saved'; employee: EmployeeData }
+    | { kind: 'duplicate' }
+    | { kind: 'error' };
+
+  async function postEmployee(current: EmployeeData): Promise<PersistOutcome> {
     setSaveError('');
     try {
       const res = await fetch('/api/employees', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, employee: data }),
+        body: JSON.stringify({ token, employee: current }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok || !json.employeeId) {
         setSaveError(json.message || 'שגיאה בשמירת פרטי העובד');
-        return null;
+        return { kind: 'error' };
       }
       // מקרה נדיר: בדיקת הכפילות בצד הלקוח לא מצאה, השרת כן. מציגים ועוצרים כדי
       // שהמזכירה תראה לאיזו רשומה קיימת הפרטים מוזגו, במקום לצרף תקן בלי לדעת.
-      if (json.created === false) {
+      // matchedByTz ולא created===false: עדכון של הרשומה שכבר שייכת לטופס הוא תקין.
+      if (json.matchedByTz) {
         setDupNotice(
           `עובד עם ת.ז. זו כבר קיים במערכת${json.matchedName ? ` (${json.matchedName})` : ''} - הפרטים עודכנו ברשומה הקיימת.`,
         );
         setShowNewForm(false);
-        await loadAndSelect(json.employeeId, data.name);
-        return null;
+        await loadAndSelect(json.employeeId, current.name);
+        return { kind: 'duplicate' };
       }
-      const saved: EmployeeData = { ...data, recordId: json.employeeId, newlyCreated: true };
-      setData(saved);
-      return saved;
+      const saved: EmployeeData = {
+        ...current,
+        recordId: json.employeeId,
+        newlyCreated: current.newlyCreated || json.created === true,
+      };
+      setData((d) => ({ ...d, recordId: saved.recordId, newlyCreated: saved.newlyCreated }));
+      return { kind: 'saved', employee: saved };
     } catch {
       setSaveError('שגיאת רשת - פרטי העובד לא נשמרו');
-      return null;
+      return { kind: 'error' };
     }
+  }
+
+  /**
+   * כתיבת פרטי העובד ל"רשימת עובדים". יוצרת רשומה כשעדיין אין, ומעדכנת כשכבר יש -
+   * ולכן בטוח לקרוא לה שוב ושוב לאותו עובד.
+   *
+   * נקראת בשני מצבים: אוטומטית ברגע שפרטי העובד תקינים (ראו האפקט למטה), ושוב
+   * בלחיצת "המשך" כדי לשמור עריכות שנעשו אחרי היצירה האוטומטית.
+   *
+   * כתיבה אחת בכל רגע: לחיצה על "המשך" בזמן שהיצירה האוטומטית עוד רצה הייתה שולחת
+   * שתי בקשות עם recordId ריק, ושתיהן היו יוצרות רשומה. לכן ממתינים לקודמת ומאמצים
+   * את ה-recordId שלה לפני הכתיבה הבאה.
+   */
+  const persistInFlight = useRef<Promise<PersistOutcome> | null>(null);
+  async function persistEmployee(current: EmployeeData): Promise<PersistOutcome> {
+    const prior = persistInFlight.current;
+    if (prior) {
+      const done = await prior.catch((): PersistOutcome => ({ kind: 'error' }));
+      if (done.kind === 'duplicate') return done;
+      if (done.kind === 'saved' && !current.recordId) {
+        current = { ...current, recordId: done.employee.recordId, newlyCreated: done.employee.newlyCreated };
+      }
+    }
+    const run = postEmployee(current);
+    persistInFlight.current = run;
+    try {
+      return await run;
+    } finally {
+      if (persistInFlight.current === run) persistInFlight.current = null;
+    }
+  }
+
+  /**
+   * צירוף מסמך: נכנס ל-docs מיד (כדי שייראה מצורף), ואם רשומת העובד כבר קיימת הוא
+   * גם נשלח לאיירטייבל באותו רגע. בהצלחה הוא עובר מ-docs ל-existingYouthDocs ומוצג
+   * כ"קיים בתיק העובד". בכישלון הוא נשאר ב-docs, ויעלה בלחיצת "המשך" או בשליחה.
+   */
+  async function attachDoc(doc: (typeof DOC_FIELDS)[number], uploaded: UploadedDoc | undefined) {
+    onDocsChange({ ...docs, [doc.key]: uploaded });
+    if (uploaded && errors[`doc_${doc.key}`]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[`doc_${doc.key}`];
+        return next;
+      });
+    }
+    if (!uploaded || !data.recordId) return;
+
+    const shortLabel = doc.label.split('\n')[0];
+    setUploadNote(`שומר ${shortLabel}...`);
+    const { uploadedFieldIds } = await uploadEmployeeDocs({
+      token,
+      employeeId: data.recordId,
+      items: [{ docsKey: doc.key, fieldId: doc.fieldId, label: doc.label, file: uploaded }],
+    });
+    setUploadNote('');
+    if (uploadedFieldIds.length === 0) return;
+
+    // updater ולא אובייקט מוכן: ייתכן שצורף בינתיים מסמך נוסף, ואסור לדרוס אותו.
+    onDocsChange((prev) => {
+      const next = { ...prev };
+      delete next[doc.key];
+      return next;
+    });
+    setData((d) => ({
+      ...d,
+      existingYouthDocs: [...new Set([...(d.existingYouthDocs ?? []), doc.fieldId])],
+    }));
   }
 
   /**
@@ -238,9 +316,11 @@ export function EmployeeStep({
     setUploadNote('');
     if (uploadedKeys.length === 0) return base;
 
-    const nextDocs = { ...docs };
-    uploadedKeys.forEach((k) => delete nextDocs[k]);
-    onDocsChange(nextDocs);
+    onDocsChange((prev) => {
+      const nextDocs = { ...prev };
+      uploadedKeys.forEach((k) => delete nextDocs[k]);
+      return nextDocs;
+    });
     const next: EmployeeData = {
       ...base,
       existingYouthDocs: [...new Set([...(base.existingYouthDocs ?? []), ...uploadedFieldIds])],
@@ -323,15 +403,12 @@ export function EmployeeStep({
 
     setAdvancing(true);
     try {
-      // עובד חדש - נשמר לאיירטייבל כאן, ולא רק בשליחת הטופס.
-      let ready = data;
-      if (!data.recordId) {
-        const saved = await saveNewEmployee();
-        if (!saved) return;
-        ready = saved;
-      }
-      // המסמכים עולים מיד אחרי שיש רשומת עובד - גם לעובד חדש וגם לקיים.
-      ready = await uploadPendingDocs(ready.recordId!, ready);
+      // תמיד upsert: יוצר את הרשומה אם היצירה האוטומטית עוד לא הספיקה לרוץ, ומעדכן
+      // אותה אם היא כבר קיימת (גם עריכות שנעשו אחרי היצירה האוטומטית נשמרות כך).
+      const outcome = await persistEmployee(data);
+      if (outcome.kind !== 'saved') return;
+      // מה שנותר ב-docs: מסמך שצורף לפני שהרשומה נוצרה, או כזה שהעלאתו נכשלה.
+      const ready = await uploadPendingDocs(outcome.employee.recordId!, outcome.employee);
       onNext(ready);
     } finally {
       setAdvancing(false);
@@ -339,6 +416,12 @@ export function EmployeeStep({
   }
 
   const selectedExisting = Boolean(data.recordId);
+  /**
+   * עובד *שנבחר* מהחיפוש או נטען מראש - מוצג לקריאה בלבד עד לחיצה על "עריכה".
+   * עובד שנוצר עכשיו מתוך טופס "עובד חדש" מחזיק אף הוא recordId (הרשומה נשמרת מיד),
+   * אבל הטופס שלו חייב להישאר פתוח לעריכה - אחרת השדות היו ננעלים תוך כדי ההקלדה.
+   */
+  const pickedExisting = selectedExisting && !data.newlyCreated;
   // ילדים מתחת לגיל 14 is only relevant for a woman who is not single.
   const showChildrenField = showChildrenUnder14Question(data);
 
@@ -364,6 +447,21 @@ export function EmployeeStep({
 
   // Under 14 → employment is illegal at any time; the form is a dead end here.
   const underEmploymentAge = isUnderEmploymentAge(data.birthDate);
+
+  /**
+   * פרטי העובד עצמם מלאים ותקינים - התנאי ליצירה האוטומטית של הרשומה.
+   * מכוון: אינו כולל מסמכים, תאריך תחילת חוזה ושאלת ילדים - אלו שדות של התהליך
+   * ולא של זהות העובד, והם אלה שחוסמים את המעבר לשלב הבא ומסכנים את מה שהוקלד.
+   */
+  const personalFieldsValid =
+    data.name.trim().length > 0 &&
+    (data.noIsraeliId ? isValidForeignId(data.tz) : isValidIsraeliId(data.tz)) &&
+    data.address.trim().length > 0 &&
+    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email) &&
+    isValidIsraeliPhone(data.phone) &&
+    Boolean(data.gender) &&
+    Boolean(data.maritalStatus) &&
+    Boolean(data.birthDate);
 
   // Youth-employment warnings (by age) + a mandatory acknowledgement checkbox.
   // The working-hours limits differ between 14–16 and 16–18.
@@ -413,10 +511,44 @@ export function EmployeeStep({
 
   const isEditMode = mode === 'edit';
 
+  /**
+   * יצירה אוטומטית של רשומת העובד ברגע שפרטי העובד עצמם תקינים - בלי להמתין למסמכים
+   * ובלי להמתין ללחיצת "המשך".
+   *
+   * המסמכים הם שדה חובה וחוסמים את המעבר לשלב הבא, ולכן מזכירה שגילתה שחסר לה אישור
+   * ועזבה כדי להשיג אותו הייתה מאבדת גם את כל הפרטים שהקלידה. הרשומה נוצרת כאן, ומכאן
+   * ואילך כל מסמך שמצורף עולה אליה מיד (ראו attachDoc).
+   *
+   * ה-debounce נחוץ כדי שלא תיווצר רשומה מערך חלקי באמצע הקלדה.
+   */
+  const autoCreateTimer = useRef<ReturnType<typeof setTimeout>>();
+  const autoCreating = useRef(false);
+  useEffect(() => {
+    if (isEditMode || data.recordId || !showNewForm) return;
+    if (!personalFieldsValid || underEmploymentAge) return;
+    clearTimeout(autoCreateTimer.current);
+    autoCreateTimer.current = setTimeout(async () => {
+      if (autoCreating.current) return;
+      autoCreating.current = true;
+      try {
+        const outcome = await persistEmployee(data);
+        // מה שכבר צורף לפני שהרשומה נוצרה עולה עכשיו.
+        if (outcome.kind === 'saved') await uploadPendingDocs(outcome.employee.recordId!, outcome.employee);
+      } finally {
+        autoCreating.current = false;
+      }
+    }, 1200);
+    return () => clearTimeout(autoCreateTimer.current);
+    // data שלם בתלויות בכוונה: כל הקלדה מאפסת את הטיימר, כך שהרשומה נוצרת 1.2 שניות
+    // אחרי ההקלדה האחרונה ועם הערכים המעודכנים - ולא עם צילום ישן מרגע שהטופס נעשה תקין.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, personalFieldsValid, underEmploymentAge, showNewForm, isEditMode]);
+
+
   return (
     <>
       {/* Search — hidden in edit mode and once an employee is selected */}
-      {!isEditMode && !selectedExisting && (
+      {!isEditMode && !pickedExisting && (
       <div className="relative w-full md:w-1/2 lg:w-1/3 mb-6">
         <Icon
           name="search"
@@ -436,7 +568,7 @@ export function EmployeeStep({
       )}
 
       {/* Results */}
-      {!isEditMode && !selectedExisting && (results.length > 0 || searching) && (
+      {!isEditMode && !pickedExisting && (results.length > 0 || searching) && (
         <div className="bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant overflow-hidden mb-6">
           <div className="grid grid-cols-3 gap-4 p-4 border-b border-outline-variant bg-surface-container-low text-label-lg font-bold text-on-surface-variant">
             <div>שם העובד</div>
@@ -485,7 +617,7 @@ export function EmployeeStep({
       )}
 
       {/* Add new toggle — hidden in edit mode */}
-      {!isEditMode && !selectedExisting && (
+      {!isEditMode && !pickedExisting && (
         <button
           className="w-full py-3 px-4 border-2 border-dashed border-outline-variant rounded-xl flex items-center justify-center gap-2 text-on-surface-variant hover:border-primary hover:text-primary transition-all mb-6"
           onClick={() => setShowNewForm((v) => !v)}
@@ -496,7 +628,7 @@ export function EmployeeStep({
       )}
 
       {/* Missing gender banner — shown when an existing employee has no gender on record. */}
-      {selectedExisting && !data.gender && !loadingEmployee && (
+      {pickedExisting && !data.gender && !loadingEmployee && (
         <div className="mb-4 p-4 rounded-xl border border-tertiary/40 bg-tertiary-container/30 flex items-start gap-3">
           <Icon name="warning" className="text-tertiary mt-0.5 shrink-0" />
           <p className="text-body-md text-on-surface">
@@ -511,10 +643,10 @@ export function EmployeeStep({
         <section className="bg-surface-container-lowest p-6 rounded-xl shadow-card border border-outline-variant mb-6">
           <div className="flex justify-between items-center mb-5 border-b border-outline-variant pb-3">
             <h3 className="text-headline-md text-primary">
-              {selectedExisting ? 'פרטי העובד' : 'פרטי עובד חדש'}
+              {pickedExisting ? 'פרטי העובד' : 'פרטי עובד חדש'}
             </h3>
             <div className="flex items-center gap-4">
-              {selectedExisting && !editing && (
+              {pickedExisting && !editing && (
                 <button
                   className="text-primary text-label-lg hover:underline flex items-center gap-1"
                   onClick={() => setEditing(true)}
@@ -540,7 +672,7 @@ export function EmployeeStep({
 
           {/* Same layout always; fields are locked unless editing (new employee = always editable). */}
           {(() => {
-            const locked = selectedExisting && !editing;
+            const locked = pickedExisting && !editing;
             const age = ageFromBirthDate(data.birthDate);
             return (
               <div
@@ -561,7 +693,7 @@ export function EmployeeStep({
                       if (dupNotice) setDupNotice('');
                     }}
                     onBlur={() => {
-                      if (!selectedExisting) checkDuplicate(data.tz);
+                      if (!pickedExisting) checkDuplicate(data.tz);
                     }}
                     placeholder={data.noIsraeliId ? 'מספר דרכון / מספר זיהוי זר' : '9 ספרות'}
                     disabled={locked}
@@ -644,7 +776,7 @@ export function EmployeeStep({
                     {age !== null ? age : '—'}
                   </span>
                 </Field>
-                {selectedExisting && editing && (
+                {pickedExisting && editing && (
                   <div className="flex items-end flex-col gap-1">
                     <button
                       className="text-primary font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
@@ -816,17 +948,7 @@ export function EmployeeStep({
                   required
                   value={docs[doc.key]}
                   error={errors[`doc_${doc.key}`]}
-                  onChange={(uploaded) => {
-                    onDocsChange({ ...docs, [doc.key]: uploaded });
-                    // Clear the "missing file" error as soon as a file is attached.
-                    if (uploaded && errors[`doc_${doc.key}`]) {
-                      setErrors((prev) => {
-                        const next = { ...prev };
-                        delete next[`doc_${doc.key}`];
-                        return next;
-                      });
-                    }
-                  }}
+                  onChange={(uploaded) => void attachDoc(doc, uploaded)}
                 />
               ))}
             </div>
@@ -835,7 +957,7 @@ export function EmployeeStep({
       )}
 
       {/* כשל בשמירת עובד חדש לאיירטייבל — נשארים בשלב, הפרטים שהוקלדו לא אבדו. */}
-      {saveError && !selectedExisting && (
+      {saveError && (
         <div className="mt-6 p-3 rounded-lg bg-error-container/40 text-error text-body-md flex items-center gap-2">
           <Icon name="error" /> {saveError}
         </div>

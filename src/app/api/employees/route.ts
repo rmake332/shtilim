@@ -42,11 +42,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { employeeId, created, matchedName } = await upsertEmployee(
+    const { employeeId, created, matchedByTz, matchedName } = await upsertEmployee(
       { employee, institutionMosadId: gate.institution.mosadId },
       gate.requestId,
     );
-    return NextResponse.json({ ok: true, employeeId, created, matchedName });
+    return NextResponse.json({ ok: true, employeeId, created, matchedByTz, matchedName });
   } catch (e) {
     logger.error({ requestId: gate.requestId, err: String(e) }, 'employee save failed');
     return NextResponse.json({ ok: false, message: 'שגיאה בשמירת פרטי העובד.' }, { status: 500 });

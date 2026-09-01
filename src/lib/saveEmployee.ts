@@ -9,6 +9,12 @@ export interface UpsertEmployeeResult {
   employeeId: string;
   /** true כשנוצרה רשומה חדשה; false כשעודכנה רשומה קיימת (נבחרה או נמצאה לפי ת.ז.). */
   created: boolean;
+  /**
+   * נמצאה רשומה קיימת לפי ת.ז. כשהטופס עוד לא החזיק recordId - כלומר הפרטים מוזגו
+   * לעובד אחר מזה שהמזכירה חשבה שהיא פותחת. שונה מ-created=false רגיל, שמשמעותו רק
+   * שהרשומה שכבר שייכת לטופס עודכנה.
+   */
+  matchedByTz: boolean;
   /** השם שעל הרשומה הקיימת שאליה מוזגו הפרטים - מוצג למזכירה כשההתאמה לא הייתה צפויה. */
   matchedName?: string;
 }
@@ -16,9 +22,10 @@ export interface UpsertEmployeeResult {
 /**
  * כתיבת פרטי העובד ל"רשימת עובדים" - יצירה כשהוא חדש, עדכון כשהוא קיים.
  *
- * נקודת הכתיבה היחידה של טופס הקליטה לטבלת העובדים, ונקראת פעמיים לאותו עובד:
- * בסיום שלב פרטי העובד (כדי שהמידע יישמר גם אם התהליך לא יושלם) ושוב ב-submitForm.
- * לכן היא חייבת להיות אידמפוטנטית - ריצה שנייה מעדכנת ולא מוסיפה רשומה.
+ * נקודת הכתיבה היחידה של טופס הקליטה לטבלת העובדים, ונקראת כמה פעמים לאותו עובד:
+ * ברגע שפרטי העובד תקינים (כדי שהמידע יישמר גם אם התהליך לא יושלם), שוב בלחיצת
+ * "המשך" כדי לתפוס עריכות מאוחרות, ושוב ב-submitForm.
+ * לכן היא חייבת להיות אידמפוטנטית - ריצה נוספת מעדכנת ולא מוסיפה רשומה.
  */
 export async function upsertEmployee(
   params: {
@@ -33,6 +40,7 @@ export async function upsertEmployee(
 
   let employeeId = employee.recordId ?? '';
   let matchedName: string | undefined;
+  let matchedByTz = false;
   if (!employeeId) {
     // Defense-in-depth: never create a duplicate. If the ID already exists, reuse it.
     const existing = await findEmployeeByExactId(employee.tz, requestId);
@@ -40,6 +48,7 @@ export async function upsertEmployee(
       logger.info({ requestId }, 'duplicate id on employee save — reusing existing employee');
       employeeId = existing.id;
       matchedName = existing.name;
+      matchedByTz = true;
     }
   }
 
@@ -65,7 +74,7 @@ export async function upsertEmployee(
       requestId,
     );
     logger.info({ requestId, employeeId: created.id }, 'employee record created');
-    return { employeeId: created.id, created: true };
+    return { employeeId: created.id, created: true, matchedByTz: false };
   }
 
   // Existing employee — update any fields that were edited.
@@ -89,5 +98,5 @@ export async function upsertEmployee(
     logger.info({ requestId, employeeId }, 'updating existing employee record');
     await updateRecord(TABLES.employees, employeeId, empUpdate, requestId);
   }
-  return { employeeId, created: false, matchedName };
+  return { employeeId, created: false, matchedByTz, matchedName };
 }

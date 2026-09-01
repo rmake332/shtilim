@@ -115,7 +115,8 @@ export function RoleStep({
    */
   restrictedSymbols?: { id: string; label: string }[];
   docs: YouthDocs;
-  onDocsChange: (docs: YouthDocs) => void;
+  /** Dispatch של ה-Wizard: מקבל גם updater, כדי שהעלאה אסינכרונית לא תדרוס צירוף מקביל. */
+  onDocsChange: React.Dispatch<React.SetStateAction<YouthDocs>>;
   /** מסמכי תת-תפקיד שכבר הועלו לרשומת העובד - מתווספים ל-existingSubRoleDocs שלו. */
   onEmployeeDocsUploaded?: (fieldIds: string[]) => void;
   onNext: (data: RoleData, prevYear?: PrevYearPosition) => void;
@@ -432,9 +433,11 @@ export function RoleStep({
     setUploadNote('');
     if (uploadedKeys.length === 0) return;
 
-    const nextDocs = { ...docs };
-    uploadedKeys.forEach((k) => delete nextDocs[k]);
-    onDocsChange(nextDocs);
+    onDocsChange((prev) => {
+      const nextDocs = { ...prev };
+      uploadedKeys.forEach((k) => delete nextDocs[k]);
+      return nextDocs;
+    });
     onEmployeeDocsUploaded?.(uploadedFieldIds);
   }
 
