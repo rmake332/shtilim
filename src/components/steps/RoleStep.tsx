@@ -12,6 +12,7 @@ import {
   subRoleDocsFor,
 } from '@/lib/subRole';
 import { CATEGORY, DOC_FIELDS, POSITION_FIELDS } from '@/lib/airtable/schema';
+import { uploadEmployeeDocs } from '@/lib/uploadDocs';
 import { DocUpload } from '@/components/steps/DocUpload';
 import type { PrevYearPosition } from '@/lib/prevYearPosition';
 
@@ -89,6 +90,7 @@ export function RoleStep({
   mode = 'new',
   docs,
   onDocsChange,
+  onEmployeeDocsUploaded,
   onNext,
   onBack,
 }: {
@@ -114,6 +116,8 @@ export function RoleStep({
   restrictedSymbols?: { id: string; label: string }[];
   docs: YouthDocs;
   onDocsChange: (docs: YouthDocs) => void;
+  /** מסמכי תת-תפקיד שכבר הועלו לרשומת העובד - מתווספים ל-existingSubRoleDocs שלו. */
+  onEmployeeDocsUploaded?: (fieldIds: string[]) => void;
   onNext: (data: RoleData, prevYear?: PrevYearPosition) => void;
   onBack: () => void;
 }) {
@@ -130,6 +134,9 @@ export function RoleStep({
   const [addRoles, setAddRoles] = useState((initial?.selectedExtraRoleIds.length ?? 0) > 0);
   const [roleQuery, setRoleQuery] = useState('');
   const [error, setError] = useState('');
+  /** מעבר לשלב הבא בעיצומו: העלאת מסמכי ההסמכה של תת-התפקיד. */
+  const [advancing, setAdvancing] = useState(false);
+  const [uploadNote, setUploadNote] = useState('');
   const [prevYear, setPrevYear] = useState<PrevYearPosition | null>(null);
   const [prevYearLoading, setPrevYearLoading] = useState(false);
   const [prevYearChecked, setPrevYearChecked] = useState(false);
@@ -401,6 +408,36 @@ export function RoleStep({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsLicenseNumber, employee?.existingLicenseNumber]);
 
+  /**
+   * העלאת מסמכי ההסמכה של תת-התפקיד לרשומת העובד מיד בסיום השלב, ולא רק בשליחת הטופס -
+   * אותו עיקרון של שלב פרטי העובד: מסמך שכבר צורף לא הולך לאיבוד אם התהליך ננטש לפני
+   * שנוצר התקן. מסמך "נתוני העסקה" נשאר לשליחה כי הוא מתויק על התקן, שעדיין לא קיים.
+   *
+   * קובץ שהועלה מוסר מ-docs ונרשם ב-existingSubRoleDocs של העובד, כדי שלא יועלה שוב
+   * (שדה הקובץ מוסיף קבצים ולא דורס). כישלון אינו חוסם - SummaryStep ינסה שוב.
+   */
+  async function uploadSubRoleDocs(): Promise<void> {
+    const employeeId = employee?.recordId;
+    if (!employeeId) return;
+    const items = pendingSubRoleDocs
+      .filter((d) => docs[d.fieldId])
+      .map((d) => ({ docsKey: d.fieldId, fieldId: d.fieldId, label: d.label, file: docs[d.fieldId]! }));
+    if (items.length === 0) return;
+
+    setUploadNote(`מעלה מסמכים... (1/${items.length})`);
+    const { uploadedKeys, uploadedFieldIds } = await uploadEmployeeDocs(
+      { token, employeeId, items },
+      (done, total) => setUploadNote(`מעלה מסמכים... (${done}/${total})`),
+    );
+    setUploadNote('');
+    if (uploadedKeys.length === 0) return;
+
+    const nextDocs = { ...docs };
+    uploadedKeys.forEach((k) => delete nextDocs[k]);
+    onDocsChange(nextDocs);
+    onEmployeeDocsUploaded?.(uploadedFieldIds);
+  }
+
   function validateAndNext(withPrevYear?: PrevYearPosition) {
     if (!data.roleId) {
       setError('יש לבחור תפקיד');
@@ -484,7 +521,14 @@ export function RoleStep({
         }
       : data;
     setError('');
-    onNext(finalData, withPrevYear);
+    // המסמכים עולים לפני המעבר לשלב הבא; כישלון אינו חוסם את המעבר.
+    setAdvancing(true);
+    uploadSubRoleDocs()
+      .catch(() => {})
+      .finally(() => {
+        setAdvancing(false);
+        onNext(finalData, withPrevYear);
+      });
   }
 
   // Lock the role when one was actually resolved from the prior year, or in edit mode
@@ -1165,19 +1209,26 @@ export function RoleStep({
           <Icon name="error" /> {error}
         </div>
       )}
+      {uploadNote && (
+        <div className="mb-4 p-3 rounded-lg bg-secondary-container/40 text-on-secondary-container text-body-md flex items-center gap-2">
+          <Icon name="cloud_upload" /> {uploadNote}
+        </div>
+      )}
 
       <ActionBar
         title="השלמת בחירת תפקיד"
         subtitle="לאחר המעבר לשלב הבא, תגדירו את מערכת השעות עבור התפקיד הנבחר."
         onBack={onBack}
         onNext={() => validateAndNext(loadedPrevYear)}
+        nextLabel={uploadNote ? 'מעלה מסמכים…' : undefined}
         nextDisabled={
           symbolsLoading ||
           rolesLoading ||
           prevYearLoading ||
           gemulLoading ||
           extraRolesLoading ||
-          teachingEligibilityBlocked
+          teachingEligibilityBlocked ||
+          advancing
         }
       />
     </>

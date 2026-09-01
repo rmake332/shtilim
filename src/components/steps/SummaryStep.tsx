@@ -10,6 +10,7 @@ import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/
 import { ofekCategoryFor, computeUtilizedHours } from '@/lib/schedule/ofek';
 import { DOC_FIELDS, UPDATE_REASON_OPTIONS } from '@/lib/airtable/schema';
 import { subRoleDocsFor } from '@/lib/subRole';
+import { uploadOneDoc } from '@/lib/uploadDocs';
 
 export function SummaryStep({
   token,
@@ -60,6 +61,10 @@ export function SummaryStep({
    *     (/api/upload-employee-doc), so they carry over across positions/years.
    * Youth docs are keyed by `d.key` in `docs` (matching EmployeeStep); sub-role docs by
    * fieldId. Docs already on file are skipped upstream and never enter `docs`.
+   *
+   * מסמכי העובד מועלים כבר בשלבים עצמם (ראו EmployeeStep/RoleStep) ומוסרים מ-docs
+   * בהצלחה, ולכן בדרך כלל נשאר כאן רק "נתוני העסקה" (מתויק על התקן, שנוצר רק עכשיו).
+   * מה שכן נשאר הוא מסמך שהעלאתו נכשלה קודם - וזהו הניסיון החוזר שלו.
    */
   function pendingUploads(positionId?: string, employeeId?: string) {
     const out: { label: string; url: string; body: Record<string, unknown> }[] = [];
@@ -100,20 +105,7 @@ export function SummaryStep({
     for (let i = 0; i < pending.length; i++) {
       const item = pending[i];
       setUploadNote(`מעלה מסמכים... (${i + 1}/${pending.length})`);
-      let ok = false;
-      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
-        try {
-          const res = await fetch(item.url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(item.body),
-          });
-          const j = await res.json().catch(() => ({}));
-          ok = res.ok && Boolean(j.ok);
-        } catch {
-          ok = false;
-        }
-      }
+      const ok = await uploadOneDoc(item.url, item.body);
       if (!ok) failed.push(item.label.split('\n')[0]);
     }
     setUploadNote('');

@@ -21,6 +21,7 @@ import { isValidIsraeliId } from '@/lib/validation/israeliId';
 import { isValidForeignId } from '@/lib/validation/foreignId';
 import { isValidIsraeliPhone } from '@/lib/validation/phone';
 import { DOC_FIELDS } from '@/lib/airtable/schema';
+import { uploadEmployeeDocs } from '@/lib/uploadDocs';
 import { DocUpload } from '@/components/steps/DocUpload';
 
 interface SearchResult {
@@ -169,6 +170,9 @@ export function EmployeeStep({
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  /** מעבר לשלב הבא בעיצומו: שמירת העובד + העלאת המסמכים. */
+  const [advancing, setAdvancing] = useState(false);
+  const [uploadNote, setUploadNote] = useState('');
 
   function set<K extends keyof EmployeeData>(key: K, value: EmployeeData[K]) {
     setData((d) => ({ ...d, [key]: value }));
@@ -181,7 +185,6 @@ export function EmployeeStep({
    * מחזירה את הנתונים עם recordId, או null כשהשמירה נכשלה (ואז נשארים בשלב).
    */
   async function saveNewEmployee(): Promise<EmployeeData | null> {
-    setSaving(true);
     setSaveError('');
     try {
       const res = await fetch('/api/employees', {
@@ -210,9 +213,40 @@ export function EmployeeStep({
     } catch {
       setSaveError('שגיאת רשת - פרטי העובד לא נשמרו');
       return null;
-    } finally {
-      setSaving(false);
     }
+  }
+
+  /**
+   * העלאת המסמכים שצורפו בשלב זה לרשומת העובד מיד, ולא רק בשליחת הטופס - מאותו טעם
+   * שבגללו פרטי העובד נשמרים כאן: מה שכבר הוזן לא הולך לאיבוד אם התהליך ננטש.
+   *
+   * קובץ שהועלה מוסר מ-docs ונרשם ב-existingYouthDocs, כך שהוא מוצג כ"קיים בתיק
+   * העובד", אינו נדרש שוב, ובעיקר - אינו מועלה פעם שנייה בשליחה (שדה הקובץ מוסיף
+   * קבצים ולא דורס). כישלון אינו חוסם: הקובץ נשאר ב-docs ו-SummaryStep ינסה שוב.
+   */
+  async function uploadPendingDocs(employeeId: string, base: EmployeeData): Promise<EmployeeData> {
+    const items = pendingDocs
+      .filter((doc) => docs[doc.key])
+      .map((doc) => ({ docsKey: doc.key, fieldId: doc.fieldId, label: doc.label, file: docs[doc.key]! }));
+    if (items.length === 0) return base;
+
+    setUploadNote(`מעלה מסמכים... (1/${items.length})`);
+    const { uploadedKeys, uploadedFieldIds } = await uploadEmployeeDocs(
+      { token, employeeId, items },
+      (done, total) => setUploadNote(`מעלה מסמכים... (${done}/${total})`),
+    );
+    setUploadNote('');
+    if (uploadedKeys.length === 0) return base;
+
+    const nextDocs = { ...docs };
+    uploadedKeys.forEach((k) => delete nextDocs[k]);
+    onDocsChange(nextDocs);
+    const next: EmployeeData = {
+      ...base,
+      existingYouthDocs: [...new Set([...(base.existingYouthDocs ?? []), ...uploadedFieldIds])],
+    };
+    setData(next);
+    return next;
   }
 
   async function finishEditing() {
@@ -287,14 +321,21 @@ export function EmployeeStep({
     }
     if (Object.keys(e).length !== 0) return;
 
-    // עובד חדש - נשמר לאיירטייבל כאן, ולא רק בשליחת הטופס.
-    if (!data.recordId) {
-      const saved = await saveNewEmployee();
-      if (!saved) return;
-      onNext(saved);
-      return;
+    setAdvancing(true);
+    try {
+      // עובד חדש - נשמר לאיירטייבל כאן, ולא רק בשליחת הטופס.
+      let ready = data;
+      if (!data.recordId) {
+        const saved = await saveNewEmployee();
+        if (!saved) return;
+        ready = saved;
+      }
+      // המסמכים עולים מיד אחרי שיש רשומת עובד - גם לעובד חדש וגם לקיים.
+      ready = await uploadPendingDocs(ready.recordId!, ready);
+      onNext(ready);
+    } finally {
+      setAdvancing(false);
     }
-    onNext(data);
   }
 
   const selectedExisting = Boolean(data.recordId);
@@ -799,14 +840,19 @@ export function EmployeeStep({
           <Icon name="error" /> {saveError}
         </div>
       )}
+      {uploadNote && (
+        <div className="mt-6 p-3 rounded-lg bg-secondary-container/40 text-on-secondary-container text-body-md flex items-center gap-2">
+          <Icon name="cloud_upload" /> {uploadNote}
+        </div>
+      )}
 
       <ActionBar
         title={isEditMode ? 'עדכון פרטי עובד' : 'השלמת פרטי העובד'}
         subtitle={isEditMode ? 'לחצו "הבא" לחזרה לעריכת התפקיד.' : 'לאחר המעבר לשלב הבא, תבחרו את התפקיד עבור העובד.'}
         showBack={Boolean(onBack)}
         onBack={onBack}
-        nextLabel={saving && !selectedExisting ? 'שומר…' : undefined}
-        nextDisabled={(!selectedExisting && !showNewForm) || underEmploymentAge || saving}
+        nextLabel={uploadNote ? 'מעלה מסמכים…' : advancing ? 'שומר…' : undefined}
+        nextDisabled={(!selectedExisting && !showNewForm) || underEmploymentAge || advancing}
         onNext={validateAndNext}
       />
     </>

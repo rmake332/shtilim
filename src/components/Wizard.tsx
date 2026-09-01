@@ -121,6 +121,15 @@ export function Wizard({
           mode={isEdit ? 'edit' : 'new'}
           docs={docs}
           onDocsChange={setDocs}
+          // מסמכי ההסמכה עלו כבר לרשומת העובד — מסמנים אותם כ"קיים בתיק" כדי שלא
+          // יידרשו שוב ולא יועלו פעם שנייה בשליחת הטופס.
+          onEmployeeDocsUploaded={(fieldIds) =>
+            setEmployee((e) =>
+              e
+                ? { ...e, existingSubRoleDocs: [...new Set([...(e.existingSubRoleDocs ?? []), ...fieldIds])] }
+                : e,
+            )
+          }
           onBack={isEdit ? () => setStep('schedule') : () => setStep('employee')}
           onNext={(data, loadedPrevYear) => {
             setRole(data);
