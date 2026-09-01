@@ -26,3 +26,6 @@ next-env.d.ts
 
 # local scratch
 _schema_dump.txt
+
+# Claude Code — per-machine one-off command approvals (not shared)
+.claude/settings.local.json

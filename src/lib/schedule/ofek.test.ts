@@ -5,6 +5,7 @@ import {
   buildOfekKey,
   severeDisabilityBonus,
   paraStaySplit,
+  splitStayHours,
   paraDailyUnits,
   isParaEntry,
   ofekCategoryFor,
@@ -266,5 +267,29 @@ describe('computeUtilizedHours', () => {
         'הוראה ללא שהייה',
       ),
     ).toBe(15);
+  });
+});
+
+// תרחישים שנבדקו ידנית מול /api/schedule/compute (curl), כעת כרגרסיה קבועה.
+describe('splitStayHours', () => {
+  it('הוראה: כל השהייה מהמוסד, ללא תלות ב-split', () => {
+    expect(splitStayHours(4, 'הוראה', 'home')).toEqual({ stayInstitution: 4, stayHome: 0 });
+    expect(splitStayHours(4, 'הוראה', 'institution')).toEqual({ stayInstitution: 4, stayHome: 0 });
+  });
+  it('הוראה ללא שהייה: כל השהייה מהבית, ללא תלות ב-split', () => {
+    expect(splitStayHours(4, 'הוראה_ללא_שהייה', 'institution')).toEqual({ stayInstitution: 0, stayHome: 4 });
+    expect(splitStayHours(4, 'הוראה_ללא_שהייה', 'home')).toEqual({ stayInstitution: 0, stayHome: 4 });
+  });
+  it('פרא: עוקב אחר תוצאת paraStaySplit', () => {
+    expect(splitStayHours(3, 'פרא', 'institution')).toEqual({ stayInstitution: 3, stayHome: 0 });
+    expect(splitStayHours(3, 'פרא', 'home')).toEqual({ stayInstitution: 0, stayHome: 3 });
+  });
+  it('הסכום נשמר: stayInstitution + stayHome === stay', () => {
+    for (const cat of ['פרא', 'הוראה', 'הוראה_ללא_שהייה'] as const) {
+      for (const split of ['institution', 'home'] as const) {
+        const { stayInstitution, stayHome } = splitStayHours(5, cat, split);
+        expect(stayInstitution + stayHome).toBe(5);
+      }
+    }
   });
 });

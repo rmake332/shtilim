@@ -145,6 +145,26 @@ export function paraStaySplit({
   return 'institution';
 }
 
+/**
+ * מפצל את שעות השהייה של התקן ל"מהמוסד" / "מהבית" לפי קטגוריית האופק ותוצאת
+ * {@link paraStaySplit}. זו הלוגיקה שהייתה מוטבעת ב-`/api/schedule/compute`:
+ * - "הוראה" (כולל "הוראה - לוח פרא"): השהייה תמיד מהמוסד.
+ * - "הוראה ללא שהייה": השהייה תמיד מהבית (ואינה נכנסת לניצול התקציב).
+ * - פרא: לפי `split` שמחזירה `paraStaySplit` (institution / home).
+ * הסכום `stayInstitution + stayHome` תמיד שווה ל-`stay` שהוזן.
+ */
+export function splitStayHours(
+  stay: number,
+  ofekCategory: 'פרא' | 'הוראה' | 'הוראה_ללא_שהייה',
+  split: 'institution' | 'home',
+): { stayInstitution: number; stayHome: number } {
+  const teaching = ofekCategory === 'הוראה';
+  const teachingNoStay = ofekCategory === 'הוראה_ללא_שהייה';
+  const stayInstitution = teaching || (!teachingNoStay && split === 'institution') ? stay : 0;
+  const stayHome = teachingNoStay || (!teaching && split === 'home') ? stay : 0;
+  return { stayInstitution, stayHome };
+}
+
 /** Per-day para hours: total daily minutes divided by 45 (academic units). */
 export function paraDailyUnits(dailyMinutes: number): number {
   return dailyMinutes / 45;
