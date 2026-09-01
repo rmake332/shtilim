@@ -5,7 +5,21 @@ export type { Day };
 
 export type Gender = 'זכר' | 'נקבה';
 export type GenderUnset = Gender | '';
-export type MaritalStatus = 'רווק/ה' | 'נשוי/ה' | 'גרוש/ה' | 'אלמן/ה';
+/**
+ * מצב משפחתי - הערכים נמשכים **חי** מרשימת הבחירה של השדה באיירטייבל
+ * (`/api/field-choices`), ולכן זהו `string` ולא union סגור: הטבלה מכילה גם צורות
+ * ממוגדרות היסטוריות (נשוי/נשואה/גרושה/אלמנה) שאיחוד סגור היה מסתיר.
+ *
+ * הלוגיקה תלויה **רק** בשאלה אם הערך מכיל "רווק" - ראו showChildrenUnder14Question
+ * כאן ו-isMotherPosition ב-src/lib/schedule/ofek.ts. כל שאר הערכים שקולים.
+ */
+export type MaritalStatus = string;
+
+/**
+ * רשת ביטחון בלבד: מוצגת רק אם שליפת הערכים מאיירטייבל נכשלה. אין להוסיף כאן
+ * ערכים - הרשימה הקנונית היא זו שבשדה באיירטייבל.
+ */
+export const MARITAL_STATUS_FALLBACK = ['רווק/ה', 'נשוי/ה', 'גרוש/ה', 'אלמן/ה'];
 export type YesNo = 'כן' | 'לא';
 /** ילדים מתחת 14: starts unset ('') to force an explicit choice; never submitted empty. */
 export type YesNoUnset = YesNo | '';

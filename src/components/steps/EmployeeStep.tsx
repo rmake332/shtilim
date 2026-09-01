@@ -11,7 +11,7 @@ import {
   isMinor,
   isUnder16,
   isUnderEmploymentAge,
-  MaritalStatus,
+  MARITAL_STATUS_FALLBACK,
   joinFullName,
   showChildrenUnder14Question,
   splitFullName,
@@ -24,7 +24,7 @@ import { isValidIsraeliId } from '@/lib/validation/israeliId';
 import { isValidForeignId } from '@/lib/validation/foreignId';
 import { isPlaceholderId } from '@/lib/validation/placeholderId';
 import { isValidIsraeliPhone } from '@/lib/validation/phone';
-import { DOC_FIELDS } from '@/lib/airtable/schema';
+import { DOC_FIELDS, EMPLOYEE_FIELDS, TABLES } from '@/lib/airtable/schema';
 import { uploadEmployeeDocs } from '@/lib/uploadDocs';
 import { DocUpload } from '@/components/steps/DocUpload';
 
@@ -33,8 +33,6 @@ interface SearchResult {
   name: string;
   maskedTz: string;
 }
-
-const MARITAL_OPTIONS: MaritalStatus[] = ['רווק/ה', 'נשוי/ה', 'גרוש/ה', 'אלמן/ה'];
 
 const UNDER_AGE_MESSAGE = 'חל איסור חוקי להעסקת נוער תחת גיל 14.';
 
@@ -194,6 +192,24 @@ export function EmployeeStep({
     }
     return false;
   }
+
+  /**
+   * ערכי "מצב משפחתי" נמשכים חי מרשימת הבחירה של השדה באיירטייבל, כמו תת-תפקיד
+   * וסיבת עדכון. הרשימה הקשיחה שהייתה כאן החזיקה 4 ערכים שמתוכם 2 כלל לא היו קיימים
+   * בשדה (`גרוש/ה`, `אלמן/ה`) - ומכיוון שכל כתיבה היא עם typecast, בחירתם הייתה
+   * יוצרת אופציות חדשות בשדה בשקט. בנוסף, יותר ממחצית העובדים מחזיקים צורות ממוגדרות
+   * היסטוריות (נשואה/נשוי/גרושה) שה-select לא ידע להציג.
+   */
+  const [maritalChoices, setMaritalChoices] = useState<string[]>([]);
+  useEffect(() => {
+    fetch(
+      `/api/field-choices?token=${encodeURIComponent(token)}` +
+        `&fieldId=${EMPLOYEE_FIELDS.maritalStatus}&tableId=${TABLES.employees}`,
+    )
+      .then((r) => r.json())
+      .then((j) => setMaritalChoices(Array.isArray(j.choices) ? j.choices : []))
+      .catch(() => setMaritalChoices([]));
+  }, [token]);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -546,6 +562,18 @@ export function EmployeeStep({
   /** אין רשומת עובד עדיין - אין למה לצרף מסמכים, וגם אי אפשר להמשיך לשלב הבא. */
   const docsLocked = !selectedExisting;
 
+  /**
+   * הרשימה המוצגת: הערכים מאיירטייבל (או ה-fallback אם השליפה נכשלה), ובנוסף הערך
+   * השמור של העובד אם אינו ברשימה - אחרת ה-select לא היה יכול להציג אותו, והמזכירה
+   * הייתה דורסת ערך תקין רק כדי "למלא" שדה שנראה לה ריק.
+   */
+  const maritalOptions = (() => {
+    const base = maritalChoices.length > 0 ? maritalChoices : MARITAL_STATUS_FALLBACK;
+    return data.maritalStatus && !base.includes(data.maritalStatus)
+      ? [...base, data.maritalStatus]
+      : base;
+  })();
+
   // Youth-employment warnings (by age) + a mandatory acknowledgement checkbox.
   // The working-hours limits differ between 14–16 and 16–18.
   const under16 = isUnder16(data.birthDate);
@@ -846,10 +874,10 @@ export function EmployeeStep({
                     <select
                       className="w-full bg-surface-container-low border-transparent rounded-lg py-3 px-3 focus:bg-white focus:border-primary focus:ring-0 text-body-md"
                       value={data.maritalStatus}
-                      onChange={(e) => set('maritalStatus', e.target.value as MaritalStatus)}
+                      onChange={(e) => set('maritalStatus', e.target.value)}
                     >
                       <option value="">בחר מצב משפחתי</option>
-                      {MARITAL_OPTIONS.map((m) => (
+                      {maritalOptions.map((m) => (
                         <option key={m} value={m}>
                           {m}
                         </option>
