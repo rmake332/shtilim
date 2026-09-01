@@ -800,6 +800,19 @@ export function EmployeeStep({
                     </label>
                   )}
                 </Field>
+                <Field label="תאריך לידה" error={errors.birthDate} locked={locked}>
+                  <Input value={data.birthDate} onChange={(v) => set('birthDate', v)} type="date" disabled={locked} />
+                </Field>
+                {/* Derived from תאריך לידה — display only, never edited or saved. */}
+                <Field label="גיל" locked={locked} required={false}>
+                  <span
+                    className={`text-body-md font-bold block py-3 ${
+                      underEmploymentAge ? 'text-error' : 'text-on-background'
+                    }`}
+                  >
+                    {age !== null ? age : '—'}
+                  </span>
+                </Field>
                 <Field label="מין" error={errors.gender} locked={locked}>
                   <Toggle
                     options={['זכר', 'נקבה']}
@@ -830,19 +843,6 @@ export function EmployeeStep({
                       ))}
                     </select>
                   )}
-                </Field>
-                <Field label="תאריך לידה" error={errors.birthDate} locked={locked}>
-                  <Input value={data.birthDate} onChange={(v) => set('birthDate', v)} type="date" disabled={locked} />
-                </Field>
-                {/* Derived from תאריך לידה — display only, never edited or saved. */}
-                <Field label="גיל" locked={locked} required={false}>
-                  <span
-                    className={`text-body-md font-bold block py-3 ${
-                      underEmploymentAge ? 'text-error' : 'text-on-background'
-                    }`}
-                  >
-                    {age !== null ? age : '—'}
-                  </span>
                 </Field>
                 <Field label="כתובת" error={errors.address} locked={locked}>
                   <Input value={data.address} onChange={(v) => set('address', v)} placeholder="רחוב, עיר, מיקוד" disabled={locked} />
