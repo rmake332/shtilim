@@ -19,7 +19,7 @@ export type MaritalStatus = string;
  * רשת ביטחון בלבד: מוצגת רק אם שליפת הערכים מאיירטייבל נכשלה. אין להוסיף כאן
  * ערכים - הרשימה הקנונית היא זו שבשדה באיירטייבל.
  */
-export const MARITAL_STATUS_FALLBACK = ['רווק/ה', 'נשוי/ה', 'גרוש/ה', 'אלמן/ה'];
+export const MARITAL_STATUS_FALLBACK = ['נשוי/ה', 'רווק/ה', 'גרוש/ה', 'אלמנ/ה'];
 export type YesNo = 'כן' | 'לא';
 /** ילדים מתחת 14: starts unset ('') to force an explicit choice; never submitted empty. */
 export type YesNoUnset = YesNo | '';
