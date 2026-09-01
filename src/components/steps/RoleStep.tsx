@@ -170,21 +170,23 @@ export function RoleStep({
   }, [token, restrictedSymbols]);
 
   // Load roles when a symbol is picked.
-  // Edit mode fallback: the position doesn't always carry a symbol link (see getRoleById
-  // in roles.ts — the same gap already worked around for the bell-schedule lookup).
-  // Resolve the single role directly by its budget-row id in that case, so the locked-role
-  // card and the גמולים/תפקידים נוספים section still render.
+  // Edit mode: the role is already committed on the position and can't be swapped here, so
+  // it is ALWAYS resolved directly by its budget-row id - never through the symbol list.
+  // The position's סמל מוסד link doesn't have to match the budget row's: it can be missing
+  // (see getRoleById in roles.ts), or point at another symbol of the same institution. In
+  // that case getRoles(symbolId) returned a list without this role, selectedRole stayed
+  // undefined, and תת-תפקיד/גמולים/תפקידים נוספים silently vanished from the step.
   useEffect(() => {
+    if (isEditMode && data.roleId) {
+      setRolesLoading(true);
+      fetch(`/api/roles?token=${encodeURIComponent(token)}&roleId=${encodeURIComponent(data.roleId)}`)
+        .then((r) => r.json())
+        .then((j) => setRoles(j.roles ?? []))
+        .catch(() => setRoles([]))
+        .finally(() => setRolesLoading(false));
+      return;
+    }
     if (!data.symbolId) {
-      if (isEditMode && data.roleId) {
-        setRolesLoading(true);
-        fetch(`/api/roles?token=${encodeURIComponent(token)}&roleId=${encodeURIComponent(data.roleId)}`)
-          .then((r) => r.json())
-          .then((j) => setRoles(j.roles ?? []))
-          .catch(() => setRoles([]))
-          .finally(() => setRolesLoading(false));
-        return;
-      }
       setRoles([]);
       setRolesLoading(false);
       return;
@@ -376,6 +378,12 @@ export function RoleStep({
   const showSubRole = selectedRole?.paraSubRoleList ?? data.paraSubRoleList;
 
   const showContractEndDate = data.category === CATEGORY.temporarySubstitute;
+
+  // תת-תפקיד / גמולים / תפקידים נוספים. במצב עריכה הנתונים הדרושים (category,
+  // paraSubRoleList) כבר נטענו מהתקן עצמו ב-loadPosition, ולכן החלק מוצג גם כשה-lookup
+  // של שורת התקציב עדיין רץ או לא החזיר כלום - אחרת "עדכון גמולים ותפקידים" מציג
+  // כרטיס תפקיד נעול ותו לא.
+  const showRoleDetails = Boolean(selectedRole) || (isEditMode && Boolean(data.roleId));
 
   const employmentDocDef = DOC_FIELDS.find((d) => d.key === 'docEmployment')!;
   const showMinistryFileQuestion = Boolean(
@@ -837,7 +845,7 @@ export function RoleStep({
       )}
 
       {/* Conditional fields */}
-      {selectedRole && (
+      {showRoleDetails && (
         <section className="bg-white p-6 rounded-xl shadow-card border border-outline-variant mb-4 space-y-5">
           {needsLayer && (
             <div className="max-w-xs">
