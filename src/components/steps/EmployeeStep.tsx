@@ -755,7 +755,9 @@ export function EmployeeStep({
             const age = ageFromBirthDate(data.birthDate);
             return (
               <div
-                className={`grid grid-cols-1 md:grid-cols-3 gap-x-gutter gap-y-5 ${
+                // 4 עמודות במסך רחב: 10 השדות נכנסים ל-3 שורות במקום 4, וכל עמודה צרה
+                // יותר - מה שנראה כ"רווח בין העמודות" היה בעיקר עמודה רחבה עם ערך קצר.
+                className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-5 ${
                   locked ? 'cursor-pointer' : ''
                 }`}
                 onClick={locked ? () => setEditing(true) : undefined}
@@ -781,18 +783,22 @@ export function EmployeeStep({
                     placeholder={data.noIsraeliId ? 'מספר דרכון / מספר זיהוי זר' : '9 ספרות'}
                     disabled={locked}
                   />
-                  <label className="flex items-center gap-2 mt-1 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 accent-primary"
-                      checked={data.noIsraeliId}
-                      disabled={locked}
-                      onChange={(e) => set('noIsraeliId', e.target.checked)}
-                    />
-                    <span className="text-body-sm text-on-surface-variant">
-                      עובד/ת ללא תעודת זהות ישראלית
-                    </span>
-                  </label>
+                  {/* בתצוגה לקריאה בלבד התיבה היא רעש: היא מושבתת ממילא, והמידע שהיא
+                      מוסרת כבר גלוי מהמספר עצמו. מוצגת רק כשמסומנת, כהסבר למספר החריג. */}
+                  {(!locked || data.noIsraeliId) && (
+                    <label className="flex items-center gap-2 mt-1 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-primary"
+                        checked={data.noIsraeliId}
+                        disabled={locked}
+                        onChange={(e) => set('noIsraeliId', e.target.checked)}
+                      />
+                      <span className="text-body-sm text-on-surface-variant">
+                        עובד/ת ללא תעודת זהות ישראלית
+                      </span>
+                    </label>
+                  )}
                 </Field>
                 <Field label="מייל" error={errors.email} locked={locked}>
                   <Input
