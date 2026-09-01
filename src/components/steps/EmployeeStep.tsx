@@ -800,27 +800,6 @@ export function EmployeeStep({
                     </label>
                   )}
                 </Field>
-                <Field label="מייל" error={errors.email} locked={locked}>
-                  <Input
-                    value={data.email}
-                    onChange={(v) => set('email', v)}
-                    placeholder="example@mail.com"
-                    type="email"
-                    disabled={locked}
-                  />
-                </Field>
-                <Field label="טלפון" error={errors.phone} locked={locked}>
-                  <Input
-                    value={data.phone}
-                    onChange={(v) => set('phone', v)}
-                    placeholder="05X-XXXXXXX"
-                    type="tel"
-                    disabled={locked}
-                  />
-                </Field>
-                <Field label="כתובת" error={errors.address} locked={locked}>
-                  <Input value={data.address} onChange={(v) => set('address', v)} placeholder="רחוב, עיר, מיקוד" disabled={locked} />
-                </Field>
                 <Field label="מין" error={errors.gender} locked={locked}>
                   <Toggle
                     options={['זכר', 'נקבה']}
@@ -864,6 +843,27 @@ export function EmployeeStep({
                   >
                     {age !== null ? age : '—'}
                   </span>
+                </Field>
+                <Field label="כתובת" error={errors.address} locked={locked}>
+                  <Input value={data.address} onChange={(v) => set('address', v)} placeholder="רחוב, עיר, מיקוד" disabled={locked} />
+                </Field>
+                <Field label="טלפון" error={errors.phone} locked={locked}>
+                  <Input
+                    value={data.phone}
+                    onChange={(v) => set('phone', v)}
+                    placeholder="05X-XXXXXXX"
+                    type="tel"
+                    disabled={locked}
+                  />
+                </Field>
+                <Field label="מייל" error={errors.email} locked={locked}>
+                  <Input
+                    value={data.email}
+                    onChange={(v) => set('email', v)}
+                    placeholder="example@mail.com"
+                    type="email"
+                    disabled={locked}
+                  />
                 </Field>
                 {pickedExisting && editing && (
                   <div className="flex items-end flex-col gap-1">
