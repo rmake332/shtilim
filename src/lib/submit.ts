@@ -1,8 +1,7 @@
 import 'server-only';
-import { createRecord, updateRecord, getRecord, listRecords, escapeFormulaValue } from '@/lib/airtable/client';
+import { createRecord, updateRecord, listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import {
   TABLES,
-  EMPLOYEE_FIELDS,
   POSITION_FIELDS,
   PREV_YEAR_FIELDS,
   SCHEDULE_FIELDS,
@@ -11,7 +10,7 @@ import {
 } from '@/lib/airtable/schema';
 import { logger } from '@/lib/logger';
 import { notifyError } from '@/lib/makeWebhook';
-import { findEmployeeByExactId } from '@/lib/employees';
+import { upsertEmployee } from '@/lib/saveEmployee';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
 import { subRoleLinkFor } from '@/lib/subRoleTable';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
@@ -89,60 +88,12 @@ export async function submitForm(
   const { employee, role, schedule, institutionMosadId, institutionName } = params;
 
   // 1. Employee record (create if new, update if existing).
-  let employeeId = employee.recordId ?? '';
-  if (!employeeId) {
-    // Defense-in-depth: never create a duplicate. If the ID already exists, reuse it.
-    const existing = await findEmployeeByExactId(employee.tz, requestId);
-    if (existing) {
-      logger.info({ requestId }, 'duplicate id on submit — reusing existing employee');
-      employeeId = existing.id;
-    }
-  }
-  if (!employeeId) {
-    const created = await createRecord(
-      TABLES.employees,
-      {
-        [EMPLOYEE_FIELDS.name]: employee.name,
-        [EMPLOYEE_FIELDS.tz]: employee.tz,
-        [EMPLOYEE_FIELDS.address]: employee.address,
-        [EMPLOYEE_FIELDS.email]: employee.email,
-        [EMPLOYEE_FIELDS.phone]: employee.phone,
-        [EMPLOYEE_FIELDS.maritalStatus]: employee.maritalStatus,
-        [EMPLOYEE_FIELDS.gender]: employee.gender,
-        [EMPLOYEE_FIELDS.birthDate]: employee.birthDate,
-        [EMPLOYEE_FIELDS.institution]: [institutionMosadId],
-        // תאריך תחילת עבודה יושב על העובד (לא על התקן) — נגזר מתאריך תחילת החוזה שבטופס.
-        ...(employee.contractStartDate
-          ? { [EMPLOYEE_FIELDS.workStartDate]: employee.contractStartDate }
-          : {}),
-        ...(role.licenseNumber ? { [EMPLOYEE_FIELDS.licenseNumber]: Number(role.licenseNumber) } : {}),
-      },
-      requestId,
-    );
-    employeeId = created.id;
-  } else {
-    // Existing employee — update any fields that were edited.
-    const empUpdate: Record<string, unknown> = {};
-    if (employee.name)          empUpdate[EMPLOYEE_FIELDS.name]          = employee.name;
-    if (employee.address)       empUpdate[EMPLOYEE_FIELDS.address]       = employee.address;
-    if (employee.email)         empUpdate[EMPLOYEE_FIELDS.email]         = employee.email;
-    if (employee.phone)         empUpdate[EMPLOYEE_FIELDS.phone]         = employee.phone;
-    if (employee.maritalStatus) empUpdate[EMPLOYEE_FIELDS.maritalStatus] = employee.maritalStatus;
-    if (employee.gender)        empUpdate[EMPLOYEE_FIELDS.gender]        = employee.gender;
-    if (employee.birthDate)     empUpdate[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;
-    if (role.licenseNumber)     empUpdate[EMPLOYEE_FIELDS.licenseNumber] = Number(role.licenseNumber);
-    // תאריך תחילת עבודה: ממלאים רק אם הוא ריק — לעובד ותיק זהו התאריך המקורי ואין לדרוס אותו.
-    if (employee.contractStartDate) {
-      const current = await getRecord(TABLES.employees, employeeId, requestId);
-      if (current && !current.fields[EMPLOYEE_FIELDS.workStartDate]) {
-        empUpdate[EMPLOYEE_FIELDS.workStartDate] = employee.contractStartDate;
-      }
-    }
-    if (Object.keys(empUpdate).length > 0) {
-      logger.info({ requestId, employeeId }, 'updating existing employee on new-position submit');
-      await updateRecord(TABLES.employees, employeeId, empUpdate, requestId);
-    }
-  }
+  // בדרך כלל הרשומה כבר נוצרה בסיום שלב פרטי העובד (POST /api/employees) והקריאה כאן
+  // רק מעדכנת. הקריאה נשארת כי מסלולים אחרים (עריכה, טעינה משנה קודמת) מגיעים לכאן ישירות.
+  const { employeeId } = await upsertEmployee(
+    { employee, institutionMosadId, licenseNumber: role.licenseNumber },
+    requestId,
+  );
 
   // Guard against an accidental double-submit (e.g. the secretary wasn't sure the first
   // click went through, or a slow response looked like a failure, and sent the form again

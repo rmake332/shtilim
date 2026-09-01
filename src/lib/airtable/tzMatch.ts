@@ -4,20 +4,40 @@ import { isIsraeliIdShaped, normalizeIsraeliId } from '@/lib/validation/israeliI
 import { normalizeForeignId } from '@/lib/validation/foreignId';
 
 /**
+ * ניקוי הערך *המאוחסן* באיירטייבל בתוך הנוסחה: TRIM + הסרת רווחים ומקפים פנימיים
+ * + אחידות רישיות. בלי זה נוצרות כפילויות: השדה הוא טקסט חופשי ובפועל מאוחסנות בו
+ * צורות שונות של אותה ת.ז. - "54733068" בלי ריפוד אפסים, "21872231-2" עם מקף - ורק
+ * הצד שהוקלד נורמל, כך שהתאמה מדויקת החמיצה את הרשומה הקיימת ונוצרה רשומה שנייה.
+ */
+export function cleanedTzField(fieldId: string): string {
+  return `UPPER(SUBSTITUTE(SUBSTITUTE(TRIM({${fieldId}})," ",""),"-",""))`;
+}
+
+/**
  * בניית תנאי OR(...) להתאמה מדויקת של שדה ת.ז./זיהוי זר באיירטייבל.
- * ת.ז. ישראלית (1-9 ספרות) - נשאר בדיוק כמו היום (מנורמל+גולמי, כי ת.ז. מאוחסנות
- * לפעמים לא מרופדות). כל דבר אחר (זיהוי זר) - גולמי + מנורמל-זר (uppercase, בלי
+ * שני הצדדים מנורמלים: הערך המאוחסן דרך cleanedTzField, והקלט לרשימת הצורות שבהן הוא
+ * עשוי להיות מאוחסן.
+ * ת.ז. ישראלית (1-9 ספרות) - מרופדת ל-9 וגם בלי אפסים מובילים, כי ת.ז. מאוחסנות
+ * לפעמים לא מרופדות. כל דבר אחר (זיהוי זר) - גולמי + מנורמל-זר (uppercase, בלי
  * רווחים/מקפים) - לעולם לא digit-stripped, כדי שלא יתאפשר לשני מספרי זיהוי זרים
  * שונים עם אותה סדרת ספרות (למשל "AB1234567" מול "CD1234567") להתנגש.
  */
 export function buildTzExactMatchFormula(tz: string, fieldId: string): string | null {
   const trimmed = String(tz).trim();
   if (!trimmed) return null;
-  const variants = isIsraeliIdShaped(trimmed)
-    ? [normalizeIsraeliId(trimmed) as string, trimmed]
+
+  const raw = isIsraeliIdShaped(trimmed)
+    ? (() => {
+        const padded = normalizeIsraeliId(trimmed) as string;
+        // "000000000" לעולם לא ת.ז. תקינה, אבל בלי הנפילה ל-padded היינו משווים
+        // למחרוזת ריקה - שמתאימה לכל רשומה עם שדה ת.ז. ריק.
+        return [padded, padded.replace(/^0+/, '') || padded];
+      })()
     : [trimmed, normalizeForeignId(trimmed)].filter((v): v is string => Boolean(v));
-  const uniq = Array.from(new Set(variants));
+
+  const uniq = Array.from(new Set(raw.map((v) => v.toUpperCase())));
+  const field = cleanedTzField(fieldId);
   return uniq.length === 1
-    ? `{${fieldId}}="${escapeFormulaValue(uniq[0])}"`
-    : `OR(${uniq.map((v) => `{${fieldId}}="${escapeFormulaValue(v)}"`).join(',')})`;
+    ? `${field}="${escapeFormulaValue(uniq[0])}"`
+    : `OR(${uniq.map((v) => `${field}="${escapeFormulaValue(v)}"`).join(',')})`;
 }

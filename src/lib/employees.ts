@@ -2,7 +2,7 @@ import 'server-only';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, SUB_ROLE_DOC_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
 import { maskTz } from '@/lib/logger';
-import { buildTzExactMatchFormula } from '@/lib/airtable/tzMatch';
+import { buildTzExactMatchFormula, cleanedTzField } from '@/lib/airtable/tzMatch';
 
 /** Public, safe-to-return employee search result. ID is masked; no address/birthdate/full email leak. */
 export interface EmployeeSearchResult {
@@ -24,8 +24,13 @@ export async function searchEmployees(
   const digits = query.replace(/\D/g, '');
   if (digits.length < 4) return [];
 
-  const safe = escapeFormulaValue(digits);
-  const formula = `FIND("${safe}", {${EMPLOYEE_FIELDS.tz}})`;
+  // שני הצדדים מנוקים, אחרת עובד קיים לא עולה בחיפוש והמזכירה פותחת לו רשומה
+  // כפולה: מהשדה המאוחסן מסירים מקפים/רווחים ("21872231-2"), ומהחיפוש אפסים
+  // מובילים (חיפוש "054733068" מול ת.ז. שנשמרה "54733068"). הכיוון ההפוך מכוסה
+  // ממילא כי זהו חיפוש תת-מחרוזת.
+  const needle = digits.replace(/^0+/, '') || digits;
+  const safe = escapeFormulaValue(needle);
+  const formula = `FIND("${safe}", ${cleanedTzField(EMPLOYEE_FIELDS.tz)})`;
 
   const records = await listRecords(
     TABLES.employees,
@@ -155,13 +160,18 @@ export async function findEmployeeByExactId(
   const formula = buildTzExactMatchFormula(tz, EMPLOYEE_FIELDS.tz);
   if (!formula) return null;
 
+  // maxRecords גדול מ-1 בכוונה: בטבלה יש כבר כפילויות היסטוריות מהתקופה שבה
+  // ההתאמה החמיצה צורות אחסון שונות. שולפים את כולן ובוחרים דטרמיניסטית את זו
+  // שערכה המאוחסן זהה למה שהוקלד, כדי שאותה ת.ז. תמיד תוביל לאותה רשומה.
   const records = await listRecords(
     TABLES.employees,
-    { filterByFormula: formula, maxRecords: 1, fields: [EMPLOYEE_FIELDS.name, EMPLOYEE_FIELDS.tz] },
+    { filterByFormula: formula, maxRecords: 10, fields: [EMPLOYEE_FIELDS.name, EMPLOYEE_FIELDS.tz] },
     requestId,
   );
-  const r = records[0];
-  if (!r) return null;
+  if (records.length === 0) return null;
+  const typed = String(tz).trim().replace(/[\s-]/g, '').toUpperCase();
+  const clean = (v: unknown) => String(v ?? '').trim().replace(/[\s-]/g, '').toUpperCase();
+  const r = records.find((rec) => clean(rec.fields[EMPLOYEE_FIELDS.tz]) === typed) ?? records[0];
   return {
     id: r.id,
     name: String(r.fields[EMPLOYEE_FIELDS.name] ?? ''),

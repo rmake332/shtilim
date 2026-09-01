@@ -264,12 +264,17 @@ export function getMock(
       const id = m?.[1];
       return MOCK_EMPLOYEES.filter((r) => r.id === id);
     }
-    // Otherwise: naive client-side filter by the search term embedded in the formula.
+    // חיפוש/התאמה לפי ת.ז.: הנוסחאות האמיתיות עוטפות את השדה ב-SUBSTITUTE שמכיל
+    // ליטרלים משלו (" " ו-"-"), ולכן "המחרוזת הראשונה בנוסחה" אינה מונח החיפוש.
+    // מחלצים את הערכים לפי מקומם: אחרי "=" להתאמה מדויקת, בתוך FIND( לחיפוש חלקי.
+    const clean = (v: unknown) => String(v ?? '').trim().replace(/[\s-]/g, '').toUpperCase();
+    const exact = [...formula.matchAll(/="([^"]*)"/g)].map((m) => m[1]);
+    const needles = [...formula.matchAll(/FIND\("([^"]*)"/g)].map((m) => m[1]);
     let rows = MOCK_EMPLOYEES;
-    const m = formula.match(/"([^"]+)"/);
-    const term = m?.[1];
-    if (term) {
-      rows = rows.filter((r) => Object.values(r.fields).some((v) => String(v).includes(term)));
+    if (exact.length > 0) {
+      rows = rows.filter((r) => exact.includes(clean(r.fields[EMPLOYEE_FIELDS.tz])));
+    } else if (needles.length > 0) {
+      rows = rows.filter((r) => needles.some((n) => clean(r.fields[EMPLOYEE_FIELDS.tz]).includes(n)));
     }
     return rows.slice(0, opts.maxRecords ?? rows.length);
   }

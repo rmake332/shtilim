@@ -117,6 +117,12 @@ export function isMinor(birthDate: string): boolean {
 export interface EmployeeData {
   /** Airtable record id if an existing employee was chosen; null if new. */
   recordId: string | null;
+  /**
+   * הרשומה נוצרה בטופס הנוכחי (שלב פרטי העובד שומר לאיירטייבל מיד, ולכן recordId
+   * מתמלא גם לעובד חדש). זהו המקור לשאלת "תיק במשרד החינוך" ב-RoleStep, שנשאלת
+   * רק על עובד שלא היה קיים - אין להסיק "עובד חדש" מ-recordId ריק.
+   */
+  newlyCreated?: boolean;
   name: string;
   tz: string;
   /**

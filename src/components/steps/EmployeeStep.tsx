@@ -174,6 +174,47 @@ export function EmployeeStep({
     setData((d) => ({ ...d, [key]: value }));
   }
 
+  /**
+   * שמירת עובד חדש ל"רשימת עובדים" מיד בסיום השלב, לפני בחירת תפקיד ולפני יצירת תקן -
+   * כך הפרטים לא הולכים לאיבוד כשהתהליך ננטש באמצע. השרת מחזיר את הרשומה הקיימת אם
+   * ת.ז. כבר קיימת, ולכן קריאה זו לעולם לא יוצרת כפילות גם אם בדיקת הכפילות שלמעלה כשלה.
+   * מחזירה את הנתונים עם recordId, או null כשהשמירה נכשלה (ואז נשארים בשלב).
+   */
+  async function saveNewEmployee(): Promise<EmployeeData | null> {
+    setSaving(true);
+    setSaveError('');
+    try {
+      const res = await fetch('/api/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, employee: data }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok || !json.employeeId) {
+        setSaveError(json.message || 'שגיאה בשמירת פרטי העובד');
+        return null;
+      }
+      // מקרה נדיר: בדיקת הכפילות בצד הלקוח לא מצאה, השרת כן. מציגים ועוצרים כדי
+      // שהמזכירה תראה לאיזו רשומה קיימת הפרטים מוזגו, במקום לצרף תקן בלי לדעת.
+      if (json.created === false) {
+        setDupNotice(
+          `עובד עם ת.ז. זו כבר קיים במערכת${json.matchedName ? ` (${json.matchedName})` : ''} - הפרטים עודכנו ברשומה הקיימת.`,
+        );
+        setShowNewForm(false);
+        await loadAndSelect(json.employeeId, data.name);
+        return null;
+      }
+      const saved: EmployeeData = { ...data, recordId: json.employeeId, newlyCreated: true };
+      setData(saved);
+      return saved;
+    } catch {
+      setSaveError('שגיאת רשת - פרטי העובד לא נשמרו');
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function finishEditing() {
     if (!data.recordId) { setEditing(false); return; }
     if (!data.gender) {
@@ -244,7 +285,16 @@ export function EmployeeStep({
     if (selectedExisting && !editing && profileKeys.some((k) => e[k])) {
       setEditing(true);
     }
-    if (Object.keys(e).length === 0) onNext(data);
+    if (Object.keys(e).length !== 0) return;
+
+    // עובד חדש - נשמר לאיירטייבל כאן, ולא רק בשליחת הטופס.
+    if (!data.recordId) {
+      const saved = await saveNewEmployee();
+      if (!saved) return;
+      onNext(saved);
+      return;
+    }
+    onNext(data);
   }
 
   const selectedExisting = Boolean(data.recordId);
@@ -743,12 +793,20 @@ export function EmployeeStep({
         </section>
       )}
 
+      {/* כשל בשמירת עובד חדש לאיירטייבל — נשארים בשלב, הפרטים שהוקלדו לא אבדו. */}
+      {saveError && !selectedExisting && (
+        <div className="mt-6 p-3 rounded-lg bg-error-container/40 text-error text-body-md flex items-center gap-2">
+          <Icon name="error" /> {saveError}
+        </div>
+      )}
+
       <ActionBar
         title={isEditMode ? 'עדכון פרטי עובד' : 'השלמת פרטי העובד'}
         subtitle={isEditMode ? 'לחצו "הבא" לחזרה לעריכת התפקיד.' : 'לאחר המעבר לשלב הבא, תבחרו את התפקיד עבור העובד.'}
         showBack={Boolean(onBack)}
         onBack={onBack}
-        nextDisabled={(!selectedExisting && !showNewForm) || underEmploymentAge}
+        nextLabel={saving && !selectedExisting ? 'שומר…' : undefined}
+        nextDisabled={(!selectedExisting && !showNewForm) || underEmploymentAge || saving}
         onNext={validateAndNext}
       />
     </>

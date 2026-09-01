@@ -115,7 +115,7 @@ export function Wizard({
           employee={employee}
           mosadName={institution.name}
           institutionLayer={institution.layer}
-          isNewEmployee={!isEdit && employee?.recordId === null}
+          isNewEmployee={!isEdit && (employee?.recordId === null || Boolean(employee?.newlyCreated))}
           lockedRole={fromPrevYear && !hasAmbiguousSymbols}
           restrictedSymbols={fromPrevYear && hasAmbiguousSymbols ? ambiguousSymbols : undefined}
           mode={isEdit ? 'edit' : 'new'}
