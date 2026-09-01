@@ -724,21 +724,6 @@ export function EmployeeStep({
               {pickedExisting ? 'פרטי העובד' : 'פרטי עובד חדש'}
             </h3>
             <div className="flex items-center gap-4">
-              {/* עובד חדש: השמירה מפורשת. עד שהיא מתבצעת אין רשומה באיירטייבל, ולכן
-                  גם אי אפשר להעלות מסמכים (אין למה לצרף אותם) ולא להמשיך לשלב הבא. */}
-              {!pickedExisting && !isEditMode && (
-                <button
-                  className="px-5 py-2 bg-primary text-on-primary text-label-lg font-bold rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={saveEmployeeNow}
-                  disabled={!personalFieldsValid || underEmploymentAge || advancing || employeeSaved}
-                  title={
-                    personalFieldsValid ? undefined : `יש להשלים: ${missingPersonalField}`
-                  }
-                >
-                  <Icon name={employeeSaved ? 'check' : 'save'} className="text-[18px]" />
-                  {advancing ? 'שומר…' : employeeSaved ? 'נשמר' : employeeDirty ? 'שמירת השינויים' : 'שמירת פרטי העובד'}
-                </button>
-              )}
               {pickedExisting && !editing && (
                 <button
                   className="text-primary text-label-lg hover:underline flex items-center gap-1"
@@ -763,30 +748,6 @@ export function EmployeeStep({
               )}
             </div>
           </div>
-
-          {/* חיווי מצב השמירה — רק לעובד חדש; לעובד קיים "עריכה/סיום עריכה" כבר משדר זאת. */}
-          {!pickedExisting && !isEditMode && (
-            <div
-              className={`mb-5 -mt-2 px-3 py-2 rounded-lg text-body-md flex items-center gap-2 ${
-                employeeSaved
-                  ? 'bg-tertiary-container/30 text-on-surface'
-                  : 'bg-secondary-container/40 text-on-secondary-container'
-              }`}
-            >
-              <Icon
-                name={employeeSaved ? 'check_circle' : 'info'}
-                className={employeeSaved ? 'text-tertiary text-[18px]' : 'text-[18px]'}
-                fill={employeeSaved}
-              />
-              {employeeSaved
-                ? 'פרטי העובד נשמרו במערכת.'
-                : employeeDirty
-                  ? 'יש שינויים שטרם נשמרו - לחצו "שמירת השינויים".'
-                  : personalFieldsValid
-                    ? 'טרם נשמר - לחצו "שמירת פרטי העובד" כדי ליצור את העובד במערכת.'
-                    : `טרם נשמר - יש להשלים ${missingPersonalField}.`}
-            </div>
-          )}
 
           {/* Same layout always; fields are locked unless editing (new employee = always editable). */}
           {(() => {
@@ -914,6 +875,43 @@ export function EmployeeStep({
               </div>
             );
           })()}
+
+          {/* עובד חדש: השמירה מפורשת, ויושבת **מתחת לשדות** - כשמסיימים את השדה האחרון
+              רואים מיד את הכפתור, בלי לחזור לראש הכרטיס. עד שהשמירה מתבצעת אין רשומה
+              באיירטייבל, ולכן גם אי אפשר להעלות מסמכים ולא להמשיך לשלב הבא. */}
+          {!pickedExisting && !isEditMode && (
+            <div className="mt-6 pt-4 border-t border-outline-variant flex flex-wrap items-center justify-between gap-3">
+              <span
+                className={`px-3 py-2 rounded-lg text-body-md flex items-center gap-2 ${
+                  employeeSaved
+                    ? 'bg-tertiary-container/30 text-on-surface'
+                    : 'bg-secondary-container/40 text-on-secondary-container'
+                }`}
+              >
+                <Icon
+                  name={employeeSaved ? 'check_circle' : 'info'}
+                  className={employeeSaved ? 'text-tertiary text-[18px]' : 'text-[18px]'}
+                  fill={employeeSaved}
+                />
+                {employeeSaved
+                  ? 'פרטי העובד נשמרו במערכת.'
+                  : employeeDirty
+                    ? 'יש שינויים שטרם נשמרו - לחצו "שמירת השינויים".'
+                    : personalFieldsValid
+                      ? 'טרם נשמר - לחצו "שמירת פרטי העובד" כדי ליצור את העובד במערכת.'
+                      : `טרם נשמר - יש להשלים ${missingPersonalField}.`}
+              </span>
+              <button
+                className="px-5 py-2.5 bg-primary text-on-primary text-label-lg font-bold rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={saveEmployeeNow}
+                disabled={!personalFieldsValid || underEmploymentAge || advancing || employeeSaved}
+                title={personalFieldsValid ? undefined : `יש להשלים: ${missingPersonalField}`}
+              >
+                <Icon name={employeeSaved ? 'check' : 'save'} className="text-[18px]" />
+                {advancing ? 'שומר…' : employeeSaved ? 'נשמר' : employeeDirty ? 'שמירת השינויים' : 'שמירת פרטי העובד'}
+              </button>
+            </div>
+          )}
         </section>
       )}
 
