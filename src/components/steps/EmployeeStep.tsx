@@ -715,7 +715,7 @@ export function EmployeeStep({
                 fill={employeeSaved}
               />
               {employeeSaved
-                ? 'פרטי העובד נשמרו במערכת. אפשר להעלות מסמכים ולהמשיך.'
+                ? 'פרטי העובד נשמרו במערכת.'
                 : employeeDirty
                   ? 'יש שינויים שטרם נשמרו - לחצו "שמירת השינויים".'
                   : personalFieldsValid
