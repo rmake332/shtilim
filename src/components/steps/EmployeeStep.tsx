@@ -20,6 +20,7 @@ import {
 } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 import { isValidForeignId } from '@/lib/validation/foreignId';
+import { isPlaceholderId } from '@/lib/validation/placeholderId';
 import { isValidIsraeliPhone } from '@/lib/validation/phone';
 import { DOC_FIELDS } from '@/lib/airtable/schema';
 import { uploadEmployeeDocs } from '@/lib/uploadDocs';
@@ -34,6 +35,19 @@ interface SearchResult {
 const MARITAL_OPTIONS: MaritalStatus[] = ['רווק/ה', 'נשוי/ה', 'גרוש/ה', 'אלמן/ה'];
 
 const UNDER_AGE_MESSAGE = 'חל איסור חוקי להעסקת נוער תחת גיל 14.';
+
+/**
+ * הודעת השגיאה לשדה ת.ז. ממלא מקום (000000000 וכדומה) מקבל הודעה נפרדת, כי "ת.ז. לא
+ * תקינה" סתמי לא היה עונה על מה שהמזכירה בעצם ניסתה לומר - "אני לא יודעת את המספר".
+ */
+function tzErrorMessage(data: EmployeeData): string {
+  if (isPlaceholderId(data.tz)) {
+    return data.noIsraeliId
+      ? 'מספר זה אינו מספר זיהוי תקין - יש להזין מספר דרכון/זיהוי אמיתי.'
+      : 'מספר זה אינו ת.ז. תקינה. אם המספר אינו ידוע לא ניתן לקלוט את העובד; לעובד/ת ללא ת.ז. ישראלית יש לסמן את התיבה שמתחת ולהזין מספר דרכון.';
+  }
+  return data.noIsraeliId ? 'מספר זיהוי לא תקין' : 'ת.ז. לא תקינה';
+}
 
 export function EmployeeStep({
   token,
@@ -406,7 +420,7 @@ export function EmployeeStep({
     // Validate employee fields whenever the detail form is shown (new OR editable existing).
     if (showNewForm || selectedExisting) {
       if (!data.name.trim()) e.name = 'שדה חובה';
-      if (!tzOk) e.tz = data.noIsraeliId ? 'מספר זיהוי לא תקין' : 'ת.ז. לא תקינה';
+      if (!tzOk) e.tz = tzErrorMessage(data);
       if (!data.address.trim()) e.address = 'שדה חובה';
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) e.email = 'מייל לא תקין';
       if (!data.phone.trim()) e.phone = 'שדה חובה';
@@ -493,7 +507,7 @@ export function EmployeeStep({
   const missingPersonalField = (() => {
     if (!data.name.trim()) return 'שם מלא';
     if (!(data.noIsraeliId ? isValidForeignId(data.tz) : isValidIsraeliId(data.tz)))
-      return data.noIsraeliId ? 'מספר זיהוי תקין' : 'ת.ז. תקינה';
+      return isPlaceholderId(data.tz) ? 'מספר זיהוי אמיתי (המספר שהוקלד אינו מזהה תקין)' : data.noIsraeliId ? 'מספר זיהוי תקין' : 'ת.ז. תקינה';
     if (!data.address.trim()) return 'כתובת';
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) return 'מייל תקין';
     if (!data.phone.trim() || !isValidIsraeliPhone(data.phone)) return 'טלפון תקין';

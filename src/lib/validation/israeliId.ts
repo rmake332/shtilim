@@ -1,10 +1,16 @@
+import { isPlaceholderId } from '@/lib/validation/placeholderId';
+
 /**
  * Israeli national ID (ת.ז.) validation via the standard checksum (Luhn-like).
  * Pads to 9 digits. Returns true only for a valid checksum.
+ *
+ * הצ'קסאם לבדו אינו מספיק: "000000000" עובר אותו (סכום של אפסים הוא 0, ו-0 מתחלק
+ * ב-10) ושימש בפועל כממלא מקום כשהמספר לא היה ידוע. ראו isPlaceholderId.
  */
 export function isValidIsraeliId(input: string): boolean {
   const digits = String(input).trim();
   if (!/^\d{1,9}$/.test(digits)) return false;
+  if (isPlaceholderId(digits)) return false;
   const id = digits.padStart(9, '0');
 
   let sum = 0;

@@ -54,8 +54,8 @@ describe('buildTzExactMatchFormula', () => {
     expect(matches(f, '21872231')).toBe(false);
   });
 
-  it('לא מתאים לשדה ריק (ת.ז. של אפסים בלבד לא מייצרת השוואה למחרוזת ריקה)', () => {
-    const f = buildTzExactMatchFormula('000000000', FIELD)!;
+  it('לא מתאים לשדה ריק', () => {
+    const f = buildTzExactMatchFormula('218722312', FIELD)!;
     expect(matches(f, '')).toBe(false);
     expect(matches(f, '   ')).toBe(false);
   });
@@ -70,5 +70,14 @@ describe('buildTzExactMatchFormula', () => {
     const f = buildTzExactMatchFormula('AB1234567', FIELD)!;
     expect(matches(f, 'CD1234567')).toBe(false);
     expect(matches(f, '1234567')).toBe(false);
+  });
+});
+
+describe('ממלא מקום', () => {
+  it('אינו מייצר נוסחה כלל - כדי שלא ייבחר אדם אקראי מבין רשומות ה-000000000', () => {
+    expect(buildTzExactMatchFormula('000000000', FIELD)).toBeNull();
+    expect(buildTzExactMatchFormula('0', FIELD)).toBeNull();
+    expect(buildTzExactMatchFormula('000-000-000', FIELD)).toBeNull();
+    expect(buildTzExactMatchFormula('AAAA', FIELD)).toBeNull();
   });
 });

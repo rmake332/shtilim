@@ -2,6 +2,7 @@ import 'server-only';
 import { escapeFormulaValue } from '@/lib/airtable/client';
 import { isIsraeliIdShaped, normalizeIsraeliId } from '@/lib/validation/israeliId';
 import { normalizeForeignId } from '@/lib/validation/foreignId';
+import { isPlaceholderId } from '@/lib/validation/placeholderId';
 
 /**
  * ניקוי הערך *המאוחסן* באיירטייבל בתוך הנוסחה: TRIM + הסרת רווחים ומקפים פנימיים
@@ -25,6 +26,10 @@ export function cleanedTzField(fieldId: string): string {
 export function buildTzExactMatchFormula(tz: string, fieldId: string): string | null {
   const trimmed = String(tz).trim();
   if (!trimmed) return null;
+  // ממלא מקום (למשל "000000000") אינו מזהה איש, אבל בטבלה יש 16 רשומות שנשמרו איתו.
+  // בלי החסימה כאן, הקלדתו הייתה מתאימה לאחת מהן ובוחרת אוטומטית אדם אקראי - והתקן
+  // היה נוצר על עובד לא קשור. null = "אין התאמה", בכל מסלולי ההתאמה לפי ת.ז.
+  if (isPlaceholderId(trimmed)) return null;
 
   const raw = isIsraeliIdShaped(trimmed)
     ? (() => {
