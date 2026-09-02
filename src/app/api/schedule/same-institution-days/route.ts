@@ -6,7 +6,8 @@ import { findSameInstitutionDays } from '@/lib/sameInstitutionDays';
  * GET /api/schedule/same-institution-days?token=&tz=&excludePositionId=
  *
  * מחזיר את הימים שבהם לעובד כבר יש תקן פעיל אחר במוסד הנוכחי (המוסד נגזר
- * מהטוקן). בהזנה בסגנון פרא מוחסרות ביום כזה 40 דקות מהמערכת הנוכחית.
+ * מהטוקן). בהזנה בסגנון פרא מדלגים ביום כזה על ניכוי ה-35/40 לגמרי, והשעות
+ * האקדמיות מחושבות ישירות דקות ÷ 45. תקן במוסד אחר אינו נספר כאן.
  *
  *   { ok: true, days: { sun: [{ positionId, positionName, shifts }], ... } }
  */
