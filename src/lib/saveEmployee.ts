@@ -72,7 +72,7 @@ export async function upsertEmployee(
         ...(employee.contractStartDate
           ? { [EMPLOYEE_FIELDS.workStartDate]: employee.contractStartDate }
           : {}),
-        ...(licenseNumber ? { [EMPLOYEE_FIELDS.licenseNumber]: Number(licenseNumber) } : {}),
+        ...(licenseNumber ? { [EMPLOYEE_FIELDS.licenseNumber]: String(licenseNumber).trim() } : {}),
       },
       requestId,
     );
@@ -89,7 +89,7 @@ export async function upsertEmployee(
   if (employee.maritalStatus) empUpdate[EMPLOYEE_FIELDS.maritalStatus] = employee.maritalStatus;
   if (employee.gender)        empUpdate[EMPLOYEE_FIELDS.gender]        = employee.gender;
   if (employee.birthDate)     empUpdate[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;
-  if (licenseNumber)          empUpdate[EMPLOYEE_FIELDS.licenseNumber] = Number(licenseNumber);
+  if (licenseNumber)          empUpdate[EMPLOYEE_FIELDS.licenseNumber] = String(licenseNumber).trim();
   // תאריך תחילת עבודה: ממלאים רק אם הוא ריק — לעובד ותיק זהו התאריך המקורי ואין לדרוס אותו.
   if (employee.contractStartDate) {
     const current = await getRecord(TABLES.employees, employeeId, requestId);

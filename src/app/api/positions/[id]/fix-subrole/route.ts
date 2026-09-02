@@ -141,7 +141,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         await updateRecord(
           TABLES.employees,
           employeeId,
-          { [EMPLOYEE_FIELDS.licenseNumber]: Number(license) },
+          { [EMPLOYEE_FIELDS.licenseNumber]: license },
           gate.requestId,
         );
       }

@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       await updateRecord(
         TABLES.employees,
         employeeId,
-        { [EMPLOYEE_FIELDS.licenseNumber]: Number(licenseNumber) },
+        { [EMPLOYEE_FIELDS.licenseNumber]: String(licenseNumber).trim() },
         gate.requestId,
       );
     }

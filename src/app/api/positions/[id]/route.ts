@@ -418,7 +418,7 @@ async function updatePosition(
       [EMPLOYEE_FIELDS.maritalStatus]: employee.maritalStatus || undefined,
       [EMPLOYEE_FIELDS.gender]:        employee.gender        || undefined,
       [EMPLOYEE_FIELDS.birthDate]:     employee.birthDate     || undefined,
-      [EMPLOYEE_FIELDS.licenseNumber]: role.licenseNumber ? Number(role.licenseNumber) : undefined,
+      [EMPLOYEE_FIELDS.licenseNumber]: role.licenseNumber ? String(role.licenseNumber).trim() : undefined,
     };
     Object.keys(empFields).forEach((k) => empFields[k] === undefined && delete empFields[k]);
     // תאריך תחילת עבודה: ממלאים רק אם ריק — לא דורסים תאריך קיים של עובד ותיק.

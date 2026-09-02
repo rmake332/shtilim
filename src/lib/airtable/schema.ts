@@ -72,7 +72,12 @@ export const EMPLOYEE_FIELDS = {
   institution: 'fld5nl16DpoM7Xn1h',
   fatherPosition: 'fldmjgP5oDc49Gmz1', // משרת אב (checkbox) — adds 2h to entered hours
   twelveHourEmployment: 'fldDgcYm9abVpBB0D', // העסקה 12 שעות (checkbox) — מפעיל את מסלול ההפסקות של פנימיה
-  licenseNumber: 'fldEVNaTqjZ9XqWsu', // מס' רישיון — קלינאות תקשורת / ריפוי בעיסוק
+  // מס' רישיון — קלינאות תקשורת / ריפוי בעיסוק.
+  // ⚠️ שדה טקסט (singleLineText) באיירטייבל, ולכן נכתב כמחרוזת ולא כ-Number: typecast
+  // ממיר מחרוזת לטיפוס היעד אך לא מספר לטקסט, ומספר לשדה טקסט מוחזר ב-422
+  // INVALID_VALUE_FOR_COLUMN שמפיל את כל כתיבת העובד. מחרוזת בטוחה בשני הכיוונים,
+  // ומשמרת גם רישיון עם אפס מוביל או תו לא-ספרתי (Number היה הופך אותו ל-NaN → null).
+  licenseNumber: 'fldEVNaTqjZ9XqWsu',
   // פרטי בנק + מספר עוסק — תקני חשבונית, "בקשת תשלום" בגוגל דוקס
   bankName: 'fldKHfdIazuoglCd4', // בנק
   bankBranch: 'flduREz5EPvuxtZm9', // סניף

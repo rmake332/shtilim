@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (employee.maritalStatus) fields[EMPLOYEE_FIELDS.maritalStatus] = employee.maritalStatus;
   if (employee.gender)        fields[EMPLOYEE_FIELDS.gender]        = employee.gender;
   if (employee.birthDate)     fields[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;
-  if (employee.licenseNumber)      fields[EMPLOYEE_FIELDS.licenseNumber]      = Number(employee.licenseNumber);
+  if (employee.licenseNumber)      fields[EMPLOYEE_FIELDS.licenseNumber]      = String(employee.licenseNumber).trim();
   if (employee.bankName)           fields[EMPLOYEE_FIELDS.bankName]           = employee.bankName;
   if (employee.bankBranch)         fields[EMPLOYEE_FIELDS.bankBranch]         = employee.bankBranch;
   if (employee.bankAccountNumber)  fields[EMPLOYEE_FIELDS.bankAccountNumber]  = employee.bankAccountNumber;
