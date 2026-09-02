@@ -13,17 +13,54 @@ import {
   includeExistingStayInCombinedKey,
   motherPositionFromOfekRow,
   ofekRowHoursSum,
+  ofekHourAttempts,
+  snapToleranceFor,
   type MotherEmployeeInput,
 } from '@/lib/schedule/ofek';
-import { roundToHalf } from '@/lib/schedule/time';
 import { logger } from '@/lib/logger';
 
 type MotherInput = MotherEmployeeInput;
 
 type ResolvedOfek =
-  | { ok: true; row: OfekResult; key: string; motherPosition: boolean; jobPercent: number }
+  | {
+      ok: true;
+      row: OfekResult;
+      key: string;
+      motherPosition: boolean;
+      jobPercent: number;
+      /** סך השעות שהמפתח נבנה ממנו בפועל - המדויק או המעוגל. */
+      hours: number;
+    }
   /** השליפה השנייה לא מצאה שורה — נחסם בדיוק כמו חוסר התאמה בשליפה הראשונה. */
   | { ok: false; key: string };
+
+/** מפתח בלי סך השעות; השעות מתווספות ב-lookupByHours לפי סדר הניסיון. */
+interface OfekKeyBase {
+  layer: string;
+  ageHours: number | string;
+  motherPosition: boolean;
+  category: string;
+}
+
+/**
+ * שליפה מהמחשבון לפי סדר מועמדי השעות (ראה ofekHourAttempts): קודם השעות כפי
+ * שהוזנו, ורק אם לא נמצאה להן שורה - השעות המעוגלות. מחזיר את השורה שנמצאה
+ * ואת סך השעות שהוביל אליה, או את המפתח האחרון שנוסה כשאף מועמד לא נמצא.
+ */
+async function lookupByHours(
+  keyBase: OfekKeyBase,
+  candidates: number[],
+  requestId?: string,
+): Promise<{ row: OfekResult; key: string; hours: number } | { row: null; key: string }> {
+  let lastKey = '';
+  for (const totalHours of candidates) {
+    const key = buildOfekKey({ ...keyBase, totalHours });
+    lastKey = key;
+    const row = await lookupOfek(key, requestId);
+    if (row) return { row, key, hours: totalHours };
+  }
+  return { row: null, key: lastKey };
+}
 
 /**
  * בדיקה כפולה של משרת אם.
@@ -38,27 +75,35 @@ async function resolveByOfekOutput(params: {
   row: OfekResult;
   key: string;
   motherPosition: boolean;
-  keyParams: { layer: string; ageHours: number | string; category: string; totalHours: number };
+  /** סך השעות שממנו נבנה המפתח של `row`. */
+  hours: number;
+  keyParams: { layer: string; ageHours: number | string; category: string };
+  /** מועמדי סך השעות, לפי סדר הניסיון - מדויק לפני מעוגל. */
+  candidates: number[];
   motherInput: MotherInput;
   /** היקף יתר תקני העובד (פרונטלי+פרטני+שהייה), 0 כשאין לו תקנים אחרים. */
   otherScopeHours: number;
   requestId?: string;
 }): Promise<ResolvedOfek> {
-  const { row, key, motherPosition, keyParams, motherInput, otherScopeHours, requestId } = params;
+  const { row, key, motherPosition, hours, keyParams, candidates, motherInput, otherScopeHours, requestId } = params;
   const recheck = motherPositionFromOfekRow(row, motherInput, otherScopeHours);
   if (recheck.motherPosition === motherPosition) {
-    return { ok: true, row, key, motherPosition, jobPercent: recheck.jobPercent };
+    return { ok: true, row, key, motherPosition, jobPercent: recheck.jobPercent, hours };
   }
-  const finalKey = buildOfekKey({ ...keyParams, motherPosition: recheck.motherPosition });
-  const finalRow = await lookupOfek(finalKey, requestId);
-  if (!finalRow) return { ok: false, key: finalKey };
+  const final = await lookupByHours(
+    { ...keyParams, motherPosition: recheck.motherPosition },
+    candidates,
+    requestId,
+  );
+  if (!final.row) return { ok: false, key: final.key };
   return {
     ok: true,
-    row: finalRow,
-    key: finalKey,
+    row: final.row,
+    key: final.key,
     motherPosition: recheck.motherPosition,
     // אחוז המשרה המוצג נגזר מהשורה הסופית, זו שהשעות שלה נשמרות לתקן.
-    jobPercent: jobPercent(ofekRowHoursSum(finalRow) + otherScopeHours, motherInput.ageHours),
+    jobPercent: jobPercent(ofekRowHoursSum(final.row) + otherScopeHours, motherInput.ageHours),
+    hours: final.hours,
   };
 }
 
@@ -95,14 +140,19 @@ export async function POST(req: NextRequest) {
     const fatherPosition = Boolean(body.fatherPosition);
     const enteredHours = Number(body.enteredHours ?? 0) + (fatherPosition ? 2 : 0);
 
-    // Para: per-day ÷45 already done client-side; only half rounding here.
     // תוספת לקות קשה היא נתון סטטי לידיעת המשתמש בלבד: היא אינה נכנסת למחשבון
-    // אופק חדש ואינה מנצלת מהתקן, ולכן אינה מתווספת ל-finalHours.
+    // אופק חדש ואינה מנצלת מהתקן, ולכן אינה מתווספת לסך השעות.
     const bonus = severeDisabilityBonus({
       severeDisabilityFlag: Boolean(body.severeDisabilityFlag),
       enteredHours,
     });
-    const finalHours = roundToHalf(enteredHours);
+
+    // סדר הניסיון בכל שליפה: השעות כפי שהוזנו קודם, והעיגול לשלם/חצי רק כנפילה.
+    // ראה ofekHourAttempts - בטבלה יש גם שורות בערכים שאינם שלם/חצי.
+    const tolerance = snapToleranceFor(ofekCategory);
+    const attempts = ofekHourAttempts(enteredHours, tolerance);
+    /** סך השעות שהמפתח נבנה ממנו בפועל; מתעדכן לערך שהצליח בשליפה. */
+    let finalHours = attempts.raw;
 
     // שעות גיל נכנסות גם למפתח המחשבון וגם לבסיס אחוז המשרה (36 בניכוי שעות גיל).
     const ageHours = body.ageHours ?? 0;
@@ -138,7 +188,13 @@ export async function POST(req: NextRequest) {
       NextResponse.json({
         ok: false,
         reason: 'ofek_not_found',
-        message: 'אין מבנה שבוע עבודה בהתאם למערכת השעות שהוזנה' + (hint ? ` (${hint})` : ''),
+        message:
+          'אין מבנה שבוע עבודה בהתאם למערכת השעות שהוזנה' +
+          (hint ? ` (${hint})` : '') +
+          // כשאין עיגול חלופי, השעות עצמן הן ההסבר הסביר לכישלון - ונאמר זאת במפורש.
+          (attempts.rounded === null
+            ? `. סה"כ שעות המערכת (${attempts.raw}) אינו מספר עגול, ואינו קרוב מספיק לשלם/חצי כדי להיבדק מעוגל`
+            : ''),
         key: k,
         finalHours,
         bonus,
@@ -146,46 +202,44 @@ export async function POST(req: NextRequest) {
 
     // בדיקה ראשונה — שקטה: משרת אם לפי השעות שהוזנו בתוספת יתר תקני העובד,
     // רק כדי לקבל שורה מהמחשבון.
-    const preliminaryPct = jobPercent(finalHours + otherScopeHours, ageHours);
+    const preliminaryPct = jobPercent(attempts.raw + otherScopeHours, ageHours);
     const preliminaryMother = isMotherPosition({ ...motherInput, jobPercent: preliminaryPct });
-    const preliminaryKey = buildOfekKey({
-      layer,
-      ageHours,
-      motherPosition: preliminaryMother,
-      category: ofekCategory,
-      totalHours: finalHours,
-    });
-
-    const preliminaryRow = await lookupOfek(preliminaryKey, gate.requestId);
-    if (!preliminaryRow) {
+    const preliminary = await lookupByHours(
+      { layer, ageHours, motherPosition: preliminaryMother, category: ofekCategory },
+      attempts.candidates,
+      gate.requestId,
+    );
+    const preliminaryKey = preliminary.key;
+    if (!preliminary.row) {
       // מלכודת ידועה: לפעמים הצירוף קיים במחשבון רק תחת דגל "משרת אם" ההפוך
       // מזה שחושב כרגע (למשל עובדת עם כמה תקנים קטנים שרק ביחד חוצים 79%).
       // בדיקה שקטה נוספת רק כדי לתת רמז שימושי בהודעת השגיאה, לא כדי לשנות תוצאה.
-      const altKey = buildOfekKey({
-        layer,
-        ageHours,
-        motherPosition: !preliminaryMother,
-        category: ofekCategory,
-        totalHours: finalHours,
-      });
-      const altRow = await lookupOfek(altKey, gate.requestId);
-      const hint = altRow
+      const alt = await lookupByHours(
+        { layer, ageHours, motherPosition: !preliminaryMother, category: ofekCategory },
+        attempts.candidates,
+        gate.requestId,
+      );
+      const hint = alt.row
         ? `קיים צירוף תואם במחשבון עבור "משרת אם = ${!preliminaryMother ? 'כן' : 'לא'}" - בדקו את שדה הילדים מתחת לגיל 14 ואת יתר התקנים של העובד/ת במערכת, ייתכן שהיקף המשרה הכולל שלו/ה עדיין לא נכנס לחישוב`
         : undefined;
       return notFoundResponse(preliminaryKey, hint);
     }
+    finalHours = preliminary.hours;
 
     // בדיקה שנייה — הקובעת: היקף התקן הנוכחי לפי פלט המחשבון, ועליו יתר התקנים.
     const resolved = await resolveByOfekOutput({
-      row: preliminaryRow,
+      row: preliminary.row,
       key: preliminaryKey,
       motherPosition: preliminaryMother,
-      keyParams: { layer, ageHours, category: ofekCategory, totalHours: finalHours },
+      hours: preliminary.hours,
+      keyParams: { layer, ageHours, category: ofekCategory },
+      candidates: attempts.candidates,
       motherInput,
       otherScopeHours,
       requestId: gate.requestId,
     });
     if (!resolved.ok) return notFoundResponse(resolved.key);
+    finalHours = resolved.hours;
     const ofek = resolved.row;
     const key = resolved.key;
     // משרת אם היא עובדה ברמת העובד: נקבעת פעם אחת ומוזרקת גם למפתח המשולב, כדי
@@ -218,16 +272,17 @@ export async function POST(req: NextRequest) {
           ? existing.stayHours
           : 0;
         const combinedHours = finalHours + existing.frontalHours + existing.individualHours + existingStayForCombined;
+        // גם כאן: הסכום כפי שהוא קודם, והעיגול לשלם/חצי רק אם לא נמצאה לו שורה.
+        const combinedAttempts = ofekHourAttempts(combinedHours, tolerance);
         // משרת אם כבר הוכרעה על היקף כל התקנים, ולכן היא נכנסת למפתח כמות שהיא.
-        const combinedKey = buildOfekKey({
-          layer,
-          ageHours,
-          motherPosition: mother,
-          category: ofekCategory,
-          totalHours: combinedHours,
-        });
+        const combinedResult = await lookupByHours(
+          { layer, ageHours, motherPosition: mother, category: ofekCategory },
+          combinedAttempts.candidates,
+          gate.requestId,
+        );
+        const combinedKey = combinedResult.key;
         combinedKeyDebug = combinedKey;
-        const combined = await lookupOfek(combinedKey, gate.requestId);
+        const combined = combinedResult.row;
         if (!combined) {
           return NextResponse.json({
             ok: false,

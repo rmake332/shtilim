@@ -13,6 +13,10 @@ import {
   jobPercentBase,
   computeUtilizedHours,
   includeExistingStayInCombinedKey,
+  ofekHourAttempts,
+  snapToleranceFor,
+  PARA_SNAP_TOLERANCE,
+  TEACHING_SNAP_TOLERANCE,
 } from './ofek';
 
 describe('jobPercent', () => {
@@ -266,5 +270,58 @@ describe('computeUtilizedHours', () => {
         'הוראה ללא שהייה',
       ),
     ).toBe(15);
+  });
+});
+
+describe('snapToleranceFor', () => {
+  it('gives פרא the float-noise tolerance and הוראה the wider one', () => {
+    expect(snapToleranceFor('פרא')).toBe(PARA_SNAP_TOLERANCE);
+    expect(snapToleranceFor('הוראה')).toBe(TEACHING_SNAP_TOLERANCE);
+    expect(snapToleranceFor('הוראה_ללא_שהייה')).toBe(TEACHING_SNAP_TOLERANCE);
+  });
+});
+
+describe('ofekHourAttempts', () => {
+  it('tries whole/half hours once — there is nothing to fall back to', () => {
+    expect(ofekHourAttempts(21, PARA_SNAP_TOLERANCE)).toEqual({
+      raw: 21,
+      rounded: 21,
+      candidates: [21],
+    });
+    expect(ofekHourAttempts(21.5, TEACHING_SNAP_TOLERANCE)).toEqual({
+      raw: 21.5,
+      rounded: 21.5,
+      candidates: [21.5],
+    });
+  });
+  it('tries the entered hours first and the rounded value second', () => {
+    expect(ofekHourAttempts(16.4, TEACHING_SNAP_TOLERANCE)).toEqual({
+      raw: 16.4,
+      rounded: 16.5,
+      candidates: [16.4, 16.5],
+    });
+  });
+  it('drops the rounded fallback when it is farther than the tolerance', () => {
+    // 16.25 is 0.25 away from both 16 and 16.5 — beyond the הוראה tolerance.
+    expect(ofekHourAttempts(16.25, TEACHING_SNAP_TOLERANCE)).toEqual({
+      raw: 16.25,
+      rounded: null,
+      candidates: [16.25],
+    });
+    // פרא: anything past float noise has no fallback either.
+    expect(ofekHourAttempts(10.67, PARA_SNAP_TOLERANCE)).toEqual({
+      raw: 10.67,
+      rounded: null,
+      candidates: [10.67],
+    });
+  });
+  it('normalizes float noise from the ÷45 para formula before building the key', () => {
+    // הסכימה היומית של (דקות-40)/45 מייצרת זנב עשרוני שאינו קיים במפתח שבטבלה.
+    expect(ofekHourAttempts(31.210000000000004, PARA_SNAP_TOLERANCE).raw).toBe(31.21);
+    expect(ofekHourAttempts(20.999999999999996, PARA_SNAP_TOLERANCE)).toEqual({
+      raw: 21,
+      rounded: 21,
+      candidates: [21],
+    });
   });
 });

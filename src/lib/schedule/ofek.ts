@@ -3,6 +3,8 @@
  * severe-disability bonus, job percent, stay-hours split). Pure & unit-tested.
  */
 
+import { snapToHalf } from './time';
+
 export interface MotherPositionInput {
   gender: string; // 'נקבה' | 'זכר'
   maritalStatus: string;
@@ -165,13 +167,57 @@ export function isParaEntry(scheduleType: string | null | undefined): boolean {
  * כמו הוראה (לוח צלצולים) אך נבדק מול קטגוריית אופק נפרדת - ראה paraStaySplit
  * ו-computeUtilizedHours להבדלים בטיפול בשהייה ובניצול התקציב.
  */
+export type OfekCategory = 'פרא' | 'הוראה' | 'הוראה_ללא_שהייה';
+
 export function ofekCategoryFor(
   scheduleType: string | null | undefined,
-): 'פרא' | 'הוראה' | 'הוראה_ללא_שהייה' | null {
+): OfekCategory | null {
   if (scheduleType === 'פרא') return 'פרא';
   if (scheduleType === 'הוראה' || scheduleType === 'הוראה - לוח פרא') return 'הוראה';
   if (scheduleType === 'הוראה ללא שהייה') return 'הוראה_ללא_שהייה';
   return null;
+}
+
+/**
+ * סובלנות העיגול לשלם/חצי - עד כמה מותר לזוז מהשעות שהוזנו כשהן עצמן לא נמצאו
+ * במחשבון.
+ *
+ * פרא (וגם "הוראה - לוח פרא"): השעות נגזרות מחילוק ב-45 ולכן נושאות רעש
+ * נקודה-צפה בלבד; הסובלנות הצרה מיועדת לנקות אותו, לא לעגל שעות אמיתיות.
+ * הוראה: השעות הן סכום "שעות יומיות" של רצועות לוח הצלצולים, וסטייה קטנה
+ * מהשלם/חצי הקרוב מותרת.
+ */
+export const PARA_SNAP_TOLERANCE = 0.012;
+export const TEACHING_SNAP_TOLERANCE = 0.12;
+
+export function snapToleranceFor(category: OfekCategory): number {
+  return category === 'פרא' ? PARA_SNAP_TOLERANCE : TEACHING_SNAP_TOLERANCE;
+}
+
+export interface OfekHourAttempts {
+  /** השעות כפי שהוזנו, מנורמלות ל-2 ספרות עשרוניות (ניקוי רעש נקודה-צפה). */
+  raw: number;
+  /** העיגול לשלם/חצי, או null כשהוא רחוק מהמוזן יותר מהסובלנות ולכן נפסל. */
+  rounded: number | null;
+  /** ערכי סך השעות למפתח, לפי סדר הניסיון. */
+  candidates: number[];
+}
+
+/**
+ * סך השעות שיינסה במפתח המחשבון, לפי הסדר: קודם השעות כפי שהוזנו, ורק אם לא
+ * נמצאה להן שורה - העיגול לשלם/חצי הקרוב.
+ *
+ * בטבלת המחשבון יש גם שורות בערכים שאינם שלם/חצי (6.65, 10.75, 28.57, 31.21...),
+ * ולכן ערך מדויק שקיים בטבלה לא נזרק לטובת העיגול. כש-`rounded` הוא null אין
+ * חלופה: השעות אינן עגולות והעיגול חורג מהסובלנות, ולכן אם השליפה המדויקת נכשלה
+ * אין מה לנסות אחריה.
+ */
+export function ofekHourAttempts(hours: number, tolerance: number): OfekHourAttempts {
+  const raw = Math.round(hours * 100) / 100;
+  const snapped = snapToHalf(raw, tolerance);
+  if (snapped === null) return { raw, rounded: null, candidates: [raw] };
+  if (snapped === raw) return { raw, rounded: raw, candidates: [raw] };
+  return { raw, rounded: snapped, candidates: [raw, snapped] };
 }
 
 /**

@@ -117,9 +117,10 @@ export function paraDayHours(dayMinutes: number, skipDeduction = false): ParaDay
  * Snap `hours` to the nearest whole or half, but only if it falls within `tolerance`.
  * Returns the snapped value, or `null` if the nearest whole/half is farther than `tolerance`.
  *
- * Used before ofek-calc to ensure the key hits a valid entry:
- *  - הוראה (bell schedule): tolerance = 0.3
- *  - פרא: tolerance = 0.01
+ * משמש כנפילה בלבד בשליפה ממחשבון אופק חדש: השעות נבדקות קודם כפי שהוזנו, ורק אם
+ * לא נמצאה להן שורה מנסים את הערך המעוגל. הסובלנויות עצמן ב-`ofek.ts`
+ * (`PARA_SNAP_TOLERANCE` / `TEACHING_SNAP_TOLERANCE`), שם גם `ofekHourAttempts`
+ * שמרכיב את סדר הניסיון.
  */
 export function snapToHalf(hours: number, tolerance: number): number | null {
   const snapped = roundToHalf(hours);

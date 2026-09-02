@@ -127,15 +127,19 @@ describe('paraDayHours', () => {
 });
 
 describe('snapToHalf', () => {
-  // tolerance=0.3 — הוראה (bell schedule). roundToHalf always gives distance ≤0.25,
-  // so tolerance=0.3 never returns null; it tests that snapping occurs correctly.
-  it('snaps to nearest whole/half — הוראה (±0.3)', () => {
-    expect(snapToHalf(16, 0.3)).toBe(16);
-    expect(snapToHalf(16.5, 0.3)).toBe(16.5);
-    expect(snapToHalf(16.25, 0.3)).toBe(16.5);
-    expect(snapToHalf(15.72, 0.3)).toBe(15.5);
-    expect(snapToHalf(16.3, 0.3)).toBe(16.5);
-    expect(snapToHalf(16.2, 0.3)).toBe(16);
+  // tolerance=0.12 — הוראה (bell schedule).
+  it('snaps to nearest whole/half — הוראה (±0.12)', () => {
+    expect(snapToHalf(16, 0.12)).toBe(16);
+    expect(snapToHalf(16.5, 0.12)).toBe(16.5);
+    expect(snapToHalf(16.4, 0.12)).toBe(16.5);
+    expect(snapToHalf(15.6, 0.12)).toBe(15.5);
+    expect(snapToHalf(16.1, 0.12)).toBe(16);
+  });
+  it('returns null when farther than tolerance — הוראה (±0.12)', () => {
+    expect(snapToHalf(16.25, 0.12)).toBeNull();
+    expect(snapToHalf(15.72, 0.12)).toBeNull();
+    expect(snapToHalf(16.3, 0.12)).toBeNull();
+    expect(snapToHalf(16.2, 0.12)).toBeNull();
   });
   it('snaps within tolerance — פרא (±0.01)', () => {
     expect(snapToHalf(14, 0.01)).toBe(14);

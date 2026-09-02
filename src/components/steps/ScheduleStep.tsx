@@ -17,7 +17,6 @@ import {
   shiftMinutes,
   toMinutes,
   WEEKLY_CAP_HOURS,
-  snapToHalf,
   paraDayHours,
   type Shift,
   type Day,
@@ -46,7 +45,12 @@ import {
   FIXED_BREAK_MINUTES,
   type BreakPolicy,
 } from '@/lib/schedule/breaks';
-import { isParaEntry } from '@/lib/schedule/ofek';
+import {
+  isParaEntry,
+  ofekHourAttempts,
+  PARA_SNAP_TOLERANCE,
+  TEACHING_SNAP_TOLERANCE,
+} from '@/lib/schedule/ofek';
 import { computeBiweeklyDeductionHours, type BiweeklyTrack } from '@/lib/schedule/biweekly';
 import { POSITION_FIELDS } from '@/lib/airtable/schema';
 
@@ -250,8 +254,7 @@ function overBudgetMessage(hours: number, remaining: number): string {
   return `מספר השעות שהוזן (${hours}) חורג מיתרת התקציב לתפקיד (${remaining})`;
 }
 
-const NON_INTEGER_HOURS_ERROR =
-  'סה"כ שעות המערכת יהיו במספר עגול בלבד!\nלא ניתן להתקדם בתהליך בהזנת מערכת שכוללת מספר עשרוני';
+const INVALID_SCHEDULE_ERROR = 'יש לתקן את מערכת השעות לפני הבדיקה במחשבון';
 
 const EMPTY_SCHEDULE_ERROR = 'סה"כ שעות המערכת הוא 0 — יש להזין שעות עבודה לפני המשך';
 
@@ -895,7 +898,7 @@ function GridSchedule({
 
   // When entered hours change, invalidate all ofek results so the user must re-run check 1.
   const currentHoursForOfek = isPara
-    ? (paraDayErrors.length === 0 ? (snapToHalf(paraHours, 0.012) ?? null) : null)
+    ? (paraDayErrors.length === 0 ? paraHours : null)
     : netHours;
   useEffect(() => {
     if (hoursAtOfek1 === null) return;
@@ -909,10 +912,14 @@ function GridSchedule({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentHoursForOfek]);
 
+  /**
+   * השעות שנשלחות למחשבון - כפי שהוזנו, בלי עיגול. השרת בודק אותן קודם כמות שהן
+   * ורק אם לא נמצאה שורה מעגל לשלם/חצי ובודק שוב (ראה ofekHourAttempts).
+   */
   function getEnteredHours(): number | null {
     if (isPara) {
       if (paraDayErrors.length > 0) return null;
-      return snapToHalf(paraHours, 0.012) ?? null;
+      return paraHours;
     }
     return netHours;
   }
@@ -923,7 +930,7 @@ function GridSchedule({
     setWarnings([]);
     if (isPara && paraDayErrors.length > 0) { setErrors(paraDayErrors); return; }
     const hours = getEnteredHours();
-    if (hours === null) { setErrors([NON_INTEGER_HOURS_ERROR]); return; }
+    if (hours === null) { setErrors([INVALID_SCHEDULE_ERROR]); return; }
     setOfek1(null); setHoursAtOfek1(null); setExisting(null); setOfek(null);
     setComputing(true);
     try {
@@ -954,7 +961,7 @@ function GridSchedule({
     setErrors([]);
     setWarnings([]);
     const hours = getEnteredHours();
-    if (hours === null) { setErrors([NON_INTEGER_HOURS_ERROR]); return; }
+    if (hours === null) { setErrors([INVALID_SCHEDULE_ERROR]); return; }
     setOfek(null);
     setComputing(true);
     try {
@@ -983,9 +990,8 @@ function GridSchedule({
           : `מערכת שעות לעובד מוגבלת לפי חוק ל-${weeklyCap} שעות שבועיות`,
       );
     if (isPara) errs.push(...paraDayErrors);
-    // פרא: block if hours can't snap to nearest whole/half within ±0.01.
-    if (isPara && paraDayErrors.length === 0 && snapToHalf(paraHours, 0.012) === null)
-      errs.push(NON_INTEGER_HOURS_ERROR);
+    // שעות שאינן עגולות אינן נחסמות כאן: המחשבון נשאל עליהן קודם כמות שהן, ורק
+    // אם גם הן וגם העיגול נכשלו התשובה מהשרת חוסמת (ראה ofekHourAttempts).
 
     // Deputy-1: weekly hours come from the 37.5/40 selector, but at least one day must be filled.
     if (type === 'סגן ראשון') {
@@ -1211,10 +1217,10 @@ function GridSchedule({
             </div>
           )}
 
-          {/* עיגול לאופק — פרא בלבד, טווח ±0.01 */}
+          {/* השעות שייבדקו באופק — פרא בלבד: המדויקות קודם, ואחריהן העיגול (±0.012) */}
           {isPara && paraDayErrors.length === 0 && paraHours > 0 && (() => {
-            const snapped = snapToHalf(paraHours, 0.012);
-            const diff = snapped !== null ? snapped - paraHours : null;
+            const attempts = ofekHourAttempts(paraHours, PARA_SNAP_TOLERANCE);
+            const fallback = attempts.rounded !== null && attempts.rounded !== attempts.raw ? attempts.rounded : null;
             return (
               <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
                 {skippedDeductionMin > 0 && (
@@ -1224,21 +1230,18 @@ function GridSchedule({
                   </div>
                 )}
                 <div className="flex justify-between text-on-surface-variant">
-                  <span>שעות בפועל:</span>
-                  <span className="font-bold">{formatNum(paraHours)}</span>
-                </div>
-                <div className="flex justify-between text-on-surface-variant">
                   <span>שעות לבדיקה באופק:</span>
-                  <span className={`font-bold ${snapped === null ? 'text-error' : 'text-primary'}`}>
-                    {snapped !== null ? formatNum(snapped) : 'לא ניתן לעגל'}
-                  </span>
+                  <span className="font-bold text-primary">{formatNum(attempts.raw)}</span>
                 </div>
-                {diff !== null && Math.abs(diff) > 0.001 && (
+                {fallback !== null && (
                   <div className="flex justify-between text-on-surface-variant">
-                    <span>הפרש:</span>
-                    <span className={`font-bold ${diff > 0 ? 'text-[#1a6b2f]' : 'text-error'}`}>
-                      {diff > 0 ? '+' : ''}{formatNum(diff)}
-                    </span>
+                    <span>אם לא תימצא התאמה, ייבדק גם:</span>
+                    <span className="font-bold">{formatNum(fallback)}</span>
+                  </div>
+                )}
+                {attempts.rounded === null && (
+                  <div className="text-on-surface-variant">
+                    מספר לא עגול - אם לא תימצא התאמה מדויקת במחשבון, לא תתבצע בדיקה חוזרת מעוגלת
                   </div>
                 )}
               </div>
@@ -1847,26 +1850,30 @@ function BellScheduleGrid({
     });
   }
 
-  // snappedHours = weeklyHours מעוגל לשלם/חצי בטווח ±0.3 (מה שנשלח לאופק)
-  const snappedHours = weeklyHours > 0 ? (snapToHalf(weeklyHours, 0.3) ?? null) : null;
-  const snapDiff = snappedHours !== null ? snappedHours - weeklyHours : null;
+  // מה שייבדק במחשבון: weeklyHours כפי שהוא, ורק אם לא תימצא לו שורה - העיגול
+  // לשלם/חצי בטווח ±0.12 (ראה ofekHourAttempts).
+  const hourAttempts = weeklyHours > 0 ? ofekHourAttempts(weeklyHours, TEACHING_SNAP_TOLERANCE) : null;
+  const roundedFallback =
+    hourAttempts && hourAttempts.rounded !== null && hourAttempts.rounded !== hourAttempts.raw
+      ? hourAttempts.rounded
+      : null;
 
   // When the bell-selected hours change, invalidate all ofek results.
   useEffect(() => {
     if (hoursAtOfek1 === null) return;
-    const checked = snappedHours ?? 0;
-    if (Math.abs(checked - hoursAtOfek1) > 0.001) {
+    if (Math.abs(weeklyHours - hoursAtOfek1) > 0.001) {
       setOfek1(null);
       setHoursAtOfek1(null);
       setExisting(null);
       setOfek(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snappedHours]);
+  }, [weeklyHours]);
 
+  /** השעות שנשלחות למחשבון - כפי שנבחרו בלוח הצלצולים, בלי עיגול מקומי. */
   function getBellHours(): number | null {
     if (weeklyHours <= 0) return null;
-    return snappedHours;
+    return weeklyHours;
   }
 
   const morningDay = data.morningDay ?? null;
@@ -1941,7 +1948,7 @@ function BellScheduleGrid({
       const we = youthWeeklyError(weeklyClockHours, youth);
       if (we) errs.push(we);
     }
-    if (weeklyHours > 0 && snappedHours === null) errs.push(NON_INTEGER_HOURS_ERROR);
+    // שעות שאינן עגולות אינן נחסמות כאן: המחשבון נשאל עליהן קודם כמות שהן.
     if (hasBellDayError)
       errs.push(...Object.entries(bellDayErrors).map(([d, e]) => `יום ${DAY_LABELS[d as Day]}: ${e}`));
     return errs;
@@ -2149,23 +2156,22 @@ function BellScheduleGrid({
             </div>
           )}
 
-          {/* עיגול לאופק — מוצג רק כשיש הפרש */}
-          {snappedHours !== null && (
+          {/* השעות שייבדקו באופק: המדויקות קודם, והעיגול (±0.12) רק כנפילה */}
+          {hourAttempts !== null && (
             <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
               <div className="flex justify-between text-on-surface-variant">
-                <span>שעות בפועל:</span>
-                <span className="font-bold">{formatNum(weeklyHours)}</span>
-              </div>
-              <div className="flex justify-between text-on-surface-variant">
                 <span>שעות לבדיקה באופק:</span>
-                <span className="font-bold text-primary">{formatNum(snappedHours)}</span>
+                <span className="font-bold text-primary">{formatNum(hourAttempts.raw)}</span>
               </div>
-              {snapDiff !== null && Math.abs(snapDiff) > 0.001 && (
+              {roundedFallback !== null && (
                 <div className="flex justify-between text-on-surface-variant">
-                  <span>הפרש:</span>
-                  <span className={`font-bold ${snapDiff > 0 ? 'text-[#1a6b2f]' : 'text-error'}`}>
-                    {snapDiff > 0 ? '+' : ''}{formatNum(snapDiff)}
-                  </span>
+                  <span>אם לא תימצא התאמה, ייבדק גם:</span>
+                  <span className="font-bold">{formatNum(roundedFallback)}</span>
+                </div>
+              )}
+              {hourAttempts.rounded === null && (
+                <div className="text-on-surface-variant">
+                  מספר לא עגול - אם לא תימצא התאמה מדויקת במחשבון, לא תתבצע בדיקה חוזרת מעוגלת
                 </div>
               )}
             </div>
