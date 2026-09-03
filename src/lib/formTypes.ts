@@ -243,7 +243,7 @@ export interface RoleData {
   remainingHours: number;
   /** Final layer: from budget if present, else manually chosen. */
   layer: string;
-  /** תת-תפקיד: מוצג רק כששדה "רשימה נפתחת לתפקידי פרא" מסומן בתקציב. חטיבה → מסונן ל"הדרכה...". */
+  /** תת-תפקיד: מוצג רק כששדה "רשימה נפתחת לתפקידי פרא" מסומן בתקציב. הרשימה המלאה בכל שכבה. */
   subRole: string;
   /**
    * אישור אפרת ולנדברג למטפל/ת רגשית או מטפל/ת באומנות. שער UI בלבד (לא נשמר

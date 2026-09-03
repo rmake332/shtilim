@@ -48,10 +48,6 @@ export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
   const needsLandberg = requiresLandbergApproval(subRole);
   const alreadyHandled = ctx.fixStatus === 'טופל';
   const needsConfirm = ctx.suggestion !== '';
-  // אותו כלל כמו ב-RoleStep: בחטיבה מוצעים רק ערכי ההדרכה.
-  const choices = ctx.layer === 'חטיבה'
-    ? CANONICAL_SUB_ROLES.filter((c) => c.includes('הדרכ'))
-    : CANONICAL_SUB_ROLES;
 
   function chooseSubRole(next: string) {
     setSubRole(next);
@@ -205,7 +201,7 @@ export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
                   className="w-full bg-surface rounded-lg h-11 px-3 text-body-md border border-outline-variant"
                 >
                   <option value="">בחר/י תת-תפקיד…</option>
-                  {choices.map((c) => (
+                  {CANONICAL_SUB_ROLES.map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>

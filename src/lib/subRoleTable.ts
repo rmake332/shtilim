@@ -24,6 +24,7 @@ export interface SubRoleRow {
   requiresLicenseNumber: boolean;
   /** מסמכי ההסמכה הנדרשים, כבר ממופים לשדה הקובץ בפועל על העובד. */
   docs: { fieldId: string; label: string }[];
+  /** נשאר בטבלה אך אינו נאכף: הרשימה המלאה מוצגת בכל שכבה. */
   availableInHativa: boolean;
   displayOrder: number;
 }

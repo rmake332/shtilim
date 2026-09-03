@@ -22,8 +22,6 @@ export interface SubRoleFixContext {
   suggestion: string;
   /** האם שורת התקציב של התקן בכלל מציגה תת-תפקיד. */
   showsSubRole: boolean;
-  /** שכבת התקן. חטיבה מצומצמת לערכי הדרכה בלבד, כמו ב-RoleStep. */
-  layer: string;
   existingSubRoleDocs: string[];
   existingLicenseNumber: string;
 }
@@ -105,7 +103,6 @@ export async function loadSubRoleFix(
     fixStatus: strField(pf[POSITION_FIELDS.subRoleFixStatus]),
     suggestion: suggestCanonicalSubRole(originalSubRole) ?? '',
     showsSubRole,
-    layer: strField(pf[POSITION_FIELDS.layer]),
     existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
     existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
   };

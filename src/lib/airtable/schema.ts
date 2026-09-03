@@ -457,7 +457,7 @@ export const SUB_ROLE_FIELDS = {
   requiresLandberg: 'fldzZpJtsOTP5K3TX', // דורש אישור ולנדברג (checkbox)
   requiresLicenseNumber: 'fldoottjXQuAGFNdX', // דורש מספר רישיון (checkbox)
   requiredDocs: 'fld2kQeXUZvVf7ui6', // מסמכים נדרשים (multipleSelects): ראו SUB_ROLE_DOC_CHOICES
-  availableInHativa: 'fldQnVhsfS8BkpPFV', // זמין בחטיבה (checkbox): מחליף את סינון המחרוזת 'הדרכ'
+  availableInHativa: 'fldQnVhsfS8BkpPFV', // זמין בחטיבה (checkbox): לא נאכף יותר, הרשימה המלאה מוצגת בכל שכבה
   displayOrder: 'fldcw3JKMIq60sDiS', // סדר תצוגה (number)
   positionsLink: 'fldHPTZvSiPPkpjyo', // קישור חוזר לתקנים פעילים
 } as const;

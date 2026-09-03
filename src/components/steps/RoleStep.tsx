@@ -206,21 +206,17 @@ export function RoleStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load subRole choices from Airtable — only for roles whose budget row has
-  // "רשימה נפתחת לתפקידי פרא" checked. חטיבה: רק ערכי "הדרכה...". שאר השכבות: כל הערכים.
+  // Load subRole choices from Airtable, only for roles whose budget row has
+  // "רשימה נפתחת לתפקידי פרא" checked. הרשימה המלאה מוצגת בכל השכבות.
   useEffect(() => {
     const role = roles.find((r) => r.id === data.roleId);
     if (!(role?.paraSubRoleList ?? data.paraSubRoleList)) { setSubRoleChoices([]); return; }
     fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${POSITION_FIELDS.subRole}`)
       .then((r) => r.json())
       .then((j) => {
-        // סינון קנוני קודם: השדה באיירטייבל צבר 40 אופציות שנוצרו ע"י typecast
-        // מטקסט חופשי של תשפ"ו, ובלעדיו גם 'הדרכות' ו'הדרכה מהבית' היו נכנסות
-        // לסינון החטיבה למטה. ראו src/lib/subRole.ts.
-        const choices = canonicalSubRoleChoices(j.choices ?? []);
-        setSubRoleChoices(
-          data.layer === 'חטיבה' ? choices.filter((c) => c.includes('הדרכ')) : choices,
-        );
+        // סינון קנוני: השדה באיירטייבל צבר 40 אופציות שנוצרו ע"י typecast מטקסט
+        // חופשי של תשפ"ו. ראו src/lib/subRole.ts.
+        setSubRoleChoices(canonicalSubRoleChoices(j.choices ?? []));
       })
       .catch(() => setSubRoleChoices([]));
   // eslint-disable-next-line react-hooks/exhaustive-deps

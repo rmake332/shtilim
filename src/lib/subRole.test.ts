@@ -187,9 +187,4 @@ describe('סנכרון עם טבלת תת-תפקידים', () => {
     const needLandberg = CANONICAL_SUB_ROLES.filter((r) => requiresLandbergApproval(r));
     expect(needLandberg).toEqual(['מטפל/ת באומנות', 'מטפל/ת רגשית']);
   });
-
-  it('זמינות בחטיבה בקוד תואמת את מה שסומן בטבלה (שני ערכי ההדרכה)', () => {
-    const inHativa = CANONICAL_SUB_ROLES.filter((r) => r.includes('הדרכ'));
-    expect(inHativa).toEqual(['הדרכה קלינאות', 'הדרכה ריפוי בעיסוק']);
-  });
 });
