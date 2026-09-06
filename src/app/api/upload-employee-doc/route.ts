@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
 import { uploadAttachment } from '@/lib/airtable/client';
-import { SUB_ROLE_DOC_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
+import { DOC_FIELDS } from '@/lib/airtable/schema';
+import { subRoleDocFieldIds } from '@/lib/subRoleTable';
 import { MAX_DOC_BYTES } from '@/lib/formTypes';
 import { logger } from '@/lib/logger';
 
 /**
- * Field IDs that may receive an upload — restricted to the sub-role doc fields and the
- * youth/role doc fields (excluding נתוני העסקה, which is filed on the position instead).
+ * אילו שדות מותר להעלות אליהם: מסמכי הנוער/תפקיד (מוגדרים בקוד) יחד עם מסמכי
+ * ההסמכה שטבלת תת-תפקידים מפנה אליהם. החלק השני נשלף בזמן ריצה, כדי שסוג מסמך
+ * חדש שיתווסף בטבלה יתקבל בלי שינוי קוד. נתוני העסקה מוחרג: הוא מתויק על התקן.
  */
-const ALLOWED_FIELD_IDS = new Set<string>([
-  ...SUB_ROLE_DOC_FIELDS.map((d) => d.fieldId),
-  ...DOC_FIELDS.filter((d) => d.key !== 'docEmployment').map((d) => d.fieldId),
-]);
+async function allowedFieldIds(): Promise<Set<string>> {
+  return new Set<string>([
+    ...(await subRoleDocFieldIds()),
+    ...DOC_FIELDS.filter((d) => d.key !== 'docEmployment').map((d) => d.fieldId),
+  ]);
+}
 /** Server-side cap mirroring the client (see MAX_DOC_BYTES — bounded by the host body limit). */
 
 /**
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (!employeeId || !fieldId || !file?.base64) {
     return NextResponse.json({ ok: false, message: 'חסרים נתוני קובץ.' }, { status: 400 });
   }
-  if (!ALLOWED_FIELD_IDS.has(fieldId)) {
+  if (!(await allowedFieldIds()).has(fieldId)) {
     return NextResponse.json({ ok: false, message: 'שדה לא מורשה.' }, { status: 400 });
   }
   // base64 → byte length ≈ len * 3/4; reject oversized payloads early.

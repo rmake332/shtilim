@@ -13,6 +13,7 @@ import {
 import { logger } from '@/lib/logger';
 import { submitForm } from '@/lib/submit';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
+import { subRoleDocFieldIds } from '@/lib/subRoleTable';
 import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { checkLiveBudget } from '@/lib/schedule/budgetCheck';
@@ -113,7 +114,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       youthRulesAcknowledged: true, // pre-acknowledged on original submission
       fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
       twelveHourEmployment: Boolean(empFields[EMPLOYEE_FIELDS.twelveHourEmployment]),
-      existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
+      existingSubRoleDocs: existingSubRoleDocsFromFields(empFields, await subRoleDocFieldIds()),
       existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
       existingYouthDocs: existingYouthDocsFromFields(empFields),
     };

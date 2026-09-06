@@ -10,6 +10,7 @@ import {
   requiresLandbergApproval,
   requiresLicenseNumber,
   subRoleDocsFor,
+  unresolvedDocsFor,
   type SubRoleOption,
 } from '@/lib/subRole';
 import { CATEGORY, DOC_FIELDS } from '@/lib/airtable/schema';
@@ -402,6 +403,9 @@ export function RoleStep({
   const pendingSubRoleDocs = allSubRoleDocs.filter((d) => !existingSubRoleDocs.has(d.fieldId));
   const alreadyOnFileSubRoleDocs = allSubRoleDocs.filter((d) => existingSubRoleDocs.has(d.fieldId));
   const needsLicenseNumber = requiresLicenseNumber(subRoleOptions, data.subRole);
+  // מסמך שסומן בטבלה בלי שדה קובץ תואם ברשימת עובדים: חוסמים ומסבירים במקום
+  // להמשיך בלי דרישת ההסמכה.
+  const unresolvedSubRoleDocs = showSubRole ? unresolvedDocsFor(subRoleOptions, data.subRole) : [];
 
   // Prefill the license number already on file for this employee (once), so it isn't
   // blindly re-requested — the secretary can still edit it.
@@ -490,6 +494,10 @@ export function RoleStep({
     }
     if (showSubRole && !data.subRole) {
       setError('יש לבחור תת-תפקיד');
+      return;
+    }
+    if (unresolvedSubRoleDocs.length) {
+      setError(`למסמכים הבאים אין שדה מתאים ברשימת עובדים: ${unresolvedSubRoleDocs.join(', ')}`);
       return;
     }
     if (showSubRole && requiresLandbergApproval(subRoleOptions, data.subRole)) {

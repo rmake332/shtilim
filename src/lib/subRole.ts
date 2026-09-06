@@ -29,6 +29,14 @@ export interface SubRoleOption {
   requiresLandberg: boolean;
   requiresLicenseNumber: boolean;
   docs: SubRoleDoc[];
+  /**
+   * שמות מסמכים שסומנו בטבלה אך לא נמצא להם שדה קובץ מתאים ברשימת עובדים.
+   *
+   * לא מדלגים עליהם בשקט: מסמך שלא נפתר פירושו דרישת הסמכה שנעלמה מהטופס, וזו
+   * בדיוק סוג התקלה שהפרויקט הזה בא לתקן. הטופס חוסם שמירה ומציג את השמות, כדי
+   * שיהיה ברור שצריך ליישר שם שדה באיירטייבל.
+   */
+  unresolvedDocs: string[];
 }
 
 export function findSubRole(
@@ -66,11 +74,47 @@ export function requiresLicenseNumber(
 }
 
 /**
+ * מסמכים שסומנו לתת-התפקיד בטבלה אך שם הבחירה שלהם אינו תואם לשם שדה קובץ
+ * ברשימת עובדים. רשימה לא ריקה חוסמת שמירה.
+ */
+export function unresolvedDocsFor(
+  options: readonly SubRoleOption[],
+  name: string,
+): string[] {
+  return findSubRole(options, name)?.unresolvedDocs ?? [];
+}
+
+/**
  * נרמול טקסטואלי לפני התאמה: רווחים נגררים/כפולים וגרשיים עבריים (״ ׳) שנכנסו
  * מהקלדה חופשית. "מטפלת רגשית " ו-"מטפלת  רגשית" חייבים להתנהג כמו "מטפלת רגשית".
  */
 function normalize(raw: string): string {
   return raw.replace(/״/g, '"').replace(/׳/g, "'").replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * פותר את שמות המסמכים שסומנו בטבלת תת-תפקידים לשדות הקבצים בפועל ברשימת עובדים,
+ * לפי התאמת שם. זה כל המיפוי, ואין לו עותק קשיח בקוד: הוספת סוג מסמך חדש היא
+ * יצירת שדה קובץ בעובד והוספת בחירה באותו שם.
+ *
+ * ההשוואה מנורמלת (רווחים וגרשיים) כי שם שדה באיירטייבל נוצר בהקלדה חופשית,
+ * ורווח מוביל אינו הבדל אמיתי. שם שלא נפתר מוחזר ב-`unresolvedDocs` ולא מושמט:
+ * דרישת הסמכה שנעלמת בשקט היא בדיוק התקלה שהמערכת הזו באה למנוע.
+ */
+export function resolveSubRoleDocs(
+  choiceNames: readonly string[],
+  attachmentFields: ReadonlyArray<{ id: string; name: string }>,
+): { docs: SubRoleDoc[]; unresolvedDocs: string[] } {
+  const byName = new Map(attachmentFields.map((f) => [normalize(f.name), f]));
+  const docs: SubRoleDoc[] = [];
+  const unresolvedDocs: string[] = [];
+
+  for (const choice of choiceNames) {
+    const match = byName.get(normalize(choice));
+    if (match) docs.push({ fieldId: match.id, label: match.name.trim() });
+    else unresolvedDocs.push(choice);
+  }
+  return { docs, unresolvedDocs };
 }
 
 /**

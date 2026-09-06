@@ -10,6 +10,7 @@ import {
   BREAK_DAY_KEYS,
 } from '@/lib/airtable/schema';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
+import { subRoleDocFieldIds } from '@/lib/subRoleTable';
 import { bellScheduleNumsFrom } from '@/lib/roles';
 import { DEFAULT_CONTRACT_START_DATE, splitFullName, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
@@ -97,7 +98,7 @@ export async function loadPosition(
     youthRulesAcknowledged: true,
     fatherPosition: Boolean(empFields[EMPLOYEE_FIELDS.fatherPosition]),
     twelveHourEmployment: Boolean(empFields[EMPLOYEE_FIELDS.twelveHourEmployment]),
-    existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
+    existingSubRoleDocs: existingSubRoleDocsFromFields(empFields, await subRoleDocFieldIds()),
     existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
     existingYouthDocs: existingYouthDocsFromFields(empFields),
   };

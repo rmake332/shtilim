@@ -1,6 +1,7 @@
 import 'server-only';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
-import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, SUB_ROLE_DOC_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
+import { TABLES, EMPLOYEE_FIELDS, POSITION_FIELDS, DOC_FIELDS } from '@/lib/airtable/schema';
+import { subRoleDocFieldIds } from '@/lib/subRoleTable';
 import { maskTz } from '@/lib/logger';
 import { buildTzExactMatchFormula, cleanedTzField } from '@/lib/airtable/tzMatch';
 
@@ -70,7 +71,7 @@ export interface EmployeeDetails {
   bankBranch: string;
   bankAccountNumber: string;
   vatNumber: string;
-  /** SUB_ROLE_DOC_FIELDS.fieldId values that already have an attachment on file. */
+  /** מזהי שדות מסמכי ההסמכה שכבר מכילים קובץ (לפי טבלת תת-תפקידים). */
   existingSubRoleDocs: string[];
   /** DOC_FIELDS.fieldId values (youth/role documents) that already have an attachment on file. */
   existingYouthDocs: string[];
@@ -92,9 +93,16 @@ function fieldIdsWithAttachment(fieldIds: string[], fields: Record<string, unkno
     });
 }
 
-/** Which SUB_ROLE_DOC_FIELDS.fieldId values already have an attachment in a רשימת עובדים fields object. */
-export function existingSubRoleDocsFromFields(fields: Record<string, unknown>): string[] {
-  return fieldIdsWithAttachment(SUB_ROLE_DOC_FIELDS.map((d) => d.fieldId), fields);
+/**
+ * אילו משדות הקבצים של מסמכי ההסמכה כבר מכילים קובץ ברשומת העובד.
+ * `docFieldIds` מגיע מטבלת תת-תפקידים (subRoleDocFieldIds), ולא מרשימה בקוד,
+ * כדי שסוג מסמך חדש ייבדק אוטומטית.
+ */
+export function existingSubRoleDocsFromFields(
+  fields: Record<string, unknown>,
+  docFieldIds: string[],
+): string[] {
+  return fieldIdsWithAttachment(docFieldIds, fields);
 }
 
 /**
@@ -123,7 +131,7 @@ export async function getEmployeeById(
   const r = records[0];
   if (!r) return null;
   const f = r.fields;
-  const existingSubRoleDocs = existingSubRoleDocsFromFields(f);
+  const existingSubRoleDocs = existingSubRoleDocsFromFields(f, await subRoleDocFieldIds());
   const existingYouthDocs = existingYouthDocsFromFields(f);
   return {
     id: r.id,

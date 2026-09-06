@@ -9,8 +9,9 @@ import {
   requiresLandbergApproval,
   requiresLicenseNumber,
   subRoleDocsFor,
+  unresolvedDocsFor,
 } from '@/lib/subRole';
-import { activeSubRoleOptions, subRoleLinkFor } from '@/lib/subRoleTable';
+import { activeSubRoleOptions, subRoleDocFieldIds, subRoleLinkFor } from '@/lib/subRoleTable';
 import { logger } from '@/lib/logger';
 
 const SUB_ROLE_FIX_HANDLED = 'טופל';
@@ -119,13 +120,30 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       );
     }
 
+    // מסמך שסומן בטבלה אך אין לו שדה קובץ בשם זהה ברשימת עובדים. חוסמים במקום
+    // לדלג: דרישת הסמכה שנעלמת בשקט היא בדיוק התקלה שהמערכת הזו באה לתקן.
+    const unresolved = unresolvedDocsFor(subRoleOptions, chosen);
+    if (unresolved.length) {
+      logger.error(
+        { requestId: gate.requestId, subRole: chosen, unresolved },
+        'fix-subrole blocked: required docs have no matching attachment field',
+      );
+      return NextResponse.json(
+        {
+          ok: false,
+          message: `למסמכים הבאים אין שדה מתאים ברשימת עובדים: ${unresolved.join(', ')}. יש ליישר את שם השדה לשם הבחירה בטבלת תת-תפקידים.`,
+        },
+        { status: 400 },
+      );
+    }
+
     const employeeId = linkIds(pf[POSITION_FIELDS.employeeLink])[0] ?? '';
     const employee = employeeId ? await getRecord(TABLES.employees, employeeId, gate.requestId) : null;
     const employeeFields = employee?.fields ?? {};
 
     // אימות שרת אחרי העלאת המסמכים: לא מסמנים "טופל" כשעדיין חסר מסמך נדרש.
     // זו הנקודה שכל 59 התקנים עם וריאנט כתיב דילגו עליה בשקט.
-    const onFile = new Set(existingSubRoleDocsFromFields(employeeFields));
+    const onFile = new Set(existingSubRoleDocsFromFields(employeeFields, await subRoleDocFieldIds()));
     const missing = subRoleDocsFor(subRoleOptions, chosen).filter((d) => !onFile.has(d.fieldId));
     if (missing.length) {
       return NextResponse.json(

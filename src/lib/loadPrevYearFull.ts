@@ -14,7 +14,7 @@ import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { bellScheduleNumsFrom } from '@/lib/roles';
 import { suggestSubRole } from '@/lib/subRole';
-import { activeSubRoleNames } from '@/lib/subRoleTable';
+import { activeSubRoleNames, subRoleDocFieldIds } from '@/lib/subRoleTable';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 export interface PrevYearFull {
@@ -143,7 +143,7 @@ export async function loadPrevYearFull(
         ageHours: Number(ef[EMPLOYEE_FIELDS.ageHours]) || 0,
         fatherPosition: Boolean(ef[EMPLOYEE_FIELDS.fatherPosition]),
         twelveHourEmployment: Boolean(ef[EMPLOYEE_FIELDS.twelveHourEmployment]),
-        existingSubRoleDocs: existingSubRoleDocsFromFields(ef),
+        existingSubRoleDocs: existingSubRoleDocsFromFields(ef, await subRoleDocFieldIds()),
         existingLicenseNumber: employeeLicenseNumber,
         existingYouthDocs: existingYouthDocsFromFields(ef),
         // childrenUnder14 stays empty → secretary must fill it.

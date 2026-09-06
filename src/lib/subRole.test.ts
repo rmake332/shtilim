@@ -5,55 +5,81 @@ import {
   requiresLandbergApproval,
   requiresLicenseNumber,
   subRoleDocsFor,
+  resolveSubRoleDocs,
   suggestSubRole,
+  unresolvedDocsFor,
   type SubRoleOption,
 } from './subRole';
-import { SUB_ROLE_DOC_FIELDS, SUB_ROLE_DOC_CHOICES } from './airtable/schema';
+
+
+/**
+ * שדות הקבצים (multipleAttachments) ברשימת עובדים, עם השמות כפי שהם באיירטייבל.
+ * המיפוי בזמן ריצה הוא התאמת שם מול השדות האלה, ואין לו עותק קשיח בקוד.
+ */
+const EMPLOYEE_ATTACHMENT_FIELDS = [
+  { id: 'fldC1g9HcVxdpRMpd', name: 'רישיון משרד הבריאות קלינאות' },
+  { id: 'fldwFyObtzxSxVqre', name: 'רישיון משרד הבריאות מרבע' },
+  { id: 'fldabnKaTq0KGh3E5', name: ' אישור תואר שני בטיפול' },
+  { id: 'fldA4idheSGsMDHAm', name: 'אישור 960 שעות סטאז' },
+  { id: 'fld8nuuhTs2er90Rx', name: 'תעודת רישום משרד הרווחה עוס' },
+];
+
+/** קיצור: בונה מסמך פתור לפי שם שדה הקובץ. */
+function doc(fieldName: string) {
+  const { docs, unresolvedDocs } = resolveSubRoleDocs([fieldName], EMPLOYEE_ATTACHMENT_FIELDS);
+  if (unresolvedDocs.length) throw new Error(`לא נפתר: ${fieldName}`);
+  return docs[0];
+}
 
 /**
  * העתק של 8 השורות בטבלת "תת-תפקידים" (tblIEck6VDcpdfLFZ) כפי שהן מוגדרות שם.
  * מקור האמת בזמן ריצה הוא הטבלה; הפיקסצ'ר הזה מתעד מה היא אמורה להכיל, ומאפשר
  * לבדוק את הלוגיקה בלי לפנות לאיירטייבל.
  */
-const DOC = SUB_ROLE_DOC_CHOICES;
 const OPTIONS: SubRoleOption[] = [
   {
     name: 'קלינאות תקשורת',
     requiresLandberg: false,
     requiresLicenseNumber: true,
-    docs: [DOC['רישיון משרד הבריאות (קלינאות תקשורת)']],
+    docs: [doc('רישיון משרד הבריאות קלינאות')],
+    unresolvedDocs: [],
   },
   {
     name: 'ריפוי בעיסוק',
     requiresLandberg: false,
     requiresLicenseNumber: true,
-    docs: [DOC['רישיון משרד הבריאות (ריפוי בעיסוק)']],
+    docs: [doc('רישיון משרד הבריאות מרבע')],
+    unresolvedDocs: [],
   },
   {
     name: 'מטפל/ת באומנות',
     requiresLandberg: true,
     requiresLicenseNumber: false,
-    docs: [DOC['אישור תואר שני בטיפול'], DOC["אישור 960 שעות סטאז'"]],
+    docs: [doc(' אישור תואר שני בטיפול'), doc('אישור 960 שעות סטאז')],
+    unresolvedDocs: [],
   },
-  { name: 'מטפל/ת רגשית', requiresLandberg: true, requiresLicenseNumber: false, docs: [] },
-  { name: 'פיזיו', requiresLandberg: false, requiresLicenseNumber: false, docs: [] },
+  { name: 'מטפל/ת רגשית', requiresLandberg: true, requiresLicenseNumber: false, docs: [], unresolvedDocs: [] },
+  { name: 'פיזיו', requiresLandberg: false, requiresLicenseNumber: false, docs: [], unresolvedDocs: [] },
   {
     name: 'עובד/ת סוציאלי/ת',
     requiresLandberg: false,
     requiresLicenseNumber: false,
-    docs: [DOC['תעודת רישום משרד הרווחה']],
+    docs: [doc('תעודת רישום משרד הרווחה עוס')],
+    unresolvedDocs: [],
   },
   {
     name: 'הדרכה קלינאות',
     requiresLandberg: false,
     requiresLicenseNumber: true,
-    docs: [DOC['רישיון משרד הבריאות (קלינאות תקשורת)']],
+    docs: [doc('רישיון משרד הבריאות קלינאות')],
+    unresolvedDocs: [],
   },
   {
     name: 'הדרכה ריפוי בעיסוק',
     requiresLandberg: false,
     requiresLicenseNumber: true,
-    docs: [DOC['רישיון משרד הבריאות (ריפוי בעיסוק)']],
+    docs: [doc('רישיון משרד הבריאות מרבע')],
+    unresolvedDocs: [],
   },
 ];
 const NAMES = OPTIONS.map((o) => o.name);
@@ -114,7 +140,7 @@ describe('subRoleDocsFor', () => {
   it('מטפל/ת באומנות דורש שני מסמכים', () => {
     expect(subRoleDocsFor(OPTIONS, 'מטפל/ת באומנות').map((d) => d.label)).toEqual([
       'אישור תואר שני בטיפול',
-      "אישור 960 שעות סטאז'",
+      'אישור 960 שעות סטאז',
     ]);
   });
 
@@ -244,22 +270,48 @@ describe('suggestSubRole', () => {
   });
 });
 
-// ── שמירה על סנכרון בין הקוד לטבלת תת-תפקידים ──────────────────────────────
-// מסמכי ההסמכה הם החוליה היחידה שנשארה בקוד, כי הם מפנים לשדות קבצים ממשיים
-// על רשומת העובד. הבדיקות האלה מוודאות שהמיפוי מהטבלה לשדות תואם את מה שהקוד
-// מכיר, כדי ששם בחירה שיתווסף בטבלה בלי שדה מתאים לא יישאר בלי שיבחין בו איש.
-describe('סנכרון עם טבלת תת-תפקידים', () => {
-  it('SUB_ROLE_DOC_CHOICES מכסה בדיוק את שדות המסמכים שהקוד מכיר', () => {
-    const fromChoices = new Set(Object.values(SUB_ROLE_DOC_CHOICES).map((d) => d.fieldId));
-    const fromCode = new Set(SUB_ROLE_DOC_FIELDS.map((d) => d.fieldId));
-    expect([...fromChoices].sort()).toEqual([...fromCode].sort());
+// ── פתרון מסמכים לפי שם שדה הקובץ ──────────────────────────────────────────
+describe('resolveSubRoleDocs', () => {
+  it('מתאים שם בחירה לשדה קובץ ומחזיר את המזהה שלו', () => {
+    const { docs, unresolvedDocs } = resolveSubRoleDocs(
+      ['תעודת רישום משרד הרווחה עוס'],
+      EMPLOYEE_ATTACHMENT_FIELDS,
+    );
+    expect(docs).toEqual([{ fieldId: 'fld8nuuhTs2er90Rx', label: 'תעודת רישום משרד הרווחה עוס' }]);
+    expect(unresolvedDocs).toEqual([]);
   });
 
-  it('כל בחירה ממופה לתווית התצוגה שהמזכירה רואה', () => {
-    for (const { fieldId, label } of Object.values(SUB_ROLE_DOC_CHOICES)) {
-      const def = SUB_ROLE_DOC_FIELDS.find((d) => d.fieldId === fieldId);
-      expect(def, `אין הגדרה בקוד לשדה ${fieldId}`).toBeDefined();
-      expect(label).toBe(def!.label);
-    }
+  it('רווח מוביל וגרש עברי אינם מונעים התאמה', () => {
+    // שם השדה באיירטייבל הוא ' אישור תואר שני בטיפול' עם רווח מוביל
+    const { docs } = resolveSubRoleDocs(['אישור תואר שני בטיפול'], EMPLOYEE_ATTACHMENT_FIELDS);
+    expect(docs.map((d) => d.fieldId)).toEqual(['fldabnKaTq0KGh3E5']);
+    expect(docs[0].label).toBe('אישור תואר שני בטיפול'); // התווית מוצגת ללא הרווח
+  });
+
+  it('שם שאין לו שדה מוחזר כלא-פתור ולא מושמט בשקט', () => {
+    const { docs, unresolvedDocs } = resolveSubRoleDocs(
+      ['תעודת רישום משרד הרווחה עוס', 'אישור שאין לו שדה'],
+      EMPLOYEE_ATTACHMENT_FIELDS,
+    );
+    expect(docs).toHaveLength(1);
+    expect(unresolvedDocs).toEqual(['אישור שאין לו שדה']);
+  });
+
+  it('סוג מסמך חדש נפתר בלי שינוי קוד', () => {
+    // כל מה שנדרש: שדה קובץ חדש בעובד ובחירה באותו שם בטבלת תת-תפקידים
+    const withNew = [...EMPLOYEE_ATTACHMENT_FIELDS, { id: 'fldNEW0000000000', name: 'אישור חדש' }];
+    const { docs, unresolvedDocs } = resolveSubRoleDocs(['אישור חדש'], withNew);
+    expect(docs).toEqual([{ fieldId: 'fldNEW0000000000', label: 'אישור חדש' }]);
+    expect(unresolvedDocs).toEqual([]);
+  });
+});
+
+describe('unresolvedDocsFor', () => {
+  it('חושף מסמך שלא נפתר, כדי שהשמירה תיחסם במקום לדלג', () => {
+    const broken: SubRoleOption[] = [
+      { name: 'תת-תפקיד חדש', requiresLandberg: false, requiresLicenseNumber: false, docs: [], unresolvedDocs: ['אישור שאין לו שדה'] },
+    ];
+    expect(unresolvedDocsFor(broken, 'תת-תפקיד חדש')).toEqual(['אישור שאין לו שדה']);
+    expect(unresolvedDocsFor(OPTIONS, 'קלינאות תקשורת')).toEqual([]);
   });
 });

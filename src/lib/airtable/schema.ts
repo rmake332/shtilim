@@ -101,45 +101,16 @@ export const EMPLOYEE_FIELDS = {
 } as const;
 
 /**
- * Professional documents required for specific תת-תפקיד (subRole) values — filed on the
- * EMPLOYEE record (רשימת עובדים), reused across positions/years, not re-requested once on file.
- * `requiresLicenseNumber`: also prompt for EMPLOYEE_FIELDS.licenseNumber (shared by both
- * license-requiring sub-roles).
+ * מסמכי הסמכה לפי תת-תפקיד אינם מוגדרים כאן יותר.
+ *
+ * הם נקבעים בשדה "מסמכים נדרשים" בטבלת תת-תפקידים, ושם הבחירה שם חייב להיות
+ * זהה לשם שדה הקובץ (multipleAttachments) בטבלת רשימת עובדים. הפתרון נעשה
+ * בזמן ריצה ב-src/lib/subRoleTable.ts מול ה-Meta API, כדי שהוספת סוג מסמך
+ * חדש תהיה יצירת שדה קובץ בעובד והוספת בחירה באותו שם, בלי שינוי קוד.
+ *
+ * חמשת שדות הקבצים שהיו מקודדים כאן (docHealthLicenseClinic ואילך) עדיין
+ * מופיעים ב-EMPLOYEE_FIELDS למעלה, אבל אף לוגיקה לא מתייחסת אליהם ישירות.
  */
-export const SUB_ROLE_DOC_FIELDS = [
-  {
-    subRole: 'קלינאות תקשורת',
-    fieldId: EMPLOYEE_FIELDS.docHealthLicenseClinic,
-    label: 'רישיון משרד הבריאות',
-    requiresLicenseNumber: true,
-  },
-  {
-    subRole: 'ריפוי בעיסוק',
-    fieldId: EMPLOYEE_FIELDS.docHealthLicenseOT,
-    label: 'רישיון משרד הבריאות',
-    requiresLicenseNumber: true,
-  },
-  {
-    subRole: 'מטפל/ת באומנות',
-    fieldId: EMPLOYEE_FIELDS.docArtTherapyMasters,
-    label: 'אישור תואר שני בטיפול',
-    requiresLicenseNumber: false,
-  },
-  {
-    subRole: 'מטפל/ת באומנות',
-    fieldId: EMPLOYEE_FIELDS.docArtTherapyInternship,
-    label: "אישור 960 שעות סטאז'",
-    requiresLicenseNumber: false,
-  },
-  {
-    subRole: 'עובדת סוציאלית',
-    fieldId: EMPLOYEE_FIELDS.docSocialWorkerReg,
-    label: 'תעודת רישום משרד הרווחה',
-    requiresLicenseNumber: false,
-  },
-] as const;
-
-export type SubRoleDocDef = (typeof SUB_ROLE_DOC_FIELDS)[number];
 
 /** תקנים פעילים fields */
 export const POSITION_FIELDS = {
@@ -456,7 +427,7 @@ export const SUB_ROLE_FIELDS = {
   active: 'fld351rhXriWm9WEg', // פעיל (checkbox): כבוי מסתיר מהתפריט בלי למחוק
   requiresLandberg: 'fldzZpJtsOTP5K3TX', // דורש אישור ולנדברג (checkbox)
   requiresLicenseNumber: 'fldoottjXQuAGFNdX', // דורש מספר רישיון (checkbox)
-  requiredDocs: 'fld2kQeXUZvVf7ui6', // מסמכים נדרשים (multipleSelects): ראו SUB_ROLE_DOC_CHOICES
+  requiredDocs: 'fld2kQeXUZvVf7ui6', // מסמכים נדרשים (multipleSelects): שם הבחירה = שם שדה הקובץ ברשימת עובדים
   availableInHativa: 'fldQnVhsfS8BkpPFV', // זמין בחטיבה (checkbox): לא נאכף יותר, הרשימה המלאה מוצגת בכל שכבה
   displayOrder: 'fldcw3JKMIq60sDiS', // סדר תצוגה (number)
   positionsLink: 'fldHPTZvSiPPkpjyo', // קישור חוזר לתקנים פעילים

@@ -3,7 +3,7 @@ import { getRecord, listRecords, escapeFormulaValue } from '@/lib/airtable/clien
 import { TABLES, POSITION_FIELDS, EMPLOYEE_FIELDS, BUDGET_FIELDS, MOSAD_FIELDS } from '@/lib/airtable/schema';
 import { existingSubRoleDocsFromFields } from '@/lib/employees';
 import { suggestSubRole, type SubRoleOption } from '@/lib/subRole';
-import { activeSubRoleOptions } from '@/lib/subRoleTable';
+import { activeSubRoleOptions, subRoleDocFieldIds } from '@/lib/subRoleTable';
 
 export interface SubRoleFixContext {
   /** טוקן המוסד, נגזר בשרת מהתקן עצמו ולעולם לא מגיע מה-URL. */
@@ -108,7 +108,7 @@ export async function loadSubRoleFix(
     suggestion: suggestSubRole(originalSubRole, subRoleOptions.map((o) => o.name)) ?? '',
     subRoleOptions,
     showsSubRole,
-    existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
+    existingSubRoleDocs: existingSubRoleDocsFromFields(empFields, await subRoleDocFieldIds()),
     existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),
   };
 }

@@ -12,6 +12,7 @@ import {
   requiresLandbergApproval,
   requiresLicenseNumber,
   subRoleDocsFor,
+  unresolvedDocsFor,
 } from '@/lib/subRole';
 
 /**
@@ -46,6 +47,9 @@ export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
   const onFileDocs = allDocs.filter((d) => onFile.has(d.fieldId));
   const needsLicense = requiresLicenseNumber(options, subRole);
   const needsLandberg = requiresLandbergApproval(options, subRole);
+  // מסמך שסומן בטבלה אך אין לו שדה קובץ בשם זהה ברשימת עובדים. חוסמים ומסבירים,
+  // כי דרישת הסמכה שנעלמת בשקט היא בדיוק התקלה שהמערכת הזו באה למנוע.
+  const unresolvedDocs = unresolvedDocsFor(options, subRole);
   const alreadyHandled = ctx.fixStatus === 'טופל';
   const needsConfirm = ctx.suggestion !== '';
 
@@ -62,6 +66,11 @@ export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
 
     if (ctx.showsSubRole) {
       if (!subRole) return setError('יש לבחור תת-תפקיד.');
+      if (unresolvedDocs.length) {
+        return setError(
+          `למסמכים הבאים אין שדה מתאים ברשימת עובדים: ${unresolvedDocs.join(', ')}.`,
+        );
+      }
       if (needsConfirm && !confirmed) return setError('יש לאשר את הבחירה לפני השמירה.');
       if (needsLandberg && landberg !== 'כן') {
         return setError(
@@ -268,6 +277,19 @@ export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
                 </div>
               )}
 
+              {unresolvedDocs.length > 0 && (
+                <div className="bg-error-container/30 border border-error/40 rounded-lg p-4 text-right">
+                  <p className="text-label-lg font-bold text-error mb-1">
+                    לא ניתן לשמור: חסרה הגדרה באיירטייבל
+                  </p>
+                  <p className="text-body-md text-on-surface-variant">
+                    למסמכים <strong>{unresolvedDocs.join(", ")}</strong> אין שדה קובץ בשם זהה
+                    בטבלת רשימת עובדים. יש ליישר את שם השדה לשם הבחירה בשדה &quot;מסמכים
+                    נדרשים&quot; בטבלת תת-תפקידים.
+                  </p>
+                </div>
+              )}
+
               {onFileDocs.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {onFileDocs.map((d) => (
@@ -304,7 +326,7 @@ export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
               <div className="flex items-center gap-3 pt-1">
                 <button
                   onClick={save}
-                  disabled={saving || !subRole || (needsConfirm && !confirmed)}
+                  disabled={saving || !subRole || unresolvedDocs.length > 0 || (needsConfirm && !confirmed)}
                   className="px-5 py-2.5 rounded-lg bg-primary text-on-primary text-label-lg font-bold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {saving ? 'שומר…' : 'שמירה וסימון כטופל'}
