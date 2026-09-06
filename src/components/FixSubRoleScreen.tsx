@@ -9,7 +9,6 @@ import { DocUpload } from '@/components/steps/DocUpload';
 import type { UploadedDoc } from '@/lib/formTypes';
 import type { SubRoleFixContext } from '@/lib/loadSubRoleFix';
 import {
-  CANONICAL_SUB_ROLES,
   requiresLandbergApproval,
   requiresLicenseNumber,
   subRoleDocsFor,
@@ -41,11 +40,12 @@ export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
   const [done, setDone] = useState(false);
 
   const onFile = new Set(ctx.existingSubRoleDocs);
-  const allDocs = subRoleDocsFor(subRole);
+  const options = ctx.subRoleOptions;
+  const allDocs = subRoleDocsFor(options, subRole);
   const pendingDocs = allDocs.filter((d) => !onFile.has(d.fieldId));
   const onFileDocs = allDocs.filter((d) => onFile.has(d.fieldId));
-  const needsLicense = requiresLicenseNumber(subRole);
-  const needsLandberg = requiresLandbergApproval(subRole);
+  const needsLicense = requiresLicenseNumber(options, subRole);
+  const needsLandberg = requiresLandbergApproval(options, subRole);
   const alreadyHandled = ctx.fixStatus === 'טופל';
   const needsConfirm = ctx.suggestion !== '';
 
@@ -201,8 +201,8 @@ export function FixSubRoleScreen({ ctx }: { ctx: SubRoleFixContext }) {
                   className="w-full bg-surface rounded-lg h-11 px-3 text-body-md border border-outline-variant"
                 >
                   <option value="">בחר/י תת-תפקיד…</option>
-                  {CANONICAL_SUB_ROLES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {options.map((o) => (
+                    <option key={o.name} value={o.name}>{o.name}</option>
                   ))}
                 </select>
                 <p className="text-label-sm text-on-surface-variant mt-2 text-right">

@@ -1,61 +1,68 @@
-import { SUB_ROLE_DOC_FIELDS, type SubRoleDocDef } from '@/lib/airtable/schema';
-
 /**
- * תת-תפקיד: המקור היחיד לרשימה הקנונית, לנרמול ערכים שנקלטו כטקסט חופשי,
- * ולתנאים הנגזרים מכל ערך (אישור ולנדברג, מסמכי הסמכה, מספר רישיון).
+ * תת-תפקיד: הצורה המשותפת לשרת וללקוח, והנרמול של ערכים שנקלטו כטקסט חופשי.
  *
- * למה הקובץ הזה קיים: השדה תת-תפקיד בטבלת תשפ"ו הוא טקסט חופשי, והקוד העתיק
- * ממנו ערכים כמו שהם. `typecast: true` באיירטייבל יוצר מכל מחרוזת שאינה מוכרת
- * אופציה חדשה בשדה, ולכן השדה תפח מ-8 ל-48 אופציות, וכל אופציה חדשה חזרה
- * לתפריט הנפתח דרך ה-Meta API. מכיוון שכל ההשוואות בקוד הן התאמת מחרוזת
- * מדויקת, וריאנט כמו "מטפלת רגשית" (במקום "מטפל/ת רגשית") עקף בשקט את שער
- * אישור ולנדברג ואת דרישת מסמכי ההסמכה.
+ * **מקור הרשימה הוא טבלת "תת-תפקידים" באיירטייבל** (`tblIEck6VDcpdfLFZ`), ולא
+ * רשימה קשיחה כאן. כל פונקציה בקובץ הזה מקבלת את האופציות כפרמטר, כדי שגם
+ * רכיבי לקוח (שאינם יכולים לקרוא לאיירטייבל) יעבדו על אותם נתונים בדיוק:
+ * השרת שולף אותם דרך `src/lib/subRoleTable.ts`, והלקוח מקבל אותם דרך
+ * `GET /api/sub-roles` או כ-prop.
  *
- * כל צרכן פונה לפונקציות כאן ולא למחרוזות ישירות, כדי שהחלפת מקור הרשימה
- * (למשל מעבר לטבלה נפרדת באיירטייבל) תהיה שינוי בתוך הקובץ הזה בלבד.
+ * למה זה חשוב: השדה תת-תפקיד בטבלת תשפ"ו הוא טקסט חופשי, והקוד העתיק ממנו
+ * ערכים כמו שהם. `typecast: true` באיירטייבל יוצר מכל מחרוזת שאינה מוכרת אופציה
+ * חדשה, ולכן השדה תפח מ-8 ל-48 אופציות. מכיוון שכל ההשוואות בקוד הן התאמת
+ * מחרוזת מדויקת, וריאנט כמו "מטפלת רגשית" (במקום "מטפל/ת רגשית") עקף בשקט את
+ * שער אישור ולנדברג ואת דרישת מסמכי ההסמכה.
  */
 
-/** 8 הערכים הקנוניים. כל ערך אחר בשדה נוצר בטעות ע"י typecast. */
-export const CANONICAL_SUB_ROLES = [
-  'קלינאות תקשורת',
-  'ריפוי בעיסוק',
-  'מטפל/ת באומנות',
-  'מטפל/ת רגשית',
-  'פיזיו',
-  'עובדת סוציאלית',
-  'הדרכה קלינאות',
-  'הדרכה ריפוי בעיסוק',
-] as const;
-
-export type CanonicalSubRole = (typeof CANONICAL_SUB_ROLES)[number];
-
-const CANONICAL_SET: ReadonlySet<string> = new Set(CANONICAL_SUB_ROLES);
-
-export function isCanonicalSubRole(value: string): value is CanonicalSubRole {
-  return CANONICAL_SET.has(value);
+/** מסמך הסמכה נדרש, כבר ממופה לשדה הקובץ בפועל על העובד. */
+export interface SubRoleDoc {
+  fieldId: string;
+  label: string;
 }
 
-/** מסנן רשימת אופציות חיה מה-Meta API לערכים הקנוניים בלבד, בסדר המקורי. */
-export function canonicalSubRoleChoices(choices: readonly string[]): string[] {
-  return choices.filter((c) => isCanonicalSubRole(c));
+/**
+ * תת-תפקיד אחד כפי שהוא מוגדר בטבלה. זו הצורה שעוברת לרכיבי הלקוח, ולכן היא
+ * מכילה רק את מה שהם צריכים כדי להציג ולוודא (בלי מזהה רשומה או סדר תצוגה).
+ */
+export interface SubRoleOption {
+  name: string;
+  requiresLandberg: boolean;
+  requiresLicenseNumber: boolean;
+  docs: SubRoleDoc[];
 }
 
-/** תת-תפקיד שדורש אישור אפרת ולנדברג לפני המשך. */
-const LANDBERG_SUB_ROLES: ReadonlySet<string> = new Set(['מטפל/ת רגשית', 'מטפל/ת באומנות']);
+export function findSubRole(
+  options: readonly SubRoleOption[],
+  name: string,
+): SubRoleOption | undefined {
+  if (!name) return undefined;
+  return options.find((o) => o.name === name);
+}
 
-export function requiresLandbergApproval(subRole: string): boolean {
-  return LANDBERG_SUB_ROLES.has(subRole);
+/** האם הערך מוכר בטבלה. מחליף את בדיקת הרשימה הקשיחה שהייתה כאן. */
+export function isKnownSubRole(options: readonly SubRoleOption[], name: string): boolean {
+  return Boolean(findSubRole(options, name));
 }
 
 /** מסמכי הסמכה נדרשים לתת-תפקיד (מערך ריק כשאין). מתויקים על העובד, לא על התקן. */
-export function subRoleDocsFor(subRole: string): readonly SubRoleDocDef[] {
-  if (!subRole) return [];
-  return SUB_ROLE_DOC_FIELDS.filter((d) => d.subRole === subRole);
+export function subRoleDocsFor(options: readonly SubRoleOption[], name: string): SubRoleDoc[] {
+  return findSubRole(options, name)?.docs ?? [];
 }
 
-/** האם תת-התפקיד דורש גם מספר רישיון (נגזר ממסמכי ההסמכה שלו). */
-export function requiresLicenseNumber(subRole: string): boolean {
-  return subRoleDocsFor(subRole).some((d) => d.requiresLicenseNumber);
+/** תת-תפקיד שדורש אישור אפרת ולנדברג לפני המשך. */
+export function requiresLandbergApproval(
+  options: readonly SubRoleOption[],
+  name: string,
+): boolean {
+  return findSubRole(options, name)?.requiresLandberg ?? false;
+}
+
+/** האם תת-התפקיד דורש גם מספר רישיון. */
+export function requiresLicenseNumber(
+  options: readonly SubRoleOption[],
+  name: string,
+): boolean {
+  return findSubRole(options, name)?.requiresLicenseNumber ?? false;
 }
 
 /**
@@ -63,41 +70,58 @@ export function requiresLicenseNumber(subRole: string): boolean {
  * מהקלדה חופשית. "מטפלת רגשית " ו-"מטפלת  רגשית" חייבים להתנהג כמו "מטפלת רגשית".
  */
 function normalize(raw: string): string {
-  return raw.replace(/\u05f4/g, '"').replace(/\u05f3/g, "'").replace(/\s+/g, ' ').trim();
+  return raw.replace(/״/g, '"').replace(/׳/g, "'").replace(/\s+/g, ' ').trim();
 }
 
 /**
- * מפת ההתאמה מטקסט חופשי לערך קנוני.
+ * כללי ההתאמה מטקסט חופשי למקצוע. כל כלל מזהה מקצוע אחד, ומופעל גם על הקלט
+ * הגולמי וגם על שמות תת-התפקידים שבטבלה, כדי למצוא לאיזה מהם הקלט מתכוון.
+ *
+ * למה לא לרשום שם יעד קבוע לכל כלל: שם בטבלה הוא נתון שאפשר לערוך. כשהערך
+ * "עובדת סוציאלית" שונה ל-"עובד/ת סוציאלי/ת", יעד קבוע היה מפסיק להתאים בשקט
+ * וכל וריאנטי העו"ס היו נפתחים ריקים. התאמה לפי אותו כלל שורדת שינוי שם.
  *
  * הסדר קריטי: "פסיכותרפיסט" מכיל את המחרוזת "תרפי", ולכן כלל האומנות היה בולע
  * אותו אלמלא הכלל הרגשי מקדים אותו. מאותה סיבה אין להשתמש ב-"תרפי" כטוקן בפני
  * עצמו, אלא רק בצורות המפורשות (אומנות / אמנות / דרמה / מוזיקה).
  */
-const SUGGESTION_RULES: readonly [RegExp, CanonicalSubRole][] = [
-  [/רגש|ריגש|פסיכותרפ/, 'מטפל/ת רגשית'],
-  [/קלינא/, 'קלינאות תקשורת'],
-  [/מרפא|ריפוי בעיסוק|בעסוק/, 'ריפוי בעיסוק'],
-  [/פיזיו/, 'פיזיו'],
-  [/אומנות|אמנות|דרמה|מוזיקה/, 'מטפל/ת באומנות'],
-  [/סוציאל|סוצאיל|עו"ס|^עוס$/, 'עובדת סוציאלית'],
+const SUGGESTION_RULES: readonly RegExp[] = [
+  /רגש|ריגש|פסיכותרפ/,
+  /קלינא/,
+  /מרפא|ריפוי בעיסוק|בעסוק/,
+  /פיזיו/,
+  /אומנות|אמנות|דרמה|מוזיקה/,
+  /סוציאל|סוצאיל|עו"ס|^עוס$/,
 ];
 
 /**
- * מציע ערך קנוני לטקסט חופשי שנקלט משנה קודמת, או `null` כשאין ודאות.
+ * מציע שם תת-תפקיד לטקסט חופשי שנקלט משנה קודמת, או `null` כשאין ודאות.
  *
  * `null` הוא תשובה לגיטימית ומכוונת: תפקידי הדרכה, פדגוגיה וריכוז ("הדרכות",
  * "מדריכה רפ״ע", "פדגוגית", "רכזת טיפול", "מנהלת טיפולית") אינם מתאימים לאף
- * אחד מ-8 הערכים, ולכן התפריט נפתח ריק והמזכירה בוחרת בעצמה.
+ * ערך בטבלה, ולכן התפריט נפתח ריק והמזכירה בוחרת בעצמה.
+ *
+ * `names` הם השמות הקיימים בטבלה, וההצעה היא תמיד אחד מהם, כדי שערך שהוצע
+ * יהיה תמיד ערך שאפשר לשמור.
  */
-export function suggestCanonicalSubRole(raw: string): CanonicalSubRole | null {
+export function suggestSubRole(raw: string, names: readonly string[]): string | null {
   const value = normalize(raw ?? '');
   if (!value) return null;
-  if (isCanonicalSubRole(value)) return value;
 
-  // תפקידי הדרכה: יש שני ערכים קנוניים נפרדים ("הדרכה קלינאות" / "הדרכה ריפוי
-  // בעיסוק"), ואי אפשר להסיק מ-"הדרכות" באיזה מהם מדובר. זה חייב עין אנושית,
-  // ולכן נעצרים כאן לפני שכלל הקלינאות/ריפוי היה בולע את הערך לתוך הטיפול עצמו.
+  if (names.includes(value)) return value;
+
+  // תפקידי הדרכה: יש כמה ערכי הדרכה נפרדים בטבלה, ואי אפשר להסיק מ-"הדרכות"
+  // באיזה מהם מדובר. זה חייב עין אנושית, ולכן נעצרים כאן לפני שכלל
+  // הקלינאות/ריפוי היה בולע את הערך לתוך הטיפול עצמו.
   if (value.includes('הדרכ')) return null;
 
-  return SUGGESTION_RULES.find(([re]) => re.test(value))?.[1] ?? null;
+  const rule = SUGGESTION_RULES.find((re) => re.test(value));
+  if (!rule) return null;
+
+  // היעד נבחר מבין שמות הטבלה לפי אותו כלל. שמות הדרכה מוחרגים: קלט שאינו
+  // הדרכה מתכוון לטיפול עצמו, ובלעדי ההחרגה "קלינאית תקשורת" היה מתלבט בין
+  // "קלינאות תקשורת" ל-"הדרכה קלינאות". יותר ממועמד אחד מחזיר null, כי ניחוש
+  // בין שני מקצועות גרוע מתפריט ריק.
+  const candidates = names.filter((n) => !n.includes('הדרכ') && rule.test(n));
+  return candidates.length === 1 ? candidates[0] : null;
 }

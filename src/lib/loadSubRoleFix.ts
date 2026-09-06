@@ -2,7 +2,8 @@ import 'server-only';
 import { getRecord, listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, POSITION_FIELDS, EMPLOYEE_FIELDS, BUDGET_FIELDS, MOSAD_FIELDS } from '@/lib/airtable/schema';
 import { existingSubRoleDocsFromFields } from '@/lib/employees';
-import { suggestCanonicalSubRole } from '@/lib/subRole';
+import { suggestSubRole, type SubRoleOption } from '@/lib/subRole';
+import { activeSubRoleOptions } from '@/lib/subRoleTable';
 
 export interface SubRoleFixContext {
   /** טוקן המוסד, נגזר בשרת מהתקן עצמו ולעולם לא מגיע מה-URL. */
@@ -18,8 +19,10 @@ export interface SubRoleFixContext {
   currentSubRole: string;
   /** 'דורש תיקון' / 'טופל' / '' */
   fixStatus: string;
-  /** הצעה קנונית, או '' כשאין ודאות ואז התפריט נפתח ריק. */
+  /** הצעה מטבלת תת-תפקידים, או '' כשאין ודאות ואז התפריט נפתח ריק. */
   suggestion: string;
+  /** האופציות הפעילות מהטבלה, כדי שהרכיב לא יצטרך סיבוב נוסף לשרת. */
+  subRoleOptions: SubRoleOption[];
   /** האם שורת התקציב של התקן בכלל מציגה תת-תפקיד. */
   showsSubRole: boolean;
   existingSubRoleDocs: string[];
@@ -86,6 +89,7 @@ export async function loadSubRoleFix(
   const budget = roleId ? await getRecord(TABLES.budget, roleId, requestId) : null;
   const showsSubRole = Boolean(budget?.fields[BUDGET_FIELDS.paraSubRoleList]);
 
+  const subRoleOptions = await activeSubRoleOptions();
   const currentSubRole = strField(pf[POSITION_FIELDS.subRole]);
   // המקורי הוא מקור האמת להצעה. הוא נכתב פעם אחת ע"י סקריפט הסימון ולא נדרס,
   // ולכן ההצעה נשארת יציבה גם אחרי שמישהו כבר שינה את תת-התפקיד עצמו.
@@ -101,7 +105,8 @@ export async function loadSubRoleFix(
     originalSubRole,
     currentSubRole,
     fixStatus: strField(pf[POSITION_FIELDS.subRoleFixStatus]),
-    suggestion: suggestCanonicalSubRole(originalSubRole) ?? '',
+    suggestion: suggestSubRole(originalSubRole, subRoleOptions.map((o) => o.name)) ?? '',
+    subRoleOptions,
     showsSubRole,
     existingSubRoleDocs: existingSubRoleDocsFromFields(empFields),
     existingLicenseNumber: strField(empFields[EMPLOYEE_FIELDS.licenseNumber]),

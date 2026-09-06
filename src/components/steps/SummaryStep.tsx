@@ -9,7 +9,7 @@ import { maskTzClient } from '@/lib/maskClient';
 import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
 import { ofekCategoryFor, computeUtilizedHours } from '@/lib/schedule/ofek';
 import { DOC_FIELDS, UPDATE_REASON_OPTIONS } from '@/lib/airtable/schema';
-import { subRoleDocsFor } from '@/lib/subRole';
+import { subRoleDocsFor, type SubRoleOption } from '@/lib/subRole';
 import { uploadOneDoc } from '@/lib/uploadDocs';
 
 export function SummaryStep({
@@ -44,6 +44,17 @@ export function SummaryStep({
   const [submitting, setSubmitting] = useState(false);
   const [uploadNote, setUploadNote] = useState('');
   const [result, setResult] = useState<{ ok: boolean; message: string; editUrl?: string } | null>(null);
+  const [subRoleOptions, setSubRoleOptions] = useState<SubRoleOption[]>([]);
+
+  // מסמכי ההסמכה של תת-התפקיד מוגדרים בטבלת "תת-תפקידים" באיירטייבל. נטענים
+  // כאן כדי לדעת אילו קבצים להעלות ואילו להציג כמצורפים, באותה רשימה שהוצגה
+  // ב-RoleStep ושנאכפת בשרת.
+  useEffect(() => {
+    fetch(`/api/sub-roles?token=${encodeURIComponent(token)}`)
+      .then((r) => r.json())
+      .then((j) => setSubRoleOptions(j.subRoles ?? []))
+      .catch(() => setSubRoleOptions([]));
+  }, [token]);
 
   // Edit mode: default "תאריך עדכון מערכת" to today if it wasn't already set.
   useEffect(() => {
@@ -67,6 +78,7 @@ export function SummaryStep({
    * מה שכן נשאר הוא מסמך שהעלאתו נכשלה קודם - וזהו הניסיון החוזר שלו.
    */
   function pendingUploads(positionId?: string, employeeId?: string) {
+    // subRoleOptions נטענות מטבלת תת-תפקידים; ראו ה-useEffect למעלה.
     const out: { label: string; url: string; body: Record<string, unknown> }[] = [];
 
     for (const d of DOC_FIELDS) {
@@ -82,7 +94,7 @@ export function SummaryStep({
     }
 
     if (employeeId) {
-      for (const d of subRoleDocsFor(role.subRole)) {
+      for (const d of subRoleDocsFor(subRoleOptions, role.subRole)) {
         const file = docs[d.fieldId];
         if (!file) continue;
         out.push({ label: d.label, url: '/api/upload-employee-doc', body: { token, employeeId, fieldId: d.fieldId, file } });
@@ -266,7 +278,7 @@ export function SummaryStep({
               {role.contractEndDate && <Item label="תאריך סיום מילוי המקום" value={role.contractEndDate} />}
             </Grid>
             {(() => {
-              const attached = subRoleDocsFor(role.subRole).filter((d) => docs[d.fieldId]);
+              const attached = subRoleDocsFor(subRoleOptions, role.subRole).filter((d) => docs[d.fieldId]);
               if (attached.length === 0) return null;
               return (
                 <div className="mt-3 border-t border-outline-variant pt-3">

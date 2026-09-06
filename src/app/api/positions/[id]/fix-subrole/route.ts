@@ -5,12 +5,12 @@ import { getRecord, updateRecord } from '@/lib/airtable/client';
 import { TABLES, POSITION_FIELDS, EMPLOYEE_FIELDS, BUDGET_FIELDS } from '@/lib/airtable/schema';
 import { existingSubRoleDocsFromFields } from '@/lib/employees';
 import {
-  isCanonicalSubRole,
+  isKnownSubRole,
   requiresLandbergApproval,
   requiresLicenseNumber,
   subRoleDocsFor,
 } from '@/lib/subRole';
-import { subRoleLinkFor } from '@/lib/subRoleTable';
+import { activeSubRoleOptions, subRoleLinkFor } from '@/lib/subRoleTable';
 import { logger } from '@/lib/logger';
 
 const SUB_ROLE_FIX_HANDLED = 'טופל';
@@ -106,10 +106,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ ok: true, cleared: true });
     }
 
-    if (!isCanonicalSubRole(chosen)) {
+    // הוולידציה והתנאים מגיעים מטבלת תת-תפקידים, אותה רשימה בדיוק שהתפריט
+    // מציג. כך ערך שנוסף כשורה בטבלה נשמר בלי שינוי קוד, וערך שהוסר נחסם.
+    const subRoleOptions = await activeSubRoleOptions();
+    if (!isKnownSubRole(subRoleOptions, chosen)) {
       return NextResponse.json({ ok: false, message: 'יש לבחור תת-תפקיד מהרשימה.' }, { status: 400 });
     }
-    if (requiresLandbergApproval(chosen) && landbergApproval !== 'כן') {
+    if (requiresLandbergApproval(subRoleOptions, chosen) && landbergApproval !== 'כן') {
       return NextResponse.json(
         { ok: false, message: 'לא ניתן לשמור ללא אישור של אפרת ולנדברג.' },
         { status: 400 },
@@ -123,7 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // אימות שרת אחרי העלאת המסמכים: לא מסמנים "טופל" כשעדיין חסר מסמך נדרש.
     // זו הנקודה שכל 59 התקנים עם וריאנט כתיב דילגו עליה בשקט.
     const onFile = new Set(existingSubRoleDocsFromFields(employeeFields));
-    const missing = subRoleDocsFor(chosen).filter((d) => !onFile.has(d.fieldId));
+    const missing = subRoleDocsFor(subRoleOptions, chosen).filter((d) => !onFile.has(d.fieldId));
     if (missing.length) {
       return NextResponse.json(
         { ok: false, message: `חסרים מסמכים: ${missing.map((d) => d.label).join(', ')}.` },
@@ -132,7 +135,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const license = (licenseNumber ?? '').trim();
-    if (requiresLicenseNumber(chosen)) {
+    if (requiresLicenseNumber(subRoleOptions, chosen)) {
       const existingLicense = strField(employeeFields[EMPLOYEE_FIELDS.licenseNumber]);
       if (!license && !existingLicense) {
         return NextResponse.json({ ok: false, message: "יש להזין מס' רישיון." }, { status: 400 });

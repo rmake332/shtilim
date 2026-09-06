@@ -3,27 +3,23 @@ import { unstable_cache } from 'next/cache';
 import { listRecords } from '@/lib/airtable/client';
 import { TABLES, SUB_ROLE_FIELDS, SUB_ROLE_DOC_CHOICES } from '@/lib/airtable/schema';
 import { CACHE_TAGS } from '@/lib/cacheTags';
+import type { SubRoleDoc, SubRoleOption } from '@/lib/subRole';
 
 /**
- * טבלת תת-תפקידים: הרשימה הקנונית והתנאים הנגזרים מכל ערך, כנתונים במקום כקוד.
+ * טבלת תת-תפקידים (`tblIEck6VDcpdfLFZ`): המקור היחיד לרשימת תת-התפקידים
+ * ולתנאים הנגזרים מכל ערך (אישור ולנדברג, מספר רישיון, מסמכי הסמכה).
  *
- * עד היום הרשימה, שער ולנדברג ומסמכי ההסמכה היו מקודדים בשלושה מקומות
- * (`CANONICAL_SUB_ROLES`, `LANDBERG_SUB_ROLES`, `SUB_ROLE_DOC_FIELDS`), והוספת
- * תת-תפקיד דרשה שינוי קוד ופריסה. עכשיו זו שורה בטבלה.
+ * עד המעבר הרשימה והתנאים היו מקודדים בשלושה מקומות בקוד, והוספת תת-תפקיד
+ * דרשה שינוי ב-3 קבצים ופריסה. עכשיו זו שורה בטבלה.
  *
- * מצב המעבר: `src/lib/subRole.ts` עדיין מחזיק את אותה רשימה כברירת מחדל, כי
- * הוא נטען גם בצד הלקוח ואי אפשר לקרוא ממנו לאיירטייבל. הקובץ הזה הוא הצד
- * השרתי, והוא מה שיחליף אותו כשהמעבר יושלם.
+ * הצרכנים: השרת קורא ישירות מכאן, ורכיבי הלקוח מקבלים את אותן אופציות דרך
+ * `GET /api/sub-roles` (RoleStep, AllocationScreen) או כ-prop מהעמוד
+ * (FixSubRoleScreen). הצורה המשותפת מוגדרת ב-`src/lib/subRole.ts`.
  */
 
-export interface SubRoleRow {
+export interface SubRoleRow extends SubRoleOption {
   id: string;
-  name: string;
   active: boolean;
-  requiresLandberg: boolean;
-  requiresLicenseNumber: boolean;
-  /** מסמכי ההסמכה הנדרשים, כבר ממופים לשדה הקובץ בפועל על העובד. */
-  docs: { fieldId: string; label: string }[];
   /** נשאר בטבלה אך אינו נאכף: הרשימה המלאה מוצגת בכל שכבה. */
   availableInHativa: boolean;
   displayOrder: number;
@@ -66,7 +62,9 @@ export const fetchSubRoleRows = unstable_cache(
           requiresLicenseNumber: Boolean(f[SUB_ROLE_FIELDS.requiresLicenseNumber]),
           // בחירה שאין לה מיפוי מדולגת במכוון: היא מעידה על שם בחירה שנוסף
           // באיירטייבל בלי שדה קובץ מתאים, ואין מה לבקש מהמזכירה להעלות.
-          docs: docNames.map((n) => SUB_ROLE_DOC_CHOICES[n]).filter((d): d is { fieldId: string; label: string } => Boolean(d)),
+          docs: docNames
+            .map((n) => SUB_ROLE_DOC_CHOICES[n])
+            .filter((d): d is SubRoleDoc => Boolean(d)),
           availableInHativa: Boolean(f[SUB_ROLE_FIELDS.availableInHativa]),
           displayOrder: Number(f[SUB_ROLE_FIELDS.displayOrder]) || 0,
         };
@@ -77,6 +75,27 @@ export const fetchSubRoleRows = unstable_cache(
   ['sub-roles'],
   { tags: [CACHE_TAGS.subRoles], revalidate: 3600 },
 );
+
+/**
+ * האופציות שמוצגות למזכירה ונאכפות בשמירה: השורות הפעילות בלבד, בסדר התצוגה,
+ * מצומצמות לצורה שעוברת ללקוח.
+ */
+export async function activeSubRoleOptions(): Promise<SubRoleOption[]> {
+  const rows = await fetchSubRoleRows();
+  return rows
+    .filter((r) => r.active)
+    .map(({ name, requiresLandberg, requiresLicenseNumber, docs }) => ({
+      name,
+      requiresLandberg,
+      requiresLicenseNumber,
+      docs,
+    }));
+}
+
+/** שמות תת-התפקידים הפעילים, ליעדי מפת ההצעה ב-`suggestSubRole`. */
+export async function activeSubRoleNames(): Promise<string[]> {
+  return (await activeSubRoleOptions()).map((o) => o.name);
+}
 
 /**
  * מזהה הרשומה של תת-תפקיד לפי שמו, לכתיבה לשדה הקישור.

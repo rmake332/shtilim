@@ -6,11 +6,10 @@ import Image from 'next/image';
 import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
 import { formatNum } from '@/lib/formatNum';
-import { canonicalSubRoleChoices, subRoleDocsFor } from '@/lib/subRole';
+import { requiresLicenseNumber, subRoleDocsFor, type SubRoleOption } from '@/lib/subRole';
 import { joinFullName, splitFullName, type UploadedDoc } from '@/lib/formTypes';
 import { DocUpload } from '@/components/steps/DocUpload';
 import { BudgetStatCard } from '@/components/invoice/BudgetStatCard';
-import { INVOICE_POSITION_FIELDS, TABLES } from '@/lib/airtable/schema';
 
 interface InvoiceBudgetRow {
   id: string;
@@ -108,7 +107,7 @@ export function AllocationScreen({
   const router = useRouter();
   const [budgetRow, setBudgetRow] = useState<InvoiceBudgetRow | null>(null);
   const [positions, setPositions] = useState<InvoicePosition[]>([]);
-  const [subRoleChoices, setSubRoleChoices] = useState<string[]>([]);
+  const [subRoleOptions, setSubRoleOptions] = useState<SubRoleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [finishing, setFinishing] = useState(false);
@@ -177,12 +176,13 @@ export function AllocationScreen({
 
   useEffect(() => { void loadData(); }, [token, budgetRowId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // אותה רשימת תת-תפקידים כמו בטופס הקליטה, מטבלת "תת-תפקידים" באיירטייבל.
+  // קודם נשלפו כאן אופציות ה-singleSelect של טבלת תקני חשבונית, שצברה גם היא
+  // ערכי זבל מ-typecast ולא נשאה שום מידע על מסמכים או מספר רישיון.
   useEffect(() => {
-    fetch(
-      `/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${INVOICE_POSITION_FIELDS.subRole}&tableId=${TABLES.invoicePositions}`,
-    )
+    fetch(`/api/sub-roles?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
-      .then((j) => setSubRoleChoices(canonicalSubRoleChoices(j.choices ?? [])))
+      .then((j) => setSubRoleOptions(j.subRoles ?? []))
       .catch(() => {});
   }, [token]);
 
@@ -235,10 +235,10 @@ export function AllocationScreen({
     setFormError('');
   }
 
-  const wantedDocs = subRoleDocsFor(subRole);
+  const wantedDocs = subRoleDocsFor(subRoleOptions, subRole);
   const pendingDocs = wantedDocs.filter((d) => !existingSubRoleDocs.includes(d.fieldId));
   const alreadyOnFileDocs = wantedDocs.filter((d) => existingSubRoleDocs.includes(d.fieldId));
-  const needsLicenseNumber = wantedDocs.some((d) => d.requiresLicenseNumber);
+  const needsLicenseNumber = requiresLicenseNumber(subRoleOptions, subRole);
 
   async function submitAddEmployee() {
     setFormError('');
@@ -423,8 +423,8 @@ export function AllocationScreen({
     if (!empForm.email.trim()) { setEmpError('יש להזין אימייל.'); return; }
     if (!empForm.gender) { setEmpError('יש לבחור מין.'); return; }
     if (!empForm.subRole) { setEmpError('יש לבחור תת-תפקיד.'); return; }
-    const wantedDocs = subRoleDocsFor(empForm.subRole);
-    const needsLicenseNumber = wantedDocs.some((d) => d.requiresLicenseNumber);
+    const wantedDocs = subRoleDocsFor(subRoleOptions, empForm.subRole);
+    const needsLicenseNumber = requiresLicenseNumber(subRoleOptions, empForm.subRole);
     if (needsLicenseNumber && !empForm.licenseNumber) { setEmpError("יש להזין מס' רישיון."); return; }
     const pendingDocs = wantedDocs.filter((d) => !empExistingSubRoleDocs.includes(d.fieldId));
     for (const d of pendingDocs) {
@@ -698,10 +698,10 @@ export function AllocationScreen({
           {editingEmployeeFor && (() => {
             const p = positions.find((row) => row.id === editingEmployeeFor);
             if (!p) return null;
-            const empWantedDocs = subRoleDocsFor(empForm.subRole);
+            const empWantedDocs = subRoleDocsFor(subRoleOptions, empForm.subRole);
             const empPendingDocs = empWantedDocs.filter((d) => !empExistingSubRoleDocs.includes(d.fieldId));
             const empAlreadyOnFileDocs = empWantedDocs.filter((d) => empExistingSubRoleDocs.includes(d.fieldId));
-            const empNeedsLicenseNumber = empWantedDocs.some((d) => d.requiresLicenseNumber);
+            const empNeedsLicenseNumber = requiresLicenseNumber(subRoleOptions, empForm.subRole);
             return (
               <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-6 shadow-sm space-y-5">
                 <div className="flex items-center justify-between">
@@ -816,7 +816,7 @@ export function AllocationScreen({
                           className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
                         >
                           <option value="">בחר תת-תפקיד</option>
-                          {subRoleChoices.map((c) => <option key={c} value={c}>{c}</option>)}
+                          {subRoleOptions.map((o) => <option key={o.name} value={o.name}>{o.name}</option>)}
                         </select>
                       </div>
                     </div>
@@ -1074,7 +1074,7 @@ export function AllocationScreen({
                 <label className="text-label-lg text-on-surface block mb-2">תת-תפקיד <span className="text-error">*</span></label>
                 <select value={subRole} onChange={(e) => { setSubRole(e.target.value); setLicenseDocs({}); setLicenseNumber(''); }} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md">
                   <option value="">בחר תת-תפקיד</option>
-                  {subRoleChoices.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {subRoleOptions.map((o) => <option key={o.name} value={o.name}>{o.name}</option>)}
                 </select>
               </div>
               <div>

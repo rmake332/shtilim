@@ -3,7 +3,8 @@ import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, PREV_YEAR_FIELDS } from '@/lib/airtable/schema';
 import { CACHE_TAGS } from '@/lib/cacheTags';
 import { durationToHHMM } from '@/lib/schedule/time';
-import { suggestCanonicalSubRole } from '@/lib/subRole';
+import { suggestSubRole } from '@/lib/subRole';
+import { activeSubRoleNames } from '@/lib/subRoleTable';
 import type { ShiftData } from '@/lib/formTypes';
 
 export interface PrevYearPosition {
@@ -103,6 +104,7 @@ export async function getPrevYearPosition(
   requestId?: string,
 ): Promise<PrevYearPosition | null> {
   const rows = await fetchPrevYearRowsByTz(tz);
+  const subRoleNames = await activeSubRoleNames();
 
   const tzDigits = tz.replace(/\D/g, '');
   const normRole = normalize(roleTitle);
@@ -125,8 +127,8 @@ export async function getPrevYearPosition(
     return {
       recordId: row.id,
       week: extractWeek(f),
-      // טקסט חופשי בתשפ"ו. מנורמל לערך קנוני, או ריק כשאין ודאות (ראו subRole.ts).
-      subRole: suggestCanonicalSubRole(str(f[PREV_YEAR_FIELDS.subRole])) ?? '',
+      // טקסט חופשי בתשפ"ו. מנורמל לשם מטבלת תת-תפקידים, או ריק כשאין ודאות.
+      subRole: suggestSubRole(str(f[PREV_YEAR_FIELDS.subRole]), subRoleNames) ?? '',
       notes: str(f[PREV_YEAR_FIELDS.notes]),
       hoursForBudget: numOrNull(f[PREV_YEAR_FIELDS.hoursForBudget]),
       frontalHours: numOrNull(f[PREV_YEAR_FIELDS.frontalHours]),

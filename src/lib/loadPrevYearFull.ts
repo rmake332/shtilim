@@ -13,7 +13,8 @@ import { emptyRole, emptyEmployee, emptySchedule } from '@/lib/formTypes';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { bellScheduleNumsFrom } from '@/lib/roles';
-import { suggestCanonicalSubRole } from '@/lib/subRole';
+import { suggestSubRole } from '@/lib/subRole';
+import { activeSubRoleNames } from '@/lib/subRoleTable';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
 
 export interface PrevYearFull {
@@ -90,7 +91,7 @@ export async function loadPrevYearFull(
   // עם typecast היא שיצרה 40 ערכי כתיב שגויים, שעקפו בשקט את שער אישור ולנדברג
   // ואת מסמכי ההסמכה (ההשוואות בקוד הן התאמת מחרוזת מדויקת). כשאין התאמה קנונית
   // בטוחה נשארים ריקים, והוולידציה ב-RoleStep מכריחה את המזכירה לבחור מהרשימה.
-  const subRole = suggestCanonicalSubRole(str(pf[PREV_YEAR_FIELDS.subRole])) ?? '';
+  const subRole = suggestSubRole(str(pf[PREV_YEAR_FIELDS.subRole]), await activeSubRoleNames()) ?? '';
 
   // 1) mosad name → active institution + token (server-derived; never from the client).
   if (!mosadName) return null;

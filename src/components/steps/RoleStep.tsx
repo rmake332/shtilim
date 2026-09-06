@@ -6,12 +6,13 @@ import { ActionBar } from '@/components/shell/ActionBar';
 import { formatNum } from '@/lib/formatNum';
 import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate } from '@/lib/formTypes';
 import {
-  canonicalSubRoleChoices,
-  isCanonicalSubRole,
+  isKnownSubRole,
   requiresLandbergApproval,
+  requiresLicenseNumber,
   subRoleDocsFor,
+  type SubRoleOption,
 } from '@/lib/subRole';
-import { CATEGORY, DOC_FIELDS, POSITION_FIELDS } from '@/lib/airtable/schema';
+import { CATEGORY, DOC_FIELDS } from '@/lib/airtable/schema';
 import { uploadEmployeeDocs } from '@/lib/uploadDocs';
 import { DocUpload } from '@/components/steps/DocUpload';
 import type { PrevYearPosition } from '@/lib/prevYearPosition';
@@ -143,7 +144,7 @@ export function RoleStep({
   const [prevYearChecked, setPrevYearChecked] = useState(false);
   const [loadedPrevYear, setLoadedPrevYear] = useState<PrevYearPosition | undefined>(undefined);
   const prevYearAbort = useRef<AbortController | null>(null);
-  const [subRoleChoices, setSubRoleChoices] = useState<string[]>([]);
+  const [subRoleOptions, setSubRoleOptions] = useState<SubRoleOption[]>([]);
   const isEditMode = mode === 'edit';
 
   // Load symbols once. Auto-select if only one exists.
@@ -206,21 +207,19 @@ export function RoleStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load subRole choices from Airtable, only for roles whose budget row has
-  // "רשימה נפתחת לתפקידי פרא" checked. הרשימה המלאה מוצגת בכל השכבות.
+  // תת-התפקידים נטענים מטבלת "תת-תפקידים" באיירטייבל, רק לתפקידים ששורת
+  // התקציב שלהם מסומנת "רשימה נפתחת לתפקידי פרא". הרשימה המלאה בכל השכבות.
+  // כל אופציה נושאת איתה את התנאים שלה (ולנדברג, רישיון, מסמכים), ולכן אין
+  // יותר רשימה קשיחה בקוד שצריכה להישאר מסונכרנת.
   useEffect(() => {
     const role = roles.find((r) => r.id === data.roleId);
-    if (!(role?.paraSubRoleList ?? data.paraSubRoleList)) { setSubRoleChoices([]); return; }
-    fetch(`/api/field-choices?token=${encodeURIComponent(token)}&fieldId=${POSITION_FIELDS.subRole}`)
+    if (!(role?.paraSubRoleList ?? data.paraSubRoleList)) { setSubRoleOptions([]); return; }
+    fetch(`/api/sub-roles?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
-      .then((j) => {
-        // סינון קנוני: השדה באיירטייבל צבר 40 אופציות שנוצרו ע"י typecast מטקסט
-        // חופשי של תשפ"ו. ראו src/lib/subRole.ts.
-        setSubRoleChoices(canonicalSubRoleChoices(j.choices ?? []));
-      })
-      .catch(() => setSubRoleChoices([]));
+      .then((j) => setSubRoleOptions(j.subRoles ?? []))
+      .catch(() => setSubRoleOptions([]));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.roleId, data.layer, data.paraSubRoleList, roles]);
+  }, [data.roleId, data.paraSubRoleList, roles]);
 
   // Check for a prior-year position whenever a role is selected.
   // Skipped entirely when the role is locked (from-prev-year flow already loaded it).
@@ -342,7 +341,7 @@ export function RoleStep({
       seniority: role.seniority ?? null,
     }));
     // Drop any uploaded sub-role docs from the previous choice.
-    const stale = subRoleDocsFor(data.subRole);
+    const stale = subRoleDocsFor(subRoleOptions, data.subRole);
     if (stale.length > 0) {
       const next = { ...docs };
       stale.forEach((d) => delete next[d.fieldId]);
@@ -399,10 +398,10 @@ export function RoleStep({
   // Professional-license documents tied to the chosen תת-תפקיד, filed on the EMPLOYEE
   // record. Docs already on file (from a previous position/year) aren't re-requested.
   const existingSubRoleDocs = new Set(employee?.existingSubRoleDocs ?? []);
-  const allSubRoleDocs = showSubRole ? subRoleDocsFor(data.subRole) : [];
+  const allSubRoleDocs = showSubRole ? subRoleDocsFor(subRoleOptions, data.subRole) : [];
   const pendingSubRoleDocs = allSubRoleDocs.filter((d) => !existingSubRoleDocs.has(d.fieldId));
   const alreadyOnFileSubRoleDocs = allSubRoleDocs.filter((d) => existingSubRoleDocs.has(d.fieldId));
-  const needsLicenseNumber = allSubRoleDocs.some((d) => d.requiresLicenseNumber);
+  const needsLicenseNumber = requiresLicenseNumber(subRoleOptions, data.subRole);
 
   // Prefill the license number already on file for this employee (once), so it isn't
   // blindly re-requested — the secretary can still edit it.
@@ -493,7 +492,7 @@ export function RoleStep({
       setError('יש לבחור תת-תפקיד');
       return;
     }
-    if (showSubRole && requiresLandbergApproval(data.subRole)) {
+    if (showSubRole && requiresLandbergApproval(subRoleOptions, data.subRole)) {
       if (!data.landbergApproval) {
         setError('יש לציין האם עבר אישור של אפרת ולנדברג');
         return;
@@ -518,11 +517,11 @@ export function RoleStep({
     // בלעדיה טקסט חופשי גולמי דורס בחירה שכבר עברה ולידציה, ומדלג על שער
     // ולנדברג ועל מסמכי ההסמכה שנגזרים מהערך שנבחר.
     const prevYearSubRole = withPrevYear?.subRole?.trim() ?? '';
-    const finalData = isCanonicalSubRole(prevYearSubRole)
+    const finalData = isKnownSubRole(subRoleOptions, prevYearSubRole)
       ? {
           ...data,
           subRole: prevYearSubRole,
-          landbergApproval: requiresLandbergApproval(prevYearSubRole)
+          landbergApproval: requiresLandbergApproval(subRoleOptions, prevYearSubRole)
             ? ('כן' as const)
             : data.landbergApproval,
         }
@@ -798,7 +797,7 @@ export function RoleStep({
                   setData((d) => ({
                     ...d,
                     subRole: prevYear.subRole,
-                    landbergApproval: requiresLandbergApproval(prevYear.subRole) ? 'כן' : '',
+                    landbergApproval: requiresLandbergApproval(subRoleOptions, prevYear.subRole) ? 'כן' : '',
                   }));
                 }
               }}
@@ -895,8 +894,8 @@ export function RoleStep({
                   setData((d) => ({ ...d, subRole: nextSubRole, landbergApproval: '', licenseNumber: '' }));
                   if (error === 'יש לבחור תת-תפקיד') setError('');
                   // Drop any uploaded sub-role docs that no longer apply to the new choice.
-                  const keep = new Set(subRoleDocsFor(nextSubRole).map((d) => d.fieldId));
-                  const stale = subRoleDocsFor(data.subRole).filter((d) => !keep.has(d.fieldId));
+                  const keep = new Set(subRoleDocsFor(subRoleOptions, nextSubRole).map((d) => d.fieldId));
+                  const stale = subRoleDocsFor(subRoleOptions, data.subRole).filter((d) => !keep.has(d.fieldId));
                   if (stale.length > 0) {
                     const next = { ...docs };
                     stale.forEach((d) => delete next[d.fieldId]);
@@ -905,9 +904,9 @@ export function RoleStep({
                 }}
               >
                 <option value="">בחר תת-תפקיד</option>
-                {subRoleChoices.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {subRoleOptions.map((o) => (
+                  <option key={o.name} value={o.name}>
+                    {o.name}
                   </option>
                 ))}
               </select>
@@ -915,7 +914,7 @@ export function RoleStep({
           )}
 
           {/* אישור אפרת ולנדברג — נדרש למטפל/ת רגשית או מטפל/ת באומנות */}
-          {showSubRole && requiresLandbergApproval(data.subRole) && (
+          {showSubRole && requiresLandbergApproval(subRoleOptions, data.subRole) && (
             <div>
               <p className="text-label-lg font-bold text-on-surface mb-3">
                 האם עבר אישור של אפרת ולנדברג?
