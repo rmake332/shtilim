@@ -7,6 +7,7 @@ import {
   paraStaySplit,
   paraDailyUnits,
   isParaEntry,
+  isBellScheduleEntry,
   ofekCategoryFor,
   ofekRowHoursSum,
   motherPositionFromOfekRow,
@@ -193,6 +194,21 @@ describe('isParaEntry', () => {
   });
 });
 
+describe('isBellScheduleEntry', () => {
+  it('true for the three full-timetable teaching types', () => {
+    expect(isBellScheduleEntry('הוראה')).toBe(true);
+    expect(isBellScheduleEntry('הוראה ללא שהייה')).toBe(true);
+    expect(isBellScheduleEntry('הוראה ללא אופק חדש')).toBe(true);
+  });
+  it('false for teaching roles entered another way, and for a missing value', () => {
+    expect(isBellScheduleEntry('הוראה - לוח פרא')).toBe(false);
+    expect(isBellScheduleEntry('פרא')).toBe(false);
+    expect(isBellScheduleEntry('רגיל')).toBe(false);
+    expect(isBellScheduleEntry('סגן ראשון')).toBe(false);
+    expect(isBellScheduleEntry(null)).toBe(false);
+  });
+});
+
 describe('ofekCategoryFor', () => {
   it('maps פרא to the פרא ofek table', () => {
     expect(ofekCategoryFor('פרא')).toBe('פרא');
@@ -203,6 +219,9 @@ describe('ofekCategoryFor', () => {
   });
   it('maps הוראה ללא שהייה to its own ofek table', () => {
     expect(ofekCategoryFor('הוראה ללא שהייה')).toBe('הוראה_ללא_שהייה');
+  });
+  it('returns null for הוראה ללא אופק חדש - הזנה בלוח צלצולים בלי בדיקת מחשבון', () => {
+    expect(ofekCategoryFor('הוראה ללא אופק חדש')).toBeNull();
   });
   it('returns null when the role is not measured by ofek', () => {
     expect(ofekCategoryFor('רגיל')).toBeNull();

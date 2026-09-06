@@ -47,6 +47,8 @@ import {
 } from '@/lib/schedule/breaks';
 import {
   isParaEntry,
+  isBellScheduleEntry,
+  ofekCategoryFor,
   ofekHourAttempts,
   PARA_SNAP_TOLERANCE,
   TEACHING_SNAP_TOLERANCE,
@@ -397,6 +399,7 @@ const SCHEDULE_TYPE = {
   para: 'פרא',
   teachingParaSchedule: 'הוראה - לוח פרא',
   teachingNoStay: 'הוראה ללא שהייה',
+  teachingNoOfek: 'הוראה ללא אופק חדש',
   deputy1: 'סגן ראשון',
   deputy2: 'סגן שני',
   manager: 'מנהל/ת',
@@ -482,15 +485,16 @@ export function ScheduleStep({
   }
 
   // ----- teaching staff: pick bell-schedule slots instead of typing times -----
-  // For the full-timetable teaching types (scheduleType "הוראה" or "הוראה ללא שהייה" -
-  // same entry mechanism, only the ofek category / stay handling differs downstream).
+  // For the full-timetable teaching types ("הוראה", "הוראה ללא שהייה", "הוראה ללא
+  // אופק חדש" - same entry mechanism, only what happens after the entry differs:
+  // the ofek category / stay handling, or no ofek check at all).
   // Roles that are category=הוראה but use a different entry mechanism — סגן ראשון
   // (37.5/40 picker), מנהל/ת & סגן שני (handled above), "הוראה - לוח פרא" (typed grid,
   // below), or רגיל (manual grid) — must NOT land here even if they happen to carry a
   // bell-schedule number. A teaching role with no לוח צלצולים of its own still lands
   // here: the grid then asks the user to pick one from the existing schedules before
   // showing any slots.
-  if (type === SCHEDULE_TYPE.teaching || type === SCHEDULE_TYPE.teachingNoStay) {
+  if (isBellScheduleEntry(type)) {
     return (
       <BellScheduleGrid
         token={token}
@@ -1670,6 +1674,10 @@ function BellScheduleGrid({
   // תפקיד צהריים: זיהוי לפי שם התפקיד.
   const isAfternoonRole = role.roleTitle.includes('צהריים');
 
+  // "הוראה ללא אופק חדש": אותה הזנה בלוח צלצולים, אך בלי שלוש בדיקות המחשבון
+  // אחריה. השעות שנבחרו הן השעות הסופיות, ללא פירוט פרונטלי/פרטני/שהייה.
+  const needsOfek = ofekCategoryFor(role.scheduleType) !== null;
+
   // חוק העסקת נוער: רצועות מחוץ לחלון השעות כלל אינן מוצעות לבחירה.
   const youth = youthLimitsFor(employee.birthDate);
   // הפסקות: בלוח צלצולים הסף נמדד בשעות אקדמיות וההפסקה אינה מנוכה מהשעות שנספרות.
@@ -2042,6 +2050,35 @@ function BellScheduleGrid({
   async function validateAndNext() {
     const preErrs = bellPreCheck();
     if (preErrs.length) { setErrors(preErrs); return; }
+
+    // "הוראה ללא אופק חדש": השעות שנבחרו בלוח הן השעות הסופיות. אין פירוט
+    // פרונטלי/פרטני/שהייה ואין השוואה לשנה קודמת (שתיהן מגיעות מהמחשבון), אבל
+    // חריגת תקציב, חפיפת שעות ותקרת 42 ש"ש נבדקות כרגיל.
+    if (!needsOfek) {
+      const hours = Math.round(weeklyHours * 100) / 100;
+      const errs: string[] = [];
+      if (hours === 0) errs.push(EMPTY_SCHEDULE_ERROR);
+      const effectiveHours = Math.max(0, hours - biweeklyDeductionHours);
+      if (effectiveHours > role.remainingHours)
+        errs.push(overBudgetMessage(effectiveHours, role.remainingHours));
+      if (errs.length) { setErrors(errs); return; }
+      const overlapOkNoOfek = await runBellOverlapCheckIfNeeded();
+      if (!overlapOkNoOfek) return;
+      if (!(await runBellWeeklyTotalCheckIfNeeded(hours))) return;
+      onNext({
+        ...data,
+        breaks: prunedBreaks,
+        weeklyHours: hours,
+        frontalHours: 0,
+        individualHours: 0,
+        stayHoursInstitution: 0,
+        stayHoursHome: 0,
+        jobPercent: 0,
+        biweeklyDeductionHours,
+      });
+      return;
+    }
+
     if (!ofek1?.ok || existing === null) {
       setErrors(['יש לבצע את הבדיקות לפני המשך']);
       return;
@@ -2157,7 +2194,7 @@ function BellScheduleGrid({
           )}
 
           {/* השעות שייבדקו באופק: המדויקות קודם, והעיגול (±0.12) רק כנפילה */}
-          {hourAttempts !== null && (
+          {needsOfek && hourAttempts !== null && (
             <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
               <div className="flex justify-between text-on-surface-variant">
                 <span>שעות לבדיקה באופק:</span>
@@ -2377,19 +2414,21 @@ function BellScheduleGrid({
           );
         })}
 
-        <OfekChecks
-          computing={computing}
-          disabled={weeklyHours <= 0 || hasBellDayError}
-          ofek1={ofek1}
-          existing={existing}
-          ofek3={ofek}
-          category={role.category}
-          layer={role.layer}
-          severeDisability={role.severeDisability}
-          onStep1={runOfek1}
-          onStep2={runCheck2}
-          onStep3={runOfek3}
-        />
+        {needsOfek && (
+          <OfekChecks
+            computing={computing}
+            disabled={weeklyHours <= 0 || hasBellDayError}
+            ofek1={ofek1}
+            existing={existing}
+            ofek3={ofek}
+            category={role.category}
+            layer={role.layer}
+            severeDisability={role.severeDisability}
+            onStep1={runOfek1}
+            onStep2={runCheck2}
+            onStep3={runOfek3}
+          />
+        )}
 
         {/* הרעת תנאים — dropdown מופיע כשהשעות קטנות מהשנה הקודמת */}
         {(() => {
@@ -2435,7 +2474,11 @@ function BellScheduleGrid({
           onEditEmployee={onEditEmployee}
           onEditRole={onEditRole}
           onNext={validateAndNext}
-          nextDisabled={slotsLoading || computing || !ofek1?.ok || existing === null || (existing.count > 0 && !ofek?.ok)}
+          nextDisabled={
+            slotsLoading ||
+            computing ||
+            (needsOfek && (!ofek1?.ok || existing === null || (existing.count > 0 && !ofek?.ok)))
+          }
         />
       </div>
     </div>

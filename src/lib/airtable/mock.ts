@@ -96,6 +96,19 @@ const MOCK_BUDGET: AirtableRecord[] = [
     },
   },
   {
+    id: 'recRoleTeachingNoOfek',
+    fields: {
+      [BUDGET_FIELDS.role]: 'מורה שילוב (הוראה ללא אופק חדש)',
+      [BUDGET_FIELDS.institutionLink]: [{ id: MOCK_MOSAD }],
+      [BUDGET_FIELDS.symbolLink]: [{ id: MOCK_SYMBOL }],
+      [BUDGET_FIELDS.category]: { name: 'הוראה' },
+      [BUDGET_FIELDS.scheduleType]: { name: 'הוראה ללא אופק חדש' },
+      [BUDGET_FIELDS.remainingHours]: 20,
+      [BUDGET_FIELDS.layer]: [{ name: 'יסודי' }],
+      [BUDGET_FIELDS.bellScheduleNum]: [{ name: '1' }],
+    },
+  },
+  {
     id: 'recRoleDeputy1',
     fields: {
       [BUDGET_FIELDS.role]: 'סגן מנהל ראשון (סגן ראשון)',

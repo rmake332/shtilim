@@ -37,6 +37,10 @@ describe('breakPolicyFor', () => {
     expect(breakPolicyFor({ scheduleType: 'הוראה ללא שהייה', layer: 'יסודי', twelveHourEmployment: false }).metric)
       .toBe('academic');
   });
+  it('"הוראה ללא אופק חדש" - אקדמי', () => {
+    expect(breakPolicyFor({ scheduleType: 'הוראה ללא אופק חדש', layer: 'יסודי', twelveHourEmployment: false }).metric)
+      .toBe('academic');
+  });
   it('שכבת פנימיה מפעילה את מסלול 12 השעות', () => {
     expect(BOARDING).toEqual({ twelveHour: true, metric: 'clock', fixedHalfHour: true });
   });
