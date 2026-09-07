@@ -7,7 +7,8 @@ import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
 import { formatNum } from '@/lib/formatNum';
 import { requiresLicenseNumber, subRoleDocsFor, type SubRoleOption } from '@/lib/subRole';
-import { joinFullName, splitFullName, type UploadedDoc } from '@/lib/formTypes';
+import { joinFullName, splitFullName, MARITAL_STATUS_FALLBACK, type UploadedDoc } from '@/lib/formTypes';
+import { EMPLOYEE_FIELDS, TABLES } from '@/lib/airtable/schema';
 import { DocUpload } from '@/components/steps/DocUpload';
 import { BudgetStatCard } from '@/components/invoice/BudgetStatCard';
 
@@ -108,6 +109,7 @@ export function AllocationScreen({
   const [budgetRow, setBudgetRow] = useState<InvoiceBudgetRow | null>(null);
   const [positions, setPositions] = useState<InvoicePosition[]>([]);
   const [subRoleOptions, setSubRoleOptions] = useState<SubRoleOption[]>([]);
+  const [maritalChoices, setMaritalChoices] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [finishing, setFinishing] = useState(false);
@@ -185,6 +187,24 @@ export function AllocationScreen({
       .then((j) => setSubRoleOptions(j.subRoles ?? []))
       .catch(() => {});
   }, [token]);
+
+  // מצב משפחתי: רשימה חיה מהשדה באיירטייבל, כמו בטופס הקליטה. קודם זה היה קלט
+  // טקסט חופשי, וכל הקלדה יצרה כאן אופציה חדשה בשדה דרך typecast.
+  useEffect(() => {
+    fetch(
+      `/api/field-choices?token=${encodeURIComponent(token)}` +
+        `&fieldId=${EMPLOYEE_FIELDS.maritalStatus}&tableId=${TABLES.employees}`,
+    )
+      .then((r) => r.json())
+      .then((j) => setMaritalChoices(Array.isArray(j.choices) ? j.choices : []))
+      .catch(() => setMaritalChoices([]));
+  }, [token]);
+
+  /** הרשימה המוצגת + הערך השמור אם אינו בה, כדי שה-select יוכל להציג אותו. */
+  const maritalOptionsFor = (currentValue: string) => {
+    const base = maritalChoices.length > 0 ? maritalChoices : MARITAL_STATUS_FALLBACK;
+    return currentValue && !base.includes(currentValue) ? [...base, currentValue] : base;
+  };
 
   // debounced ת.ז. search
   useEffect(() => {
@@ -797,11 +817,16 @@ export function AllocationScreen({
                       </div>
                       <div>
                         <label className="text-label-lg text-on-surface block mb-2">מצב משפחתי</label>
-                        <input
+                        <select
                           value={empForm.maritalStatus}
                           onChange={(e) => setEmpForm((v) => ({ ...v, maritalStatus: e.target.value }))}
                           className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
-                        />
+                        >
+                          <option value="">בחר מצב משפחתי</option>
+                          {maritalOptionsFor(empForm.maritalStatus).map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="text-label-lg text-on-surface block mb-2">
@@ -1059,11 +1084,16 @@ export function AllocationScreen({
                   </div>
                   <div>
                     <label className="text-label-lg text-on-surface block mb-2">מצב משפחתי</label>
-                    <input
+                    <select
                       value={newEmployee.maritalStatus}
                       onChange={(e) => setNewEmployee((v) => ({ ...v, maritalStatus: e.target.value }))}
                       className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
-                    />
+                    >
+                      <option value="">בחר מצב משפחתי</option>
+                      {maritalOptionsFor(newEmployee.maritalStatus).map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </details>

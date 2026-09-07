@@ -81,21 +81,45 @@ export async function upsertEmployee(
   }
 
   // Existing employee — update any fields that were edited.
-  const empUpdate: Record<string, unknown> = {};
-  if (fullName)               empUpdate[EMPLOYEE_FIELDS.name]          = fullName;
-  if (employee.address)       empUpdate[EMPLOYEE_FIELDS.address]       = employee.address;
-  if (employee.email)         empUpdate[EMPLOYEE_FIELDS.email]         = employee.email;
-  if (employee.phone)         empUpdate[EMPLOYEE_FIELDS.phone]         = employee.phone;
-  if (employee.maritalStatus) empUpdate[EMPLOYEE_FIELDS.maritalStatus] = employee.maritalStatus;
-  if (employee.gender)        empUpdate[EMPLOYEE_FIELDS.gender]        = employee.gender;
-  if (employee.birthDate)     empUpdate[EMPLOYEE_FIELDS.birthDate]     = employee.birthDate;
-  if (licenseNumber)          empUpdate[EMPLOYEE_FIELDS.licenseNumber] = String(licenseNumber).trim();
-  // תאריך תחילת עבודה: ממלאים רק אם הוא ריק — לעובד ותיק זהו התאריך המקורי ואין לדרוס אותו.
-  if (employee.contractStartDate) {
-    const current = await getRecord(TABLES.employees, employeeId, requestId);
-    if (current && !current.fields[EMPLOYEE_FIELDS.workStartDate]) {
-      empUpdate[EMPLOYEE_FIELDS.workStartDate] = employee.contractStartDate;
+  //
+  // **רק שדות שבאמת השתנו.** כתיבה של ערך זהה אינה תמימה: כל כתיבה יוצאת עם
+  // typecast: true, ולכן ערך singleSelect שנמחק או שונה שמו באיירטייבל בינתיים
+  // (למשל מיזוג "נשואה" ל"נשוי/אה") **נוצר מחדש** כאופציה חדשה ברגע שטופס שנטען
+  // לפני השינוי נשמר. כך צצו מחדש "נשואה" ו-"נשוי/ה" אחרי שני מיזוגים ידניים.
+  const current = await getRecord(TABLES.employees, employeeId, requestId);
+  const stored = current?.fields ?? null;
+  /** ערך תא מאיירטייבל כמחרוזת להשוואה (singleSelect חוזר לפעמים כאובייקט). */
+  const asText = (v: unknown): string => {
+    if (v == null) return '';
+    if (Array.isArray(v)) return v.map(asText).filter(Boolean).join(', ');
+    if (typeof v === 'object' && 'name' in (v as Record<string, unknown>)) {
+      return String((v as { name: unknown }).name ?? '');
     }
+    return String(v);
+  };
+  /**
+   * מוסיף לעדכון רק אם יש ערך חדש והוא שונה מהמאוחסן. כשלא הצלחנו לקרוא את
+   * הרשומה (מצב mock, או תקלה) חוזרים להתנהגות הישנה - עדיף כתיבה מיותרת מאשר
+   * לדלג בשקט על עדכון אמיתי.
+   */
+  const empUpdate: Record<string, unknown> = {};
+  const setIfChanged = (fieldId: string, next: string) => {
+    if (!next) return;
+    if (stored && asText(stored[fieldId]).trim() === next.trim()) return;
+    empUpdate[fieldId] = next;
+  };
+
+  setIfChanged(EMPLOYEE_FIELDS.name, fullName);
+  setIfChanged(EMPLOYEE_FIELDS.address, employee.address);
+  setIfChanged(EMPLOYEE_FIELDS.email, employee.email);
+  setIfChanged(EMPLOYEE_FIELDS.phone, employee.phone);
+  setIfChanged(EMPLOYEE_FIELDS.maritalStatus, employee.maritalStatus);
+  setIfChanged(EMPLOYEE_FIELDS.gender, employee.gender);
+  setIfChanged(EMPLOYEE_FIELDS.birthDate, employee.birthDate);
+  if (licenseNumber) setIfChanged(EMPLOYEE_FIELDS.licenseNumber, String(licenseNumber).trim());
+  // תאריך תחילת עבודה: ממלאים רק אם הוא ריק — לעובד ותיק זהו התאריך המקורי ואין לדרוס אותו.
+  if (employee.contractStartDate && stored && !stored[EMPLOYEE_FIELDS.workStartDate]) {
+    empUpdate[EMPLOYEE_FIELDS.workStartDate] = employee.contractStartDate;
   }
   if (Object.keys(empUpdate).length > 0) {
     logger.info({ requestId, employeeId }, 'updating existing employee record');
