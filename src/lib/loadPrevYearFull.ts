@@ -9,7 +9,7 @@ import {
   SYMBOL_FIELDS,
 } from '@/lib/airtable/schema';
 import { extractWeek, type PrevYearPosition } from '@/lib/prevYearPosition';
-import { emptyRole, emptyEmployee, emptySchedule } from '@/lib/formTypes';
+import { emptyRole, emptyEmployee, emptySchedule, splitFullName } from '@/lib/formTypes';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 import { existingSubRoleDocsFromFields, existingYouthDocsFromFields } from '@/lib/employees';
 import { bellScheduleNumsFrom } from '@/lib/roles';
@@ -132,6 +132,9 @@ export async function loadPrevYearFull(
         ...emptyEmployee(),
         recordId: e.id,
         name: str(ef[EMPLOYEE_FIELDS.name]),
+        // בלי הפיצול שני שדות השם היו מגיעים ריקים מ-emptyEmployee(), והמזכירה הייתה
+        // חייבת להקליד מחדש שם שכבר קיים. הספרד מסתיר את זה מ-TypeScript.
+        ...splitFullName(str(ef[EMPLOYEE_FIELDS.name])),
         tz: str(ef[EMPLOYEE_FIELDS.tz]),
         noIsraeliId: !isValidIsraeliId(str(ef[EMPLOYEE_FIELDS.tz])),
         address: str(ef[EMPLOYEE_FIELDS.address]),
