@@ -34,6 +34,7 @@ export const BOARDING_LAYER = 'פנימיה';
 const ACADEMIC_SCHEDULE_TYPES = new Set([
   'פרא',
   'הוראה',
+  'עוז',
   'הוראה - לוח פרא',
   'הוראה ללא שהייה',
   'הוראה ללא אופק חדש',

@@ -15,6 +15,7 @@ import {
   ofekRowHoursSum,
   ofekHourAttempts,
   snapToleranceFor,
+  isTeachingOfekCategory,
   type MotherEmployeeInput,
 } from '@/lib/schedule/ofek';
 import { logger } from '@/lib/logger';
@@ -319,7 +320,8 @@ export async function POST(req: NextRequest) {
       category: ofekCategory,
       isBehaviorAnalyst: Boolean(body.isBehaviorAnalyst),
     });
-    const teaching = ofekCategory === 'הוראה';
+    // "עוז" זהה ל"הוראה" בטיפול בשהייה ובניצול; רק מפתח המחשבון שונה.
+    const teaching = isTeachingOfekCategory(ofekCategory);
     // "הוראה ללא שהייה": שהייה תמיד "מהבית", ואינה נכללת בניצול התקציב, ללא תלות
     // בשכבה / paraBoard / behavior-analyst - עוקף את paraStaySplit ואת teaching הרגיל.
     const teachingNoStay = ofekCategory === 'הוראה_ללא_שהייה';

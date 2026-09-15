@@ -403,6 +403,7 @@ function PrevYearSummary({ prevYear }: { prevYear: PrevYearPosition }) {
 const SCHEDULE_TYPE = {
   regular: 'רגיל',
   teaching: 'הוראה',
+  oz: 'עוז',
   para: 'פרא',
   teachingParaSchedule: 'הוראה - לוח פרא',
   teachingNoStay: 'הוראה ללא שהייה',

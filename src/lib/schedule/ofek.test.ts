@@ -134,6 +134,16 @@ describe('buildOfekKey', () => {
       buildOfekKey({ layer: 'יסודי', ageHours: 4, motherPosition: false, category: 'פרא', totalHours: 14 }),
     ).toBe('יסודי4לאפרא14');
   });
+
+  // שורות "עוז" נכתבו באיירטייבל בסדר אחר: קטגוריה, שעות גיל, משרת אם, שכבה, שעות.
+  it('עוז: category first, layer before the hours', () => {
+    expect(
+      buildOfekKey({ layer: 'חטיבה', ageHours: 0, motherPosition: false, category: 'עוז', totalHours: 1.5 }),
+    ).toBe('עוז0לאחטיבה1.5');
+    expect(
+      buildOfekKey({ layer: 'חטיבה', ageHours: 2, motherPosition: true, category: 'עוז', totalHours: 22.4 }),
+    ).toBe('עוז2כןחטיבה22.4');
+  });
 });
 
 // התוספת מחושבת לתצוגה בלבד - אינה מתווספת ל-finalHours ואינה מנוצלת מהתקן.
@@ -199,6 +209,7 @@ describe('isBellScheduleEntry', () => {
     expect(isBellScheduleEntry('הוראה')).toBe(true);
     expect(isBellScheduleEntry('הוראה ללא שהייה')).toBe(true);
     expect(isBellScheduleEntry('הוראה ללא אופק חדש')).toBe(true);
+    expect(isBellScheduleEntry('עוז')).toBe(true);
   });
   it('false for teaching roles entered another way, and for a missing value', () => {
     expect(isBellScheduleEntry('הוראה - לוח פרא')).toBe(false);
@@ -220,6 +231,10 @@ describe('ofekCategoryFor', () => {
   it('maps הוראה ללא שהייה to its own ofek table', () => {
     expect(ofekCategoryFor('הוראה ללא שהייה')).toBe('הוראה_ללא_שהייה');
   });
+
+  it('עוז = קטגוריה נפרדת במחשבון', () => {
+    expect(ofekCategoryFor('עוז')).toBe('עוז');
+  });
   it('returns null for הוראה ללא אופק חדש - הזנה בלוח צלצולים בלי בדיקת מחשבון', () => {
     expect(ofekCategoryFor('הוראה ללא אופק חדש')).toBeNull();
   });
@@ -238,6 +253,8 @@ describe('includeExistingStayInCombinedKey', () => {
     expect(includeExistingStayInCombinedKey('הוראה', 'גנים')).toBe(true);
     expect(includeExistingStayInCombinedKey('הוראה - לוח פרא', 'חטיבה')).toBe(true);
     expect(includeExistingStayInCombinedKey('הוראה - לוח פרא', 'גנים')).toBe(true);
+    expect(includeExistingStayInCombinedKey('עוז', 'חטיבה')).toBe(true);
+    expect(includeExistingStayInCombinedKey('עוז', 'יסודי')).toBe(true);
   });
   it('הוראה ללא שהייה: לעולם לא, גם בגנים', () => {
     expect(includeExistingStayInCombinedKey('הוראה ללא שהייה', 'יסודי')).toBe(false);

@@ -90,15 +90,22 @@ export function motherPositionFromOfekRow(
 /**
  * Ofek lookup key = שכבה + שעות_גיל + משרת_אם + קטגוריה + סך_שעות_סופי
  * Example: "חטיבה0כןהוראה5"
+ *
+ * חריג "עוז": שורות המחשבון בקטגוריה הזו נכתבו באיירטייבל בסדר אחר -
+ * קטגוריה + שעות_גיל + משרת_אם + שכבה + סך_שעות_סופי, למשל "עוז0לאחטיבה1.5".
+ * המפתח הוא שדה טקסט ולא נוסחה, ולכן הסדר נקבע לפי מה שקיים בטבלה בפועל.
  */
 export function buildOfekKey(params: {
   layer: string;
   ageHours: number | string;
   motherPosition: boolean;
-  category: string; // הוראה | פרא
+  category: string; // הוראה | פרא | עוז
   totalHours: number;
 }): string {
   const mother = params.motherPosition ? 'כן' : 'לא';
+  if (params.category === 'עוז') {
+    return `${params.category}${params.ageHours}${mother}${params.layer}${params.totalHours}`;
+  }
   return `${params.layer}${params.ageHours}${mother}${params.category}${params.totalHours}`;
 }
 
@@ -140,8 +147,8 @@ export function paraStaySplit({
 }: StaySplitInput): 'institution' | 'home' {
   // מהמוסד if: paraBoard OR layer=גנים OR (layer=גנים + behavior-analyst)
   if (paraBoard || layer === 'גנים') return 'institution';
-  // מהבית if: !paraBoard + layer≠גנים + category≠הוראה + !behavior-analyst
-  if (!paraBoard && layer !== 'גנים' && category !== 'הוראה' && !isBehaviorAnalyst) {
+  // מהבית if: !paraBoard + layer≠גנים + category≠הוראה/עוז + !behavior-analyst
+  if (!paraBoard && layer !== 'גנים' && !isTeachingOfekCategory(category as OfekCategory) && !isBehaviorAnalyst) {
     return 'home';
   }
   return 'institution';
@@ -163,12 +170,13 @@ export function isParaEntry(scheduleType: string | null | undefined): boolean {
 
 /**
  * הזנת שעות בלוח צלצולים - בחירת רצועות מהלוח במקום הקלדת שעות. שלושת סוגי
- * ההוראה המלאים מוזנים כך; ההבדל ביניהם הוא רק במה שקורה אחרי ההזנה (מחשבון
- * אופק חדש וטיפול בשהייה), ראה ofekCategoryFor.
+ * ההוראה המלאים ו"עוז" מוזנים כך; ההבדל ביניהם הוא רק במה שקורה אחרי ההזנה
+ * (מחשבון אופק חדש וטיפול בשהייה), ראה ofekCategoryFor.
  */
 export function isBellScheduleEntry(scheduleType: string | null | undefined): boolean {
   return (
     scheduleType === 'הוראה' ||
+    scheduleType === 'עוז' ||
     scheduleType === 'הוראה ללא שהייה' ||
     scheduleType === 'הוראה ללא אופק חדש'
   );
@@ -180,17 +188,29 @@ export function isBellScheduleEntry(scheduleType: string | null | undefined): bo
  * כמו הוראה (לוח צלצולים) אך נבדק מול קטגוריית אופק נפרדת - ראה paraStaySplit
  * ו-computeUtilizedHours להבדלים בטיפול בשהייה ובניצול התקציב.
  *
+ * "עוז" זהה ל"הוראה" בכל שלבי החישוב; ההבדל היחיד הוא קטגוריית החיפוש במחשבון
+ * וסדר רכיבי המפתח שלה, ראה buildOfekKey.
+ *
  * "הוראה ללא אופק חדש" מוזן אף הוא בלוח צלצולים, אך מחזיר null: אחרי ההזנה אין
  * בדיקה במחשבון, השעות שנבחרו הן השעות הסופיות ואין פירוט פרונטלי/פרטני/שהייה -
  * בדיוק כמו סוג מערכת שעות "רגיל" מבחינת המשך הזרימה.
  */
-export type OfekCategory = 'פרא' | 'הוראה' | 'הוראה_ללא_שהייה';
+export type OfekCategory = 'פרא' | 'הוראה' | 'עוז' | 'הוראה_ללא_שהייה';
+
+/**
+ * "עוז" מתנהג בדיוק כמו "הוראה" בכל שלבי החישוב; ההבדל היחיד הוא קטגוריית
+ * החיפוש במחשבון (ושם גם סדר רכיבי המפתח שונה, ראה buildOfekKey).
+ */
+export function isTeachingOfekCategory(category: OfekCategory | null): boolean {
+  return category === 'הוראה' || category === 'עוז';
+}
 
 export function ofekCategoryFor(
   scheduleType: string | null | undefined,
 ): OfekCategory | null {
   if (scheduleType === 'פרא') return 'פרא';
   if (scheduleType === 'הוראה' || scheduleType === 'הוראה - לוח פרא') return 'הוראה';
+  if (scheduleType === 'עוז') return 'עוז';
   if (scheduleType === 'הוראה ללא שהייה') return 'הוראה_ללא_שהייה';
   return null;
 }
@@ -241,7 +261,7 @@ export function ofekHourAttempts(hours: number, tolerance: number): OfekHourAtte
  * האם שעות השהייה של התקנים הקיימים נכנסות לסכום השעות שנשלח כמפתח חיפוש
  * למחשבון בבדיקה המשולבת (הבדיקה השלישית).
  *
- * "הוראה" ו"הוראה - לוח פרא": תמיד, בכל שכבה. מבנה שבוע העבודה של מורה במחשבון
+ * "הוראה", "הוראה - לוח פרא" ו"עוז": תמיד, בכל שכבה. מבנה שבוע העבודה של מורה במחשבון
  * נגזר מהיקף ההעסקה המלא שלו, שכולל שהייה, גם ביסודי ובחטיבה שבהן השהייה עצמה
  * אינה נספרת בניצול התקציב.
  * "הוראה ללא שהייה": לעולם לא.
@@ -252,7 +272,7 @@ export function includeExistingStayInCombinedKey(
   layer: string | null | undefined,
 ): boolean {
   const category = ofekCategoryFor(scheduleType);
-  if (category === 'הוראה') return true;
+  if (isTeachingOfekCategory(category)) return true;
   if (category === 'הוראה_ללא_שהייה') return false;
   return layer === 'גנים';
 }
