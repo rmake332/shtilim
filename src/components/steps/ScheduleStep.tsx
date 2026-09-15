@@ -261,6 +261,13 @@ const INVALID_SCHEDULE_ERROR = 'יש לתקן את מערכת השעות לפנ�
 const EMPTY_SCHEDULE_ERROR = 'סה"כ שעות המערכת הוא 0 — יש להזין שעות עבודה לפני המשך';
 
 /**
+ * תפקיד צהריים: הכניסה המוקדמת ביותר המותרת ביום שאינו יום עובדת הבוקר.
+ * רצועה/שעת כניסה מוקדמת מזה נחשבת "בוקר" ומותרת רק ביום עובדת הבוקר שנבחר.
+ */
+const AFTERNOON_MIN_START_MIN = 11 * 60 + 50;
+const AFTERNOON_MIN_START_LABEL = '11:50';
+
+/**
  * Render all blocking errors (red) and non-blocking warnings (amber) together.
  * Each list shows every message so the user sees all problems at once.
  */
@@ -720,7 +727,7 @@ function GridSchedule({
       : WEEKLY_CAP_HOURS;
   const overCap = totalHours > weeklyCap;
 
-  // תפקיד צהריים: כניסה לפני 12:00 אסורה פרט ליום עובדת בוקר שנבחר מראש.
+  // תפקיד צהריים: כניסה לפני 11:50 אסורה פרט ליום עובדת בוקר שנבחר מראש.
   const isAfternoonRole = role.roleTitle.includes('צהריים');
   const morningDay = data.morningDay ?? null;
 
@@ -807,13 +814,13 @@ function GridSchedule({
   for (const d of gridDays) {
     const v = validateDay(week[d] ?? []);
     if (!v.ok) { dayErrors[d] = v.error; continue; }
-    // תפקיד צהריים: בכל יום שאינו יום עובדת הבוקר — כניסה חייבת להיות 12:00 ומעלה.
+    // תפקיד צהריים: בכל יום שאינו יום עובדת הבוקר — כניסה חייבת להיות 11:50 ומעלה.
     if (isAfternoonRole && d !== morningDay) {
       const shifts = week[d] ?? [];
       for (const s of shifts) {
         const inMin = toMinutes(s.in);
-        if (inMin !== null && inMin < 12 * 60) {
-          dayErrors[d] = 'בתפקיד צהריים כניסה לפני 12:00 מותרת רק ביום עובדת הבוקר';
+        if (inMin !== null && inMin < AFTERNOON_MIN_START_MIN) {
+          dayErrors[d] = `בתפקיד צהריים כניסה לפני ${AFTERNOON_MIN_START_LABEL} מותרת רק ביום עובדת הבוקר`;
           break;
         }
       }
@@ -1288,7 +1295,7 @@ function GridSchedule({
               <div>
                 <p className="text-label-lg font-semibold text-on-surface">יום עובדת בוקר</p>
                 <p className="text-label-sm text-on-surface-variant mt-0.5">
-                  בתפקיד צהריים, כניסה לפני 12:00 מותרת רק ביום אחד בשבוע. יש לבחור אותו לפני הזנת המערכת.
+                  בתפקיד צהריים, כניסה לפני {AFTERNOON_MIN_START_LABEL} מותרת רק ביום אחד בשבוע. יש לבחור אותו לפני הזנת המערכת.
                 </p>
               </div>
             </div>
@@ -1321,7 +1328,7 @@ function GridSchedule({
             </div>
             {!morningDay && (
               <p className="text-label-sm text-amber-700 mt-3 flex items-center gap-1">
-                <Icon name="info" className="text-[16px]" /> טרם נבחר יום עובדת בוקר — לא ניתן להזין כניסה לפני 12:00
+                <Icon name="info" className="text-[16px]" /> טרם נבחר יום עובדת בוקר — לא ניתן להזין כניסה לפני {AFTERNOON_MIN_START_LABEL}
               </p>
             )}
           </div>
@@ -1695,12 +1702,12 @@ function BellScheduleGrid({
   const allowedSlots = youth ? slots.filter((s) => youthSlotAllowed(s, youth)) : slots;
 
   // Friday ("ו") slots differ from Sun–Thu ("א-ה"); offer the right group per day.
-  // תפקיד צהריים: ביום הבוקר — כל הרצועות; בשאר הימים — רק 12:00 ומעלה.
+  // תפקיד צהריים: ביום הבוקר — כל הרצועות; בשאר הימים — רק 11:50 ומעלה.
   const slotsForDay = (day: Day): BellSlot[] => {
     const isFri = day === 'fri';
     const pool = allowedSlots.filter((s) => (isFri ? s.weekday === 'friday' : s.weekday !== 'friday'));
     if (!isAfternoonRole || day === morningDay) return pool;
-    return pool.filter((s) => (toMinutes(s.in) ?? 0) >= 12 * 60);
+    return pool.filter((s) => (toMinutes(s.in) ?? 0) >= AFTERNOON_MIN_START_MIN);
   };
   // kept for non-afternoon roles (same logic, no day dependency)
   const weekdaySlots = allowedSlots.filter((s) => s.weekday !== 'friday');
@@ -1785,11 +1792,11 @@ function BellScheduleGrid({
     }
     setPicks(newPicks);
 
-    // תפקיד צהריים: רצועות בוקר (לפני 12:00) מותרות רק ביום עובדת הבוקר. אם אין morningDay
+    // תפקיד צהריים: רצועות בוקר (לפני 11:50) מותרות רק ביום עובדת הבוקר. אם אין morningDay
     // (לא נשמר על התקן), נבחר את היום שיש בו רצועה מוקדמת כך שהרצועה תוצג ולא תיחסם.
     if (isAfternoonRole && !data.morningDay) {
       const morning = DAYS.find((d) =>
-        newPicks[d].some((p) => p && (toMinutes(p.in) ?? 24 * 60) < 12 * 60),
+        newPicks[d].some((p) => p && (toMinutes(p.in) ?? 24 * 60) < AFTERNOON_MIN_START_MIN),
       );
       if (morning) setData((prev) => ({ ...prev, morningDay: morning }));
     }
@@ -1907,11 +1914,11 @@ function BellScheduleGrid({
     const shifts = dayPicked.map((p) => ({ in: p.in, out: p.out }));
     const v = validateDay(shifts);
     if (!v.ok) { bellDayErrors[d] = v.error!; continue; }
-    // תפקיד צהריים: רצועה שמתחילה לפני 12:00 אסורה בכל יום פרט ליום הבוקר.
+    // תפקיד צהריים: רצועה שמתחילה לפני 11:50 אסורה בכל יום פרט ליום הבוקר.
     if (isAfternoonRole && d !== morningDay) {
-      const violating = dayPicked.find((p) => (toMinutes(p.in) ?? 0) < 12 * 60);
+      const violating = dayPicked.find((p) => (toMinutes(p.in) ?? 0) < AFTERNOON_MIN_START_MIN);
       if (violating) {
-        bellDayErrors[d] = 'בתפקיד צהריים רצועה לפני 12:00 מותרת רק ביום עובדת הבוקר';
+        bellDayErrors[d] = `בתפקיד צהריים רצועה לפני ${AFTERNOON_MIN_START_LABEL} מותרת רק ביום עובדת הבוקר`;
       }
     }
     if (bellDayErrors[d]) continue;

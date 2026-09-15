@@ -30,7 +30,7 @@ export interface BellSlot {
   dailyHours: number;
   /** Day group this slot belongs to. */
   weekday: WeekdayGroup;
-  /** מורת צהריים — slot starts before 12:00 and is restricted to afternoon teachers.
+  /** מורת צהריים — slot starts before 11:50 and is restricted to afternoon teachers.
    *  Allowed only on the one morning day the user designates. */
   afternoonOnly: boolean;
 }

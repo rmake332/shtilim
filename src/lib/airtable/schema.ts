@@ -276,7 +276,7 @@ export const BELL_FIELDS = {
   weekday: 'fldNb6rcmG8gugWyw', // יום בשבוע (singleSelect: "א-ה" / "ו")
   category: 'fld9eKY0lDfNbpJ4v', // קטגוריה (singleSelect: "עובדי הוראה")
   range: 'fldbDAXiqolYhSaou', // כניסה ויציאה (formula text "HH:MM-HH:MM")
-  afternoonTeacher: 'fldmM6mMAHJYhqFBx', // מורת צהריים (checkbox) — רצועה שמתחילה לפני 12:00 אסורה פרט ליום בוקר
+  afternoonTeacher: 'fldmM6mMAHJYhqFBx', // מורת צהריים (checkbox) — רצועה שמתחילה לפני 11:50 אסורה פרט ליום בוקר
 } as const;
 
 /** מחשבון אופק חדש fields */

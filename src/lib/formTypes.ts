@@ -364,7 +364,7 @@ export interface ScheduleData {
   prevYearRoleId?: string;
   /**
    * For צהריים roles: the one day per week when the employee works a morning shift
-   * (starts before 12:00). All other days must start at 12:00 or later.
+   * (starts before 11:50). All other days must start at 11:50 or later.
    */
   morningDay?: Day;
   /**
