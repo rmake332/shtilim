@@ -153,15 +153,17 @@ export async function submitForm(
     [POSITION_FIELDS.submittedAt]: new Date().toISOString(),
     // חותמת ניכוי הפרא. מחושבת בשרת ומאמתת את מפת הדילוג שהלקוח חישב לפיה את
     // השעות; פער זורק ParaDeductionMismatchError ומבטל את השמירה.
-    ...(await paraDeductionFields(
-      {
-        scheduleType: role.scheduleType,
-        schedule,
-        tz: employee.tz,
-        mosadId: institutionMosadId,
-      },
-      requestId,
-    )),
+    ...(
+      await paraDeductionFields(
+        {
+          scheduleType: role.scheduleType,
+          schedule,
+          tz: employee.tz,
+          mosadId: institutionMosadId,
+        },
+        requestId,
+      )
+    ).fields,
     ...(role.selectedGemulIds.length ? { [POSITION_FIELDS.bonusesLink]: role.selectedGemulIds } : {}),
     ...(role.selectedExtraRoleIds.length ? { [POSITION_FIELDS.rolesLink]: role.selectedExtraRoleIds } : {}),
     ...(schedule.ofekRecordId ? { [POSITION_FIELDS.ofekCalcLink]: [schedule.ofekRecordId] } : {}),

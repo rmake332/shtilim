@@ -43,7 +43,12 @@ export function SummaryStep({
   const [consent, setConsent] = useState(isEdit); // edit mode: pre-consent (already acknowledged)
   const [submitting, setSubmitting] = useState(false);
   const [uploadNote, setUploadNote] = useState('');
-  const [result, setResult] = useState<{ ok: boolean; message: string; editUrl?: string } | null>(null);
+  const [result, setResult] = useState<{
+    ok: boolean;
+    message: string;
+    editUrl?: string;
+    warnings?: string[];
+  } | null>(null);
   const [subRoleOptions, setSubRoleOptions] = useState<SubRoleOption[]>([]);
 
   // מסמכי ההסמכה של תת-התפקיד מוגדרים בטבלת "תת-תפקידים" באיירטייבל. נטענים
@@ -149,7 +154,15 @@ export function SummaryStep({
     setResult(null);
     try {
       let res: Response;
-      let j: { ok: boolean; positionId?: string; employeeId?: string; message?: string; editUrl?: string };
+      let j: {
+        ok: boolean;
+        positionId?: string;
+        employeeId?: string;
+        message?: string;
+        editUrl?: string;
+        /** אזהרות שאינן מונעות שמירה, למשל תקן אחר שנשאר בלי הניכוי שנשען עליו. */
+        warnings?: string[];
+      };
 
       if (isEdit && positionId) {
         res = await fetch(`/api/positions/${positionId}?token=${encodeURIComponent(token)}`, {
@@ -160,7 +173,11 @@ export function SummaryStep({
         j = await res.json();
         if (res.ok && j.ok) {
           const failed = await uploadDocuments(positionId, j.employeeId);
-          setResult({ ok: true, message: resultMessage('התקן עודכן בהצלחה!', failed) });
+          setResult({
+            ok: true,
+            message: resultMessage('התקן עודכן בהצלחה!', failed),
+            warnings: j.warnings,
+          });
         } else {
           setResult({ ok: false, message: j.message || 'שגיאה בעדכון התקן.' });
         }
@@ -203,6 +220,21 @@ export function SummaryStep({
       <div className="bg-white p-10 rounded-xl shadow-card border border-outline-variant text-center space-y-6">
         <Icon name="check_circle" className="text-tertiary text-6xl" fill />
         <p className="text-headline-md text-primary">{result.message}</p>
+        {/* אזהרות אחרי שמירה: התקן נשמר, אך תקן אחר של העובד נשאר ללא הניכוי
+            שנשען עליו. לא חוסם, אבל חייב להיאמר ולא להישאר תקלה שקטה. */}
+        {result.warnings && result.warnings.length > 0 && (
+          <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-md text-right space-y-2">
+            <div className="flex items-center gap-2 font-bold">
+              <Icon name="warning" className="text-[20px]" />
+              נדרש טיפול בתקן אחר של העובד
+            </div>
+            <ul className="list-disc pr-5 space-y-1">
+              {result.warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         {!isEdit && (
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
             {onNewPosition && (

@@ -18,7 +18,12 @@ import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { checkLiveBudget } from '@/lib/schedule/budgetCheck';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
-import { paraDeductionFields, ParaDeductionMismatchError } from '@/lib/paraDeductionWrite';
+import {
+  paraDeductionFields,
+  dependentsLosingDeduction,
+  leanedOnByDependents,
+  ParaDeductionMismatchError,
+} from '@/lib/paraDeductionWrite';
 import { subRoleLinkFor } from '@/lib/subRoleTable';
 import { joinFullName, splitFullName, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
@@ -308,7 +313,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       },
       gate.requestId,
     );
-    return NextResponse.json({ ok: true, positionId: result.positionId, employeeId: result.employeeId });
+    return NextResponse.json({
+      ok: true,
+      positionId: result.positionId,
+      employeeId: result.employeeId,
+      warnings: result.warnings,
+    });
   } catch (e) {
     // המצב במוסד השתנה בזמן המילוי: שגיאת משתמש שניתנת לתיקון, לא תקלת מערכת.
     if (e instanceof ParaDeductionMismatchError) {
@@ -411,7 +421,7 @@ async function updatePosition(
   institutionMosadId: string,
   params: { employee: EmployeeData; role: RoleData; schedule: ScheduleData },
   requestId?: string,
-): Promise<{ positionId: string; employeeId: string }> {
+): Promise<{ positionId: string; employeeId: string; warnings: string[] }> {
   const { employee, role, schedule } = params;
 
   // Update employee record if it exists.
@@ -439,6 +449,27 @@ async function updatePosition(
     await updateRecord(TABLES.employees, employeeId, empFields, requestId);
   }
 
+  // חותמת ניכוי הפרא. `excludePositionId` מונע מהתקן להיחשב תקן אחר של עצמו,
+  // וזו בדיוק הסיבה שעריכה של התקן שניכה אינה מתהפכת: התקן שדילג בזכותו מסומן
+  // "דולג", ולכן אינו מצדיק דילוג חוזר כאן.
+  const paraDeduction = await paraDeductionFields(
+    {
+      scheduleType: role.scheduleType,
+      schedule,
+      tz: employee.tz,
+      mosadId: institutionMosadId,
+      excludePositionId: positionId,
+    },
+    requestId,
+  );
+
+  // תקנים שנשענו על הניכוי של התקן הזה ביום שהוא כבר לא מנכה בו אחרי העדכון.
+  // נקרא לפני הכתיבה, כי השדה ההפוך משתנה ברגע שהקישורים נכתבים.
+  const warnings = dependentsLosingDeduction({
+    deductedDaysAfterEdit: paraDeduction.deductedDays,
+    dependents: await leanedOnByDependents(positionId, requestId),
+  });
+
   const fields: Record<string, unknown> = {
     [POSITION_FIELDS.contractStartDate]: employee.contractStartDate || undefined,
     [POSITION_FIELDS.contractEndDate]: role.contractEndDate || undefined,
@@ -465,19 +496,7 @@ async function updatePosition(
     [POSITION_FIELDS.worksElsewherePara]: schedule.worksElsewherePara,
     [POSITION_FIELDS.updateStatus]: 'ממתין לעדכון',
     [POSITION_FIELDS.submittedAt]: new Date().toISOString(),
-    // חותמת ניכוי הפרא. `excludePositionId` מונע מהתקן להיחשב תקן אחר של עצמו,
-    // וזו בדיוק הסיבה שעריכה של התקן שניכה אינה מתהפכת: התקן שדילג בזכותו
-    // מסומן "דולג", ולכן אינו מצדיק דילוג חוזר כאן.
-    ...(await paraDeductionFields(
-      {
-        scheduleType: role.scheduleType,
-        schedule,
-        tz: employee.tz,
-        mosadId: institutionMosadId,
-        excludePositionId: positionId,
-      },
-      requestId,
-    )),
+    ...paraDeduction.fields,
     ...(role.selectedGemulIds.length ? { [POSITION_FIELDS.bonusesLink]: role.selectedGemulIds } : { [POSITION_FIELDS.bonusesLink]: [] }),
     ...(role.selectedExtraRoleIds.length ? { [POSITION_FIELDS.rolesLink]: role.selectedExtraRoleIds } : { [POSITION_FIELDS.rolesLink]: [] }),
     ...(schedule.ofekRecordId ? { [POSITION_FIELDS.ofekCalcLink]: [schedule.ofekRecordId] } : {}),
@@ -495,5 +514,5 @@ async function updatePosition(
   await updateRecord(TABLES.activePositions, positionId, fields, requestId);
   logger.info({ requestId, positionId }, 'position updated');
 
-  return { positionId, employeeId };
+  return { positionId, employeeId, warnings };
 }

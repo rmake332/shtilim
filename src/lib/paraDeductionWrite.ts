@@ -1,9 +1,11 @@
 import 'server-only';
-import { POSITION_FIELDS } from '@/lib/airtable/schema';
-import { DAYS, toMinutes, PARA_MIN_DAY_MINUTES, type Day } from '@/lib/schedule/time';
+import { getRecord, listRecords } from '@/lib/airtable/client';
+import { TABLES, POSITION_FIELDS } from '@/lib/airtable/schema';
+import { DAYS, DAY_LABELS, toMinutes, PARA_MIN_DAY_MINUTES, type Day } from '@/lib/schedule/time';
 import { isParaEntry } from '@/lib/schedule/ofek';
 import {
   buildParaDeductionStamp,
+  parseParaDeductionDetail,
   NOT_APPLICABLE_STAMP,
   type DayDeduction,
 } from '@/lib/schedule/paraDeductionStamp';
@@ -32,6 +34,92 @@ export class ParaDeductionMismatchError extends Error {
   }
 }
 
+/**
+ * תקנים שהיו נשענים על הניכוי של התקן הנערך ביום שהוא כבר אינו מנכה בו.
+ *
+ * הניכוי נלקח פעם אחת ליום. כשעריכה מזיזה יום, מקצרת אותו או מבטלת אותו, התקן
+ * שוויתר על הניכוי באותו יום נשאר עם שעות גבוהות מדי - ואין שום טריגר שיחשב
+ * אותו מחדש. זו אינה סיבה לחסום את העריכה (הזזת ימים היא פעולה לגיטימית), אבל
+ * היא חייבת להיאמר בקול במקום להישאר תקלה שקטה.
+ *
+ * `leanedOnBy` הוא השדה ההפוך שאיירטייבל מתחזק; הוא מתאר את המצב **לפני**
+ * העריכה, ולכן נקרא מהרשומה כפי שהיא כרגע.
+ */
+function text(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'object' && 'name' in (v as Record<string, unknown>))
+    return String((v as Record<string, unknown>).name);
+  if (Array.isArray(v)) return v.map(text).filter(Boolean).join(',');
+  return String(v);
+}
+
+function recordIds(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => (typeof x === 'string' ? x : (x as { id?: string } | null)?.id))
+    .filter((x): x is string => Boolean(x));
+}
+
+/**
+ * התקנים שנשענים כרגע על הניכוי של `positionId`, לפי השדה ההפוך שאיירטייבל
+ * מתחזק. נקרא לפני הכתיבה, כי הכתיבה עצמה משנה את הקישורים.
+ */
+export async function leanedOnByDependents(
+  positionId: string,
+  requestId?: string,
+): Promise<{ name: string; detail: string }[]> {
+  const rec = await getRecord(TABLES.activePositions, positionId, requestId);
+  const ids = recordIds(rec?.fields[POSITION_FIELDS.paraDeductionLeanedOnBy]);
+  if (ids.length === 0) return [];
+
+  const rows = await listRecords(
+    TABLES.activePositions,
+    {
+      filterByFormula: `OR(${ids.map((id) => `RECORD_ID()='${id}'`).join(',')})`,
+      fields: [
+        POSITION_FIELDS.roleTitleText,
+        POSITION_FIELDS.mosadNameText,
+        POSITION_FIELDS.employeeNameText,
+        POSITION_FIELDS.paraDeductionDetail,
+      ],
+    },
+    requestId,
+  );
+  return rows.map((r) => ({
+    name:
+      [
+        text(r.fields[POSITION_FIELDS.employeeNameText]),
+        text(r.fields[POSITION_FIELDS.roleTitleText]),
+        text(r.fields[POSITION_FIELDS.mosadNameText]),
+      ]
+        .filter(Boolean)
+        .join(' - ') || 'תקן אחר',
+    detail: text(r.fields[POSITION_FIELDS.paraDeductionDetail]),
+  }));
+}
+
+export function dependentsLosingDeduction(params: {
+  /** ימי העבודה שהתקן הנערך ימשיך לנכות בהם אחרי השמירה. */
+  deductedDaysAfterEdit: Set<Day>;
+  /** התקנים שנשענים היום על הניכוי של התקן הנערך, עם החותמת שלהם. */
+  dependents: { name: string; detail: string }[];
+}): string[] {
+  const out: string[] = [];
+  for (const dep of params.dependents) {
+    const parsed = parseParaDeductionDetail(dep.detail);
+    if (!parsed) continue;
+    for (const [day, minutes] of parsed) {
+      if (minutes !== 0) continue;
+      if (params.deductedDaysAfterEdit.has(day)) continue;
+      out.push(
+        `התקן "${dep.name}" ויתר על ניכוי 35/40 ביום ${DAY_LABELS[day]} משום שהניכוי נלקח בתקן זה. ` +
+          `אחרי העדכון התקן הזה כבר אינו מנכה באותו יום, ולכן יש לעדכן את שעותיו של "${dep.name}".`,
+      );
+    }
+  }
+  return out;
+}
+
 /** סך דקות העבודה ביום, ממערכת השעות של הטופס. */
 function dayMinutes(schedule: ScheduleData, day: Day): number {
   return (schedule.week?.[day] ?? []).reduce((sum, s) => {
@@ -55,14 +143,17 @@ export async function paraDeductionFields(
     excludePositionId?: string;
   },
   requestId?: string,
-): Promise<Record<string, unknown>> {
+): Promise<{ fields: Record<string, unknown>; deductedDays: Set<Day> }> {
   const { scheduleType, schedule, tz, mosadId, excludePositionId } = params;
 
   if (!isParaEntry(scheduleType) || !tz) {
     return {
-      [POSITION_FIELDS.paraDeduction]: NOT_APPLICABLE_STAMP.status,
-      [POSITION_FIELDS.paraDeductionDetail]: '',
-      [POSITION_FIELDS.paraDeductionLeansOn]: [],
+      fields: {
+        [POSITION_FIELDS.paraDeduction]: NOT_APPLICABLE_STAMP.status,
+        [POSITION_FIELDS.paraDeductionDetail]: '',
+        [POSITION_FIELDS.paraDeductionLeansOn]: [],
+      },
+      deductedDays: new Set(),
     };
   }
 
@@ -71,6 +162,7 @@ export async function paraDeductionFields(
   const entries: DayDeduction[] = [];
   const leansOn = new Set<string>();
   const serverSkipped = new Set<Day>();
+  const deductedDays = new Set<Day>();
 
   for (const day of DAYS) {
     const minutes = dayMinutes(schedule, day);
@@ -85,6 +177,7 @@ export async function paraDeductionFields(
       entries.push({ day, minutes: 0, blockedBy: holder.positionName });
     } else {
       entries.push({ day, minutes: minutes < 100 ? 35 : 40 });
+      deductedDays.add(day);
     }
   }
 
@@ -105,8 +198,11 @@ export async function paraDeductionFields(
 
   const stamp = buildParaDeductionStamp(entries);
   return {
-    [POSITION_FIELDS.paraDeduction]: stamp.status,
-    [POSITION_FIELDS.paraDeductionDetail]: stamp.detail,
-    [POSITION_FIELDS.paraDeductionLeansOn]: [...leansOn],
+    fields: {
+      [POSITION_FIELDS.paraDeduction]: stamp.status,
+      [POSITION_FIELDS.paraDeductionDetail]: stamp.detail,
+      [POSITION_FIELDS.paraDeductionLeansOn]: [...leansOn],
+    },
+    deductedDays,
   };
 }
