@@ -151,7 +151,28 @@ export function planDependentUpdates(params: {
 
   for (const dep of params.dependents) {
     const parsed = parseParaDeductionDetail(dep.detail);
-    if (!parsed) continue;
+    // חותמת שאינה נפרסת (שדה טקסט שניתן לעריכה ידנית): אי אפשר לדעת באילו ימים
+    // התקן ויתר על הניכוי, ולכן אי אפשר להכריע אם הוא נשאר מכוסה. דילוג שקט היה
+    // מוציא אותו משתי רשתות הביטחון גם יחד - גם מהסימון וגם מהביקורת, שאף היא
+    // נשענת על החותמת. לכן הוא מסומן לבדיקה ידנית.
+    if (!parsed) {
+      out.push({
+        id: dep.id,
+        name: dep.name,
+        // אין ימים ידועים, אבל כן יש דרישת עדכון: orphanDays ריק לא יספיק כאן,
+        // ולכן הסימון נגזר מ-reason ולא מאורך המערך (ראה applyDependentUpdates).
+        orphanDays: [],
+        leansOn: [],
+        reason:
+          'לא ניתן לקרוא את שדה "פירוט ניכוי פרא" של התקן, ולכן לא ניתן לדעת באילו ימים ' +
+          'ויתר על ניכוי 35/40. התקן שממנו נלקח הניכוי שונה או נמחק. יש לפתוח את התקן ' +
+          'לעריכה ולשמור אותו מחדש כדי שהשעות והחותמת יחושבו נכון.',
+        warning:
+          `לתקן "${dep.name}" יש חותמת ניכוי פרא שאינה קריאה, ולכן לא ניתן לבדוק אם הוא ` +
+          `נשאר ללא ניכוי. התקן סומן באיירטייבל כדורש עדכון.`,
+      });
+      continue;
+    }
 
     /** מי מחזיק עכשיו את הניכוי בכל יום שהתקן התלוי ויתר בו. */
     const holders = new Set<string>();
@@ -205,7 +226,9 @@ export async function applyDependentUpdates(
       u.id,
       {
         [POSITION_FIELDS.paraDeductionLeansOn]: u.leansOn,
-        [POSITION_FIELDS.paraDeductionNeedsUpdate]: u.orphanDays.length > 0,
+        // `reason` ולא `orphanDays.length`: חותמת שאינה קריאה מייצרת דרישת עדכון
+        // בלי ימים ידועים.
+        [POSITION_FIELDS.paraDeductionNeedsUpdate]: Boolean(u.reason),
         [POSITION_FIELDS.paraDeductionNeedsUpdateReason]: u.reason || null,
       },
       requestId,

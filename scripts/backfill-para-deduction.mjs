@@ -13,6 +13,15 @@
  * התקן שנוצר ראשון הוא זה שניכה, וכל מי שבא אחריו דילג ונשען עליו. זה בדיוק
  * מה שהקוד עשה בזמן אמת.
  *
+ * **הכלל המשוחזר הוא הכלל הישן, לא החדש.** עד 17.9.2026 כל תקן אחר באותו יום
+ * ביטל את הניכוי, גם תקן בסוג מערכת "רגיל" וגם יום פרא מתחת ל-80 דקות. הסקריפט
+ * משחזר לפי הכלל ההוא, כי הוא זה שקבע את השעות השמורות ברשומות האלה.
+ *
+ * **הסקריפט אינו נוגע בתקן שכבר יש לו חותמת קריאה.** חותמת שנכתבה על ידי
+ * האפליקציה משקפת את מצב הבסיס בפועל, והשחזור כאן הוא הערכה לפי סדר יצירה.
+ * בלי התנאי הזה, הרצה חוזרת אחרי שהאפליקציה עלתה לאוויר הייתה עלולה לדרוס מידע
+ * נכון בניחוש. זהו כלי מיגרציה חד-פעמי לרשומות שנוצרו לפני השינוי.
+ *
  * הרצה: node scripts/backfill-para-deduction.mjs
  * DRY_RUN=true כברירת מחדל - מדפיס בלבד. לשנות ל-false כדי לכתוב בפועל.
  */
@@ -58,6 +67,8 @@ const F = {
   stamp: fieldId('POSITION_FIELDS', 'paraDeduction'),
   detail: fieldId('POSITION_FIELDS', 'paraDeductionDetail'),
   leansOn: fieldId('POSITION_FIELDS', 'paraDeductionLeansOn'),
+  needsUpdate: fieldId('POSITION_FIELDS', 'paraDeductionNeedsUpdate'),
+  needsUpdateReason: fieldId('POSITION_FIELDS', 'paraDeductionNeedsUpdateReason'),
 };
 const BUDGET_SCHEDULE_TYPE = fieldId('BUDGET_FIELDS', 'scheduleType');
 
@@ -113,6 +124,23 @@ const linkIds = (v) =>
 const secs = (v) => (typeof v === 'number' ? v : Array.isArray(v) ? secs(v[0]) : null);
 const isPara = (t) => t === 'פרא' || t === 'הוראה - לוח פרא';
 
+/**
+ * האם לתקן כבר יש חותמת קריאה. זהה ל-parseParaDeductionDetail
+ * ב-src/lib/schedule/paraDeductionStamp.ts; טקסט שאינו בפורמט נחשב "אין חותמת".
+ */
+function parseDetail(detail) {
+  if (!detail || !detail.trim()) return null;
+  let found = false;
+  for (const m of detail.matchAll(/(?:^|,\s*)([א-ו]):(\d+)/g)) {
+    if (!DAY_LETTER_TO_DAY[m[1]]) return null;
+    found = true;
+  }
+  return found ? true : null;
+}
+const DAY_LETTER_TO_DAY = Object.fromEntries(
+  Object.entries(DAY_LETTER).map(([d, l]) => [l, d]),
+);
+
 // ---- fetch
 console.log('שולף תקציב התחלתי...');
 const budgetRows = await listAll(BUDGET, [BUDGET_SCHEDULE_TYPE]);
@@ -156,32 +184,55 @@ const recs = positions.map((r) => {
   };
 });
 
-// ---- replay: בכל ת.ז.+מוסד+יום, מי שנוצר ראשון הוא שניכה
+// ---- replay
+// כל תקן של אותו עובד באותו מוסד, בסדר יצירה. גם תקן שאינו פרא נכלל: לפי הכלל
+// שהיה בתוקף עד 17.9.2026 די בקיומו באותו יום כדי לבטל את הניכוי בתקן הפרא
+// שהוזן אחריו.
+const byGroup = new Map();
+for (const p of recs) {
+  if (p.prevYear || !p.tz || !p.mosad) continue;
+  const k = `${p.tz}|${p.mosad}`;
+  if (!byGroup.has(k)) byGroup.set(k, []);
+  byGroup.get(k).push(p);
+}
+for (const list of byGroup.values()) list.sort((a, b) => a.createdTime.localeCompare(b.createdTime));
+
 const eligible = recs
   .filter((p) => !p.prevYear && isPara(p.scheduleType) && p.tz && p.mosad)
+  // תקן שכבר נושא חותמת קריאה נשאר כפי שהוא: היא נכתבה מול מצב הבסיס בפועל,
+  // והשחזור כאן הוא הערכה לפי סדר יצירה בלבד.
+  .filter((p) => !parseDetail(p.current.detail) && p.current.stamp !== 'לא נדרש')
   .sort((a, b) => a.createdTime.localeCompare(b.createdTime));
 
-/** "tz|mosad|day" → התקן שמחזיק את הניכוי באותו יום. */
-const holder = new Map();
 const planned = [];
 
 for (const p of eligible) {
   const entries = [];
   const leansOn = new Set();
+  /** ימים שהניכוי בוטל בהם בגלל תקן שמעולם לא ניכה בעצמו. */
+  const unbackedDays = [];
+  const group = byGroup.get(`${p.tz}|${p.mosad}`) ?? [];
 
   for (const d of PARA_DAYS) {
     const min = p.minutes[d];
     // יום מתחת לסף שנוסחת הפרא בכלל לא רצה עליו אינו נכנס לחותמת.
     if (min < PARA_MIN_DAY_MINUTES) continue;
-    const key = `${p.tz}|${p.mosad}|${d}`;
-    const held = holder.get(key);
-    if (held) {
-      entries.push({ day: d, minutes: 0, blockedBy: held.name });
-      leansOn.add(held.id);
-    } else {
+
+    // מי שהיה קיים באותו יום ברגע שהתקן הזה נשמר.
+    const earlier = group.filter(
+      (o) => o.id !== p.id && o.minutes[d] > 0 && o.createdTime < p.createdTime,
+    );
+    if (earlier.length === 0) {
       entries.push({ day: d, minutes: min < 100 ? 35 : 40 });
-      holder.set(key, p);
+      continue;
     }
+
+    // הניכוי בוטל. אם מי שביטל אותו הוא תקן פרא אמיתי, זו תלות תקינה גם לפי
+    // הכלל החדש; אחרת השעות השמורות מנופחות ודורשות טיפול אנושי.
+    const realHolder = earlier.find((o) => isPara(o.scheduleType) && o.minutes[d] >= PARA_MIN_DAY_MINUTES);
+    entries.push({ day: d, minutes: 0, blockedBy: (realHolder ?? earlier[0]).name });
+    if (realHolder) leansOn.add(realHolder.id);
+    else unbackedDays.push(d);
   }
   if (entries.length === 0) continue;
 
@@ -198,12 +249,17 @@ for (const p of eligible) {
   const stamp =
     deducted === entries.length ? 'נוכה' : deducted === 0 ? 'תקן נוסף ללא ניכוי' : 'ניכוי חלקי';
 
-  const next = { stamp, detail, leansOn: [...leansOn].sort() };
-  const unchanged =
-    p.current.stamp === next.stamp &&
-    p.current.detail === next.detail &&
-    p.current.leansOn.join(',') === next.leansOn.join(',');
-  if (!unchanged) planned.push({ p, next });
+  // הניכוי בוטל בגלל תקן שמעולם לא ניכה בעצמו (סוג מערכת "רגיל", או יום פרא
+  // מתחת ל-80 דקות). לפי הכלל החדש השעות השמורות גבוהות מדי, וזה דורש טיפול
+  // אנושי: הסקריפט אינו משנה שעות.
+  const needsUpdateReason = unbackedDays.length
+    ? `הניכוי ביום ${unbackedDays.map((d) => DAY_LETTER[d]).join(', ')} בוטל בשעתו בגלל תקן ` +
+      `אחר של העובד באותו מוסד שלא נוכו בו 35/40 מעולם. לפי הכלל הנוכחי השעות כאן ` +
+      `גבוהות מדי - יש לפתוח את התקן לעריכה ולשמור אותו מחדש.`
+    : '';
+
+  const next = { stamp, detail, leansOn: [...leansOn].sort(), needsUpdateReason };
+  planned.push({ p, next });
 }
 
 // ---- report
@@ -242,6 +298,10 @@ for (let i = 0; i < planned.length; i += 10) {
       [F.stamp]: next.stamp,
       [F.detail]: next.detail,
       [F.leansOn]: next.leansOn,
+      // מסומן רק כשיש בעיה. סימון קיים (למשל מתרחיש ההסרה ב-Make) אינו נמחק כאן.
+      ...(next.needsUpdateReason
+        ? { [F.needsUpdate]: true, [F.needsUpdateReason]: next.needsUpdateReason }
+        : {}),
     },
   }));
   await patchBatch(batch);

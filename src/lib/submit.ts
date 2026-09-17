@@ -88,6 +88,19 @@ export async function submitForm(
 ): Promise<{ positionId: string; employeeId: string }> {
   const { employee, role, schedule, institutionMosadId, institutionName } = params;
 
+  // 0. חותמת ניכוי הפרא. מחושבת לפני כל כתיבה כי היא היחידה כאן שיכולה לזרוק
+  // (ParaDeductionMismatchError); אילו רצה אחרי upsertEmployee, שליחה שנדחתה
+  // הייתה משאירה רשומת עובד מעודכנת בלי תקן.
+  const paraDeduction = await paraDeductionFields(
+    {
+      scheduleType: role.scheduleType,
+      schedule,
+      tz: employee.tz,
+      mosadId: institutionMosadId,
+    },
+    requestId,
+  );
+
   // 1. Employee record (create if new, update if existing).
   // בדרך כלל הרשומה כבר נוצרה בסיום שלב פרטי העובד (POST /api/employees) והקריאה כאן
   // רק מעדכנת. הקריאה נשארת כי מסלולים אחרים (עריכה, טעינה משנה קודמת) מגיעים לכאן ישירות.
@@ -151,19 +164,8 @@ export async function submitForm(
     [POSITION_FIELDS.worksElsewherePara]: schedule.worksElsewherePara,
     [POSITION_FIELDS.updateStatus]: 'ממתין לעדכון',
     [POSITION_FIELDS.submittedAt]: new Date().toISOString(),
-    // חותמת ניכוי הפרא. מחושבת בשרת ומאמתת את מפת הדילוג שהלקוח חישב לפיה את
-    // השעות; פער זורק ParaDeductionMismatchError ומבטל את השמירה.
-    ...(
-      await paraDeductionFields(
-        {
-          scheduleType: role.scheduleType,
-          schedule,
-          tz: employee.tz,
-          mosadId: institutionMosadId,
-        },
-        requestId,
-      )
-    ).fields,
+    // חותמת ניכוי הפרא (חושבה למעלה, לפני כל כתיבה).
+    ...paraDeduction.fields,
     ...(role.selectedGemulIds.length ? { [POSITION_FIELDS.bonusesLink]: role.selectedGemulIds } : {}),
     ...(role.selectedExtraRoleIds.length ? { [POSITION_FIELDS.rolesLink]: role.selectedExtraRoleIds } : {}),
     ...(schedule.ofekRecordId ? { [POSITION_FIELDS.ofekCalcLink]: [schedule.ofekRecordId] } : {}),

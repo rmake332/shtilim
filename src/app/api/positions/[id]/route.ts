@@ -426,6 +426,37 @@ async function updatePosition(
 ): Promise<{ positionId: string; employeeId: string; warnings: string[] }> {
   const { employee, role, schedule } = params;
 
+  // חותמת ניכוי הפרא מחושבת ראשונה, לפני כל כתיבה, כי היא היחידה כאן שיכולה
+  // לזרוק (ParaDeductionMismatchError). אילו רצה אחרי עדכון העובד, שמירה שנדחתה
+  // הייתה משאירה את פרטי העובד מעודכנים ואת התקן לא - שמירה חלקית מול הודעה
+  // שאומרת למשתמשת להזין הכל מחדש.
+  //
+  // `excludePositionId` מונע מהתקן להיחשב תקן אחר של עצמו, וזו בדיוק הסיבה
+  // שעריכה של התקן שניכה אינה מתהפכת: התקן שדילג בזכותו מסומן "דולג", ולכן
+  // אינו מצדיק דילוג חוזר כאן.
+  const paraDeduction = await paraDeductionFields(
+    {
+      scheduleType: role.scheduleType,
+      schedule,
+      tz: employee.tz,
+      mosadId: institutionMosadId,
+      excludePositionId: positionId,
+    },
+    requestId,
+  );
+
+  // תקנים שנשענו על הניכוי של התקן הזה. נקראים לפני הכתיבה, כי השדה ההפוך
+  // משתנה ברגע שהקישורים נכתבים. ב-coverage מוחלף SELF במזהה התקן הנערך, כי
+  // מבחינת התלויים הוא מנכה ככל תקן אחר.
+  const coverage = new Map(
+    [...paraDeduction.coverage].map(([day, holder]) => [day, holder === SELF ? positionId : holder]),
+  );
+  const dependentUpdates = planDependentUpdates({
+    coverage,
+    dependents: await leanedOnByDependents(positionId, requestId),
+  });
+  const warnings = dependentUpdates.map((u) => u.warning).filter(Boolean);
+
   // Update employee record if it exists.
   const employeeId = employee.recordId ?? '';
   if (employeeId) {
@@ -450,32 +481,6 @@ async function updatePosition(
     logger.info({ requestId, employeeId, empFields }, 'updating employee fields');
     await updateRecord(TABLES.employees, employeeId, empFields, requestId);
   }
-
-  // חותמת ניכוי הפרא. `excludePositionId` מונע מהתקן להיחשב תקן אחר של עצמו,
-  // וזו בדיוק הסיבה שעריכה של התקן שניכה אינה מתהפכת: התקן שדילג בזכותו מסומן
-  // "דולג", ולכן אינו מצדיק דילוג חוזר כאן.
-  const paraDeduction = await paraDeductionFields(
-    {
-      scheduleType: role.scheduleType,
-      schedule,
-      tz: employee.tz,
-      mosadId: institutionMosadId,
-      excludePositionId: positionId,
-    },
-    requestId,
-  );
-
-  // תקנים שנשענו על הניכוי של התקן הזה. נקראים לפני הכתיבה, כי השדה ההפוך
-  // משתנה ברגע שהקישורים נכתבים. ב-coverage מוחלף SELF במזהה התקן הנערך, כי
-  // מבחינת התלויים הוא מנכה ככל תקן אחר.
-  const coverage = new Map(
-    [...paraDeduction.coverage].map(([day, holder]) => [day, holder === SELF ? positionId : holder]),
-  );
-  const dependentUpdates = planDependentUpdates({
-    coverage,
-    dependents: await leanedOnByDependents(positionId, requestId),
-  });
-  const warnings = dependentUpdates.map((u) => u.warning).filter(Boolean);
 
   const fields: Record<string, unknown> = {
     [POSITION_FIELDS.contractStartDate]: employee.contractStartDate || undefined,

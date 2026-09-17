@@ -94,13 +94,25 @@ describe('planDependentUpdates', () => {
     expect(out.every((u) => u.orphanDays.length > 0)).toBe(true);
   });
 
-  it('תקן תלוי בלי חותמת קריאה מדולג ולא מנחשים עליו', () => {
-    expect(
-      planDependentUpdates({
-        coverage: coverage([]),
-        dependents: [{ id: 'recOld', name: 'תקן ישן', detail: '' }],
-      }),
-    ).toEqual([]);
+  it('תקן תלוי בלי חותמת קריאה מסומן לבדיקה ידנית ולא נעלם בשקט', () => {
+    // אי אפשר לדעת באילו ימים ויתר על הניכוי, ולכן אי אפשר להכריע אם נשאר מכוסה.
+    // דילוג שקט היה מוציא אותו גם מהסימון וגם מהביקורת, שאף היא נשענת על החותמת.
+    const [u] = planDependentUpdates({
+      coverage: coverage([]),
+      dependents: [{ id: 'recOld', name: 'תקן ישן', detail: '' }],
+    });
+    expect(u.orphanDays).toEqual([]);
+    expect(u.leansOn).toEqual([]);
+    expect(u.reason).toContain('לא ניתן לקרוא');
+    expect(u.warning).toContain('תקן ישן');
+  });
+
+  it('חותמת שנערכה ידנית לטקסט חופשי מסומנת גם היא', () => {
+    const [u] = planDependentUpdates({
+      coverage: coverage([['mon', A]]),
+      dependents: [{ id: 'recOld', name: 'תקן ישן', detail: 'נוכה בכל הימים' }],
+    });
+    expect(u.reason).toContain('לא ניתן לקרוא');
   });
 
   it('אין תקנים תלויים - אין מה לעדכן', () => {
