@@ -9,7 +9,8 @@
  */
 import { ageFromBirthDate } from '@/lib/formTypes';
 import { formatNum } from '@/lib/formatNum';
-import { toMinutes, shiftMinutes, type Shift } from './time';
+import { CATEGORY } from '@/lib/airtable/schema';
+import { toMinutes, shiftMinutes, type Shift, type Day } from './time';
 
 export interface YouthLimits {
   /** מקסימום שעות עבודה ביום (סכום המשמרות, שעון ולא אקדמי). */
@@ -80,4 +81,43 @@ export function youthDayError(shifts: Shift[], l: YouthLimits): string | null {
 export function youthWeeklyError(weeklyHours: number, l: YouthLimits): string | null {
   if (weeklyHours <= l.maxWeeklyHours) return null;
   return `העסקת נוער — עד ${l.maxWeeklyHours} שעות שבועיות (הוזנו ${formatNum(weeklyHours)})`;
+}
+
+/* ── תפקיד סיוע לעובד/ת מתחת לגיל 18 ──────────────────────────────────────── */
+
+/**
+ * בתפקיד סיוע מותרת העסקת מי שטרם מלאו לו 18 ביום שישי בלבד.
+ * בעבר הקטגוריה נחסמה כליל לקטינים (חסימה בבחירת התפקיד); ההגבלה צומצמה ליום
+ * שישי, ולכן היא נאכפת ברמת היום בשלב מערכת השעות ולא בשלב התפקיד.
+ * חל על קטגוריית "סיוע" בלבד, לא על "סיוע מדורג".
+ */
+export const ASSISTANCE_MINOR_DAY: Day = 'fri';
+
+export const ASSISTANCE_MINOR_NOTICE =
+  'תפקיד סיוע, עובד/ת מתחת לגיל 18: ניתן להזין שעות ביום שישי בלבד.';
+
+export const ASSISTANCE_MINOR_ROLE_NOTICE =
+  'עובד/ת מתחת לגיל 18 - ניתן להעסיק ביום שישי בלבד. הזנת שעות ביום אחר תיחסם בשלב מערכת השעות.';
+
+export const ASSISTANCE_MINOR_DAY_ERROR =
+  'תפקיד סיוע - מתחת לגיל 18 מותרת העסקה ביום שישי בלבד';
+
+/** האם חל הכלל "סיוע לקטין - יום שישי בלבד" על הצירוף תקן+עובד הזה. */
+export function isAssistanceMinor(
+  category: string | undefined,
+  birthDate: string | undefined,
+): boolean {
+  if (category !== CATEGORY.assistance) return false;
+  const age = ageFromBirthDate(birthDate ?? '');
+  return age !== null && age < 18;
+}
+
+/**
+ * שגיאת יום בתפקיד סיוע לקטין: כל יום שאינו שישי שהוזנו בו שעות (כולל מוצ"ש).
+ * משמרת ריקה לגמרי אינה נחשבת הזנה, כדי שלא תיווצר שגיאה על שורה שנפתחה ולא מולאה.
+ */
+export function assistanceMinorDayError(day: Day, shifts: Shift[]): string | null {
+  if (day === ASSISTANCE_MINOR_DAY) return null;
+  const entered = shifts.some((s) => Boolean(s.in) || Boolean(s.out));
+  return entered ? ASSISTANCE_MINOR_DAY_ERROR : null;
 }

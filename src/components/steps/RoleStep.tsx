@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { ActionBar } from '@/components/shell/ActionBar';
 import { formatNum } from '@/lib/formatNum';
-import { RoleData, EmployeeData, YouthDocs, emptyRole, ageFromBirthDate } from '@/lib/formTypes';
+import { RoleData, EmployeeData, YouthDocs, emptyRole } from '@/lib/formTypes';
+import { isAssistanceMinor, ASSISTANCE_MINOR_ROLE_NOTICE } from '@/lib/schedule/youth';
 import {
   isKnownSubRole,
   requiresLandbergApproval,
@@ -375,6 +376,10 @@ export function RoleStep({
 
   const showContractEndDate = data.category === CATEGORY.temporarySubstitute;
 
+  // תפקיד סיוע לעובד/ת שטרם מלאו לו 18: אזהרה בלבד כאן - ההגבלה עצמה (יום שישי
+  // בלבד) נאכפת ברמת היום בשלב מערכת השעות.
+  const assistanceMinor = isAssistanceMinor(data.category, employee?.birthDate);
+
   // תת-תפקיד / גמולים / תפקידים נוספים. במצב עריכה הנתונים הדרושים (category,
   // paraSubRoleList) כבר נטענו מהתקן עצמו ב-loadPosition, ולכן החלק מוצג גם כשה-lookup
   // של שורת התקציב עדיין רץ או לא החזיר כלום - אחרת "עדכון גמולים ותפקידים" מציג
@@ -460,13 +465,6 @@ export function RoleStep({
     if (needsLayer && !data.layer) {
       setError('יש לבחור שכבה');
       return;
-    }
-    if (data.category === CATEGORY.assistance) {
-      const age = ageFromBirthDate(employee?.birthDate ?? '');
-      if (age !== null && age < 18) {
-        setError('לא ניתן להעסיק עובד מתחת לגיל 18 בתפקיד סיוע');
-        return;
-      }
     }
     if (showMinistryFileQuestion && !data.hasMinistryFile) {
       setError('יש לציין האם קיים תיק במשרד החינוך');
@@ -741,6 +739,17 @@ export function RoleStep({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* תפקיד סיוע לעובד/ת מתחת לגיל 18: מותר ביום שישי בלבד (נאכף בשלב מערכת השעות) */}
+      {assistanceMinor && (
+        <div className="mb-4 p-4 rounded-xl border border-tertiary/40 bg-tertiary-container/30 flex items-start gap-3">
+          <Icon name="gavel" className="text-tertiary mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-label-lg font-semibold text-on-surface mb-1">העסקת נוער בתפקיד סיוע</p>
+            <p className="text-body-sm text-on-surface-variant">{ASSISTANCE_MINOR_ROLE_NOTICE}</p>
           </div>
         </div>
       )}

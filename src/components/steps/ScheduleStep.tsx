@@ -28,6 +28,9 @@ import {
   youthWeeklyError,
   youthSlotAllowed,
   youthTimeError,
+  isAssistanceMinor,
+  assistanceMinorDayError,
+  ASSISTANCE_MINOR_NOTICE,
   type YouthLimits,
 } from '@/lib/schedule/youth';
 import {
@@ -344,6 +347,16 @@ function YouthNotice({ limits }: { limits: YouthLimits }) {
         <br />
         {youthLimitsSummary(limits)}. שעות מחוץ לטווח או חריגה מהמכסה ייחסמו.
       </p>
+    </div>
+  );
+}
+
+/** באנר לתפקיד סיוע שבו העובד/ת טרם מלאו לו 18: הזנה מותרת ביום שישי בלבד. */
+function AssistanceMinorNotice() {
+  return (
+    <div className="p-4 rounded-xl bg-secondary-container/40 text-on-secondary-container text-body-md flex items-start gap-2">
+      <Icon name="gavel" className="text-[20px] mt-0.5 shrink-0" />
+      <p>{ASSISTANCE_MINOR_NOTICE}</p>
     </div>
   );
 }
@@ -747,6 +760,8 @@ function GridSchedule({
   const totalHours = totalMin / 60;
   // חוק העסקת נוער: חלון שעות + מכסה יומית נאכפים בהזנה; המכסה השבועית מחליפה את תקרת ה-42.
   const youth = youthLimitsFor(employee.birthDate);
+  // תפקיד סיוע לעובד/ת מתחת לגיל 18: הזנה מותרת ביום שישי בלבד (מוצ"ש בכלל האיסור).
+  const assistanceMinor = isAssistanceMinor(role.category, employee.birthDate);
   // הפסקות: המדיניות נגזרת פעם אחת מסוג המערכת + שכבת התקן + דגל העובד, ומזינה גם את
   // בדיקות היום (חסימה) וגם את שורת ההזנה בכרטיס היום.
   const breakPolicy = breakPolicyFor({
@@ -858,6 +873,11 @@ function GridSchedule({
 
   const dayErrors: Partial<Record<Day, string>> = {};
   for (const d of gridDays) {
+    // סיוע לעובד/ת מתחת ל-18: היום כולו אסור אם אינו שישי - נבדק לפני כל השאר.
+    if (assistanceMinor) {
+      const ae = assistanceMinorDayError(d, week[d] ?? []);
+      if (ae) { dayErrors[d] = ae; continue; }
+    }
     const v = validateDay(week[d] ?? []);
     if (!v.ok) { dayErrors[d] = v.error; continue; }
     // תפקיד צהריים: בכל יום שאינו יום עובדת הבוקר — כניסה חייבת להיות 11:50 ומעלה.
@@ -1323,6 +1343,7 @@ function GridSchedule({
       {/* Days grid */}
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
+        {assistanceMinor && <AssistanceMinorNotice />}
         {breakPolicy.twelveHour && <TwelveHourNotice />}
         {isPara && sameDaysError && (
           <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-md flex items-start gap-2">
@@ -1746,6 +1767,8 @@ function BellScheduleGrid({
 
   // חוק העסקת נוער: רצועות מחוץ לחלון השעות כלל אינן מוצעות לבחירה.
   const youth = youthLimitsFor(employee.birthDate);
+  // תפקיד סיוע לעובד/ת מתחת לגיל 18: בחירת רצועות מותרת ביום שישי בלבד.
+  const assistanceMinor = isAssistanceMinor(role.category, employee.birthDate);
   // הפסקות: בלוח צלצולים הסף נמדד בשעות אקדמיות וההפסקה אינה מנוכה מהשעות שנספרות.
   const breakPolicy = breakPolicyFor({
     scheduleType: role.scheduleType,
@@ -1971,6 +1994,11 @@ function BellScheduleGrid({
   for (const d of DAYS) {
     const dayPicked = picks[d].filter((p): p is BellSlot => p !== null);
     const shifts = dayPicked.map((p) => ({ in: p.in, out: p.out }));
+    // סיוע לעובד/ת מתחת ל-18: היום כולו אסור אם אינו שישי - נבדק לפני כל השאר.
+    if (assistanceMinor) {
+      const ae = assistanceMinorDayError(d, shifts);
+      if (ae) { bellDayErrors[d] = ae; continue; }
+    }
     const v = validateDay(shifts);
     if (!v.ok) { bellDayErrors[d] = v.error!; continue; }
     // תפקיד צהריים: רצועה שמתחילה לפני 11:50 אסורה בכל יום פרט ליום הבוקר.
@@ -2292,6 +2320,7 @@ function BellScheduleGrid({
       {/* Days grid */}
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
+        {assistanceMinor && <AssistanceMinorNotice />}
         {breakPolicy.twelveHour && <TwelveHourNotice />}
         {slotsLoading && (
           <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant flex items-center gap-3 text-on-surface-variant text-body-md">

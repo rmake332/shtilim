@@ -6,6 +6,8 @@ import {
   youthSlotAllowed,
   youthTimeError,
   withinYouthWindow,
+  isAssistanceMinor,
+  assistanceMinorDayError,
 } from './youth';
 
 /** תאריך לידה שנותן בדיוק את הגיל המבוקש נכון להיום. */
@@ -97,5 +99,26 @@ describe('youthSlotAllowed', () => {
   });
   it('רצועה ארוכה מהמכסה היומית נחסמת', () => {
     expect(youthSlotAllowed({ in: '08:00', out: '19:00' }, UNDER_16)).toBe(false);
+  });
+});
+
+describe('סיוע לעובד מתחת לגיל 18', () => {
+  it('חל רק על קטגוריית סיוע ורק מתחת ל-18', () => {
+    expect(isAssistanceMinor('סיוע', birthDateForAge(17))).toBe(true);
+    expect(isAssistanceMinor('סיוע', birthDateForAge(18))).toBe(false);
+    expect(isAssistanceMinor('סיוע מדורג', birthDateForAge(17))).toBe(false);
+    expect(isAssistanceMinor('פרא רפואי', birthDateForAge(17))).toBe(false);
+    expect(isAssistanceMinor('סיוע', '')).toBe(false);
+  });
+  it('יום שישי מותר, כל יום אחר נחסם', () => {
+    const shifts = [{ in: '08:00', out: '12:00' }];
+    expect(assistanceMinorDayError('fri', shifts)).toBeNull();
+    expect(assistanceMinorDayError('sun', shifts)).toContain('יום שישי בלבד');
+    expect(assistanceMinorDayError('motzash', shifts)).toContain('יום שישי בלבד');
+  });
+  it('יום ריק אינו מייצר שגיאה', () => {
+    expect(assistanceMinorDayError('sun', [])).toBeNull();
+    expect(assistanceMinorDayError('sun', [{ in: '', out: '' }])).toBeNull();
+    expect(assistanceMinorDayError('sun', [{ in: '08:00', out: '' }])).toContain('יום שישי בלבד');
   });
 });
