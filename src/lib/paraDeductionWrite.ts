@@ -34,17 +34,6 @@ export class ParaDeductionMismatchError extends Error {
   }
 }
 
-/**
- * תקנים שהיו נשענים על הניכוי של התקן הנערך ביום שהוא כבר אינו מנכה בו.
- *
- * הניכוי נלקח פעם אחת ליום. כשעריכה מזיזה יום, מקצרת אותו או מבטלת אותו, התקן
- * שוויתר על הניכוי באותו יום נשאר עם שעות גבוהות מדי - ואין שום טריגר שיחשב
- * אותו מחדש. זו אינה סיבה לחסום את העריכה (הזזת ימים היא פעולה לגיטימית), אבל
- * היא חייבת להיאמר בקול במקום להישאר תקלה שקטה.
- *
- * `leanedOnBy` הוא השדה ההפוך שאיירטייבל מתחזק; הוא מתאר את המצב **לפני**
- * העריכה, ולכן נקרא מהרשומה כפי שהיא כרגע.
- */
 function text(v: unknown): string {
   if (v == null) return '';
   if (typeof v === 'object' && 'name' in (v as Record<string, unknown>))
@@ -98,10 +87,24 @@ export async function leanedOnByDependents(
   }));
 }
 
+/**
+ * תקנים שהיו נשענים על הניכוי של התקן הנערך, ביום שאחרי העריכה כבר אין בו מנכה.
+ *
+ * הניכוי נלקח פעם אחת ליום. כשעריכה מזיזה יום, מקצרת אותו או מבטלת אותו, התקן
+ * שוויתר על הניכוי באותו יום נשאר עם שעות גבוהות מדי, ואין שום טריגר שיחשב
+ * אותו מחדש. זו אינה סיבה לחסום את העריכה (הזזת ימים היא פעולה לגיטימית), אבל
+ * היא חייבת להיאמר בקול במקום להישאר תקלה שקטה.
+ *
+ * הקריטריון הוא "אין מנכה ביום הזה" ולא "התקן הנערך אינו מנכה": אם תקן שלישי
+ * של אותו עובד מחזיק את הניכוי באותו יום, התלוי עדיין מכוסה ואין מה להתריע.
+ */
 export function dependentsLosingDeduction(params: {
-  /** ימי העבודה שהתקן הנערך ימשיך לנכות בהם אחרי השמירה. */
-  deductedDaysAfterEdit: Set<Day>;
-  /** התקנים שנשענים היום על הניכוי של התקן הנערך, עם החותמת שלהם. */
+  /** הימים שבהם מישהו מנכה אחרי השמירה (התקן הנערך או תקן אחר של העובד). */
+  coveredDaysAfterEdit: Set<Day>;
+  /**
+   * התקנים שנשענים על הניכוי של התקן הנערך, עם החותמת שלהם. נקראים לפני
+   * הכתיבה, כי הכתיבה עצמה משנה את הקישורים.
+   */
   dependents: { name: string; detail: string }[];
 }): string[] {
   const out: string[] = [];
@@ -110,10 +113,10 @@ export function dependentsLosingDeduction(params: {
     if (!parsed) continue;
     for (const [day, minutes] of parsed) {
       if (minutes !== 0) continue;
-      if (params.deductedDaysAfterEdit.has(day)) continue;
+      if (params.coveredDaysAfterEdit.has(day)) continue;
       out.push(
         `התקן "${dep.name}" ויתר על ניכוי 35/40 ביום ${DAY_LABELS[day]} משום שהניכוי נלקח בתקן זה. ` +
-          `אחרי העדכון התקן הזה כבר אינו מנכה באותו יום, ולכן יש לעדכן את שעותיו של "${dep.name}".`,
+          `אחרי העדכון אין יותר מי שמנכה באותו יום, ולכן יש לעדכן את שעותיו של "${dep.name}".`,
       );
     }
   }
@@ -143,7 +146,7 @@ export async function paraDeductionFields(
     excludePositionId?: string;
   },
   requestId?: string,
-): Promise<{ fields: Record<string, unknown>; deductedDays: Set<Day> }> {
+): Promise<{ fields: Record<string, unknown>; coveredDays: Set<Day> }> {
   const { scheduleType, schedule, tz, mosadId, excludePositionId } = params;
 
   if (!isParaEntry(scheduleType) || !tz) {
@@ -153,7 +156,7 @@ export async function paraDeductionFields(
         [POSITION_FIELDS.paraDeductionDetail]: '',
         [POSITION_FIELDS.paraDeductionLeansOn]: [],
       },
-      deductedDays: new Set(),
+      coveredDays: new Set(),
     };
   }
 
@@ -162,7 +165,15 @@ export async function paraDeductionFields(
   const entries: DayDeduction[] = [];
   const leansOn = new Set<string>();
   const serverSkipped = new Set<Day>();
-  const deductedDays = new Set<Day>();
+  /**
+   * הימים שבהם מישהו מנכה אחרי השמירה: התקן הזה עצמו, או תקן אחר של העובד
+   * באותו מוסד. זה ולא "הימים שהתקן הזה מנכה בהם" הוא הקריטריון לאזהרה:
+   * ביום שתקן שלישי מחזיק בו את הניכוי, תקן שדילג עדיין מכוסה כראוי.
+   */
+  const coveredDays = new Set<Day>();
+  for (const day of DAYS) {
+    if ((sameDays[day] ?? []).some((p) => p.deducted)) coveredDays.add(day);
+  }
 
   for (const day of DAYS) {
     const minutes = dayMinutes(schedule, day);
@@ -177,7 +188,7 @@ export async function paraDeductionFields(
       entries.push({ day, minutes: 0, blockedBy: holder.positionName });
     } else {
       entries.push({ day, minutes: minutes < 100 ? 35 : 40 });
-      deductedDays.add(day);
+      coveredDays.add(day);
     }
   }
 
@@ -203,6 +214,6 @@ export async function paraDeductionFields(
       [POSITION_FIELDS.paraDeductionDetail]: stamp.detail,
       [POSITION_FIELDS.paraDeductionLeansOn]: [...leansOn],
     },
-    deductedDays,
+    coveredDays,
   };
 }

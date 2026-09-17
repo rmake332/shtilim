@@ -20,7 +20,7 @@ describe('dependentsLosingDeduction', () => {
   it('A ממשיך לנכות ביום ב - אין אזהרה', () => {
     expect(
       dependentsLosingDeduction({
-        deductedDaysAfterEdit: new Set(['mon']),
+        coveredDaysAfterEdit: new Set(['mon']),
         dependents: [B],
       }),
     ).toEqual([]);
@@ -28,7 +28,7 @@ describe('dependentsLosingDeduction', () => {
 
   it('A הסיר את יום ב מהמערכת - B נשאר בלי מנכה, ויש אזהרה', () => {
     const out = dependentsLosingDeduction({
-      deductedDaysAfterEdit: new Set(['wed']),
+      coveredDaysAfterEdit: new Set(['wed']),
       dependents: [B],
     });
     expect(out).toHaveLength(1);
@@ -36,19 +36,29 @@ describe('dependentsLosingDeduction', () => {
     expect(out[0]).toContain('שני');
   });
 
-  it('A עבר לדלג בעצמו ביום ב - גם זה משאיר את B בלי מנכה', () => {
-    // אחרי העריכה A אינו מנכה באף יום, למשל כי תקן שלישי לקח את הניכוי.
+  it('תקן שלישי לקח את הניכוי ביום ב - B מכוסה, ואין אזהרת שווא', () => {
+    // A כבר אינו מנכה ביום ב', אבל תקן אחר של אותו עובד באותו מוסד כן. הקריטריון
+    // הוא "יש מנכה ביום הזה", לא "התקן הנערך מנכה בו".
     const out = dependentsLosingDeduction({
-      deductedDaysAfterEdit: new Set(),
+      coveredDaysAfterEdit: new Set(['mon']),
+      dependents: [B],
+    });
+    expect(out).toEqual([]);
+  });
+
+  it('אף אחד לא מנכה ביום ב אחרי העריכה - אזהרה', () => {
+    const out = dependentsLosingDeduction({
+      coveredDaysAfterEdit: new Set(),
       dependents: [B],
     });
     expect(out).toHaveLength(1);
+    expect(out[0]).toContain('אין יותר מי שמנכה');
   });
 
   it('יום שבו B ניכה בעצמו אינו מייצר אזהרה, גם כש-A לא מנכה בו', () => {
     // ב-B יום ה' רשום כ-40, כלומר הוא ניכה שם לבד ואינו תלוי ב-A.
     const out = dependentsLosingDeduction({
-      deductedDaysAfterEdit: new Set(['mon']),
+      coveredDaysAfterEdit: new Set(['mon']),
       dependents: [B],
     });
     expect(out.some((m) => m.includes('חמישי'))).toBe(false);
@@ -56,7 +66,7 @@ describe('dependentsLosingDeduction', () => {
 
   it('כמה תקנים תלויים - אזהרה לכל אחד ולכל יום', () => {
     const out = dependentsLosingDeduction({
-      deductedDaysAfterEdit: new Set(),
+      coveredDaysAfterEdit: new Set(),
       dependents: [
         B,
         { name: 'כהן רות - פרא גנים', detail: 'א:0 (פרא יסודי), ג:0 (פרא יסודי)' },
@@ -68,7 +78,7 @@ describe('dependentsLosingDeduction', () => {
   it('תקן תלוי בלי חותמת קריאה מדולג ולא מנחשים עליו', () => {
     expect(
       dependentsLosingDeduction({
-        deductedDaysAfterEdit: new Set(),
+        coveredDaysAfterEdit: new Set(),
         dependents: [{ name: 'תקן ישן', detail: '' }],
       }),
     ).toEqual([]);
@@ -76,7 +86,7 @@ describe('dependentsLosingDeduction', () => {
 
   it('אין תקנים תלויים - אין אזהרות', () => {
     expect(
-      dependentsLosingDeduction({ deductedDaysAfterEdit: new Set(['mon']), dependents: [] }),
+      dependentsLosingDeduction({ coveredDaysAfterEdit: new Set(['mon']), dependents: [] }),
     ).toEqual([]);
   });
 });

@@ -466,7 +466,7 @@ async function updatePosition(
   // תקנים שנשענו על הניכוי של התקן הזה ביום שהוא כבר לא מנכה בו אחרי העדכון.
   // נקרא לפני הכתיבה, כי השדה ההפוך משתנה ברגע שהקישורים נכתבים.
   const warnings = dependentsLosingDeduction({
-    deductedDaysAfterEdit: paraDeduction.deductedDays,
+    coveredDaysAfterEdit: paraDeduction.coveredDays,
     dependents: await leanedOnByDependents(positionId, requestId),
   });
 
