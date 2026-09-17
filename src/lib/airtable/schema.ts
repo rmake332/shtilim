@@ -166,6 +166,15 @@ export const POSITION_FIELDS = {
   updateReason: 'fldbAkB0EJBSnbyg6', // סיבת עדכון (singleSelect) — edit mode
   hasMinistryFile: 'fld4RpO0teYLfUQ8C', // קיים תיק במשרד החינוך (כן/לא)
   notes: 'fld4P9sOC5xsW6I8o', // הערות — שדה רשות בעמוד הסיכום, כל סוגי הטפסים
+  // ניכוי 35/40 של נוסחת הפרא: חותמת שנכתבת בשמירה ומתעדת מה קרה בפועל, במקום
+  // לגזור זאת מחדש בכל חישוב. הגזירה טועה בתקן פרא שבעצמו דילג על הניכוי, ולכן
+  // היא גיבוי בלבד לתקנים ישנים. ראו src/lib/schedule/paraDeductionStamp.ts.
+  paraDeduction: 'fldPJ08ut3uoyl34m', // ניכוי פרא (singleSelect): נוכה / ניכוי חלקי / תקן נוסף ללא ניכוי / לא נדרש
+  paraDeductionDetail: 'fld7zUyFzK3aRzLA6', // פירוט ניכוי פרא (text): "ב:0 (הדרכה פרא), ד:40"
+  paraDeductionLeansOn: 'fld9OTVt7bICvaFau', // נשען על ניכוי של → תקנים פעילים (self-link)
+  // השדה ההפוך, מתוחזק על ידי איירטייבל. הקוד אינו כותב אליו; תרחיש ה-Make של
+  // הסרת תקן קורא אותו לפני המחיקה כדי להתריע על תקנים שיישארו ללא מנכה.
+  paraDeductionLeanedOnBy: 'fldeeopsajZZaLKKF', // תקנים שנשענים על הניכוי
   // Youth-employee document attachment — uploaded post-create.
   docEmployment: 'fldhzxp5c6BM6EREa', // נתוני העסקה — חובה לעובד חדש בפרא/הוראה
   // weekly schedule durations (3 shifts/day) — keyed [day][shift]

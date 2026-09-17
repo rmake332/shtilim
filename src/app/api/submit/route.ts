@@ -7,6 +7,7 @@ import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { checkLiveBudget } from '@/lib/schedule/budgetCheck';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
+import { ParaDeductionMismatchError } from '@/lib/paraDeductionWrite';
 import { logger } from '@/lib/logger';
 
 /**
@@ -114,6 +115,11 @@ export async function POST(req: NextRequest) {
     if (e instanceof DuplicateSubmissionError) {
       const editUrl = `/form/${encodeURIComponent(body.token)}/edit/${e.existingPositionId}`;
       return NextResponse.json({ ok: false, message: e.message, editUrl }, { status: 409 });
+    }
+    // המצב במוסד השתנה בזמן המילוי: שגיאת משתמש שניתנת לתיקון, לא תקלת מערכת.
+    if (e instanceof ParaDeductionMismatchError) {
+      logger.warn({ requestId: gate.requestId }, 'para deduction mismatch on submit');
+      return NextResponse.json({ ok: false, message: e.message }, { status: 409 });
     }
     logger.error({ requestId: gate.requestId, err: String(e) }, 'submit failed');
     await notifyError(

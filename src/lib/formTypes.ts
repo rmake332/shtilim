@@ -343,6 +343,13 @@ export interface ScheduleData {
    * השעות בתקציב" (computeUtilizedHours) — לא ממחשבון אופק ולא מ-weeklyHours.
    */
   biweeklyDeductionHours?: number;
+  /**
+   * הימים שבהם הלקוח דילג על ניכוי ה-35/40 של נוסחת הפרא, כי תקן אחר של העובד
+   * באותו מוסד כבר ניכה בהם. השרת מחשב את אותה מפה בעצמו בזמן השמירה ומשווה:
+   * פער פירושו שהמצב במוסד השתנה בזמן המילוי, והשעות שחושבו כבר אינן נכונות.
+   * ראה src/lib/paraDeductionWrite.ts.
+   */
+  skippedDeductionDays?: string[];
   /** For deputy-1: 37.5 or 40; for manager/deputy-2: manual weekly total. */
   manualWeeklyHours?: number;
   worksElsewherePara: boolean;

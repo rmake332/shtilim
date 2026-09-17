@@ -18,6 +18,7 @@ import { notifySubmitWebhook, notifyError } from '@/lib/makeWebhook';
 import { checkWeeklyTotal } from '@/lib/weeklyTotalCheck';
 import { checkLiveBudget } from '@/lib/schedule/budgetCheck';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
+import { paraDeductionFields, ParaDeductionMismatchError } from '@/lib/paraDeductionWrite';
 import { subRoleLinkFor } from '@/lib/subRoleTable';
 import { joinFullName, splitFullName, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
 import { isValidIsraeliId } from '@/lib/validation/israeliId';
@@ -309,6 +310,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     );
     return NextResponse.json({ ok: true, positionId: result.positionId, employeeId: result.employeeId });
   } catch (e) {
+    // המצב במוסד השתנה בזמן המילוי: שגיאת משתמש שניתנת לתיקון, לא תקלת מערכת.
+    if (e instanceof ParaDeductionMismatchError) {
+      logger.warn({ requestId: gate.requestId, positionId }, 'para deduction mismatch on update');
+      return NextResponse.json({ ok: false, message: e.message }, { status: 409 });
+    }
     logger.error({ requestId: gate.requestId, err: String(e) }, 'update position failed');
     await notifyError(
       {
@@ -459,6 +465,19 @@ async function updatePosition(
     [POSITION_FIELDS.worksElsewherePara]: schedule.worksElsewherePara,
     [POSITION_FIELDS.updateStatus]: 'ממתין לעדכון',
     [POSITION_FIELDS.submittedAt]: new Date().toISOString(),
+    // חותמת ניכוי הפרא. `excludePositionId` מונע מהתקן להיחשב תקן אחר של עצמו,
+    // וזו בדיוק הסיבה שעריכה של התקן שניכה אינה מתהפכת: התקן שדילג בזכותו
+    // מסומן "דולג", ולכן אינו מצדיק דילוג חוזר כאן.
+    ...(await paraDeductionFields(
+      {
+        scheduleType: role.scheduleType,
+        schedule,
+        tz: employee.tz,
+        mosadId: institutionMosadId,
+        excludePositionId: positionId,
+      },
+      requestId,
+    )),
     ...(role.selectedGemulIds.length ? { [POSITION_FIELDS.bonusesLink]: role.selectedGemulIds } : { [POSITION_FIELDS.bonusesLink]: [] }),
     ...(role.selectedExtraRoleIds.length ? { [POSITION_FIELDS.rolesLink]: role.selectedExtraRoleIds } : { [POSITION_FIELDS.rolesLink]: [] }),
     ...(schedule.ofekRecordId ? { [POSITION_FIELDS.ofekCalcLink]: [schedule.ofekRecordId] } : {}),

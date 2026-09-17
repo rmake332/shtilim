@@ -140,6 +140,8 @@ interface SameDayPosition {
   positionId: string;
   positionName: string;
   shifts: string[];
+  /** האם נוכו בתקן הזה 35/40 באותו יום. רק כזה מצדיק דילוג בתקן הנוכחי. */
+  deducted: boolean;
 }
 
 type SameInstitutionDays = Partial<Record<Day, SameDayPosition[]>>;
@@ -163,28 +165,58 @@ async function fetchSameInstitutionDays(
   return (j.days ?? {}) as SameInstitutionDays;
 }
 
-/** הערה למשתמש: באילו ימים מדלגים על ניכוי ההפסקה הרגיל (35/40 דק') ובגלל איזה תקן. */
+/**
+ * שתי עובדות נפרדות, ולכן שתי רשימות נפרדות: באילו ימים העובד מועסק במוסד בתקן
+ * אחר (מידע), ובאילו מהם דולג בגלל זה ניכוי ה-35/40 (מסקנה). עד היום הן הוצגו
+ * כאחת, מה שיצר רושם שכל תקן חופף מבטל את הניכוי - וזה לא נכון: רק תקן שבאמת
+ * נוכו בו 35/40 באותו יום מצדיק את הדילוג.
+ */
+/**
+ * כשל בשליפת הימים חוסם המשך. בלי הנתון הזה לא ניתן לדעת אם לנכות 35/40, וההנחה
+ * השקטה שאין תקנים אחרים מייצרת שעות שגויות שאיש אינו רואה.
+ */
+const SAME_DAYS_ERROR =
+  'לא ניתן לבדוק את תקניו הקיימים של העובד במוסד. בלי הבדיקה הזו לא ניתן לחשב נכון את שעות הפרא. יש לרענן את הדף ולנסות שוב.';
+
 function SameDayDeductionNotice({ days }: { days: SameInstitutionDays }) {
   const occupied = DAYS.filter((d) => (days[d]?.length ?? 0) > 0);
   if (occupied.length === 0) return null;
+  const skipped = occupied.filter((d) => days[d]!.some((p) => p.deducted));
+  const label = (d: (typeof DAYS)[number], only?: 'deducting') =>
+    (only ? days[d]!.filter((p) => p.deducted) : days[d]!)
+      .map((p) => (p.shifts.length ? `${p.positionName} (${p.shifts.join(', ')})` : p.positionName))
+      .join(' | ');
   return (
     <div className="p-4 rounded-xl bg-secondary-container/40 text-on-secondary-container text-body-md flex items-start gap-2">
       <Icon name="event_repeat" className="text-[20px] mt-0.5 shrink-0" />
       <div>
-        <p className="font-bold">
-          העובד כבר מועסק במוסד בתקן אחר - בכל אחד מהימים הבאים לא ינוכו דקות ההפסקה הרגילות (35/40), מכיוון שכבר נוכו בתקן הקיים:
-        </p>
+        <p className="font-bold">העובד כבר מועסק במוסד בתקן אחר בימים הבאים:</p>
         <ul className="list-disc pr-5 mt-1 space-y-0.5 text-label-md">
           {occupied.map((d) => (
             <li key={d}>
-              יום {DAY_LABELS[d]}:{' '}
-              {days[d]!
-                .map((p) => (p.shifts.length ? `${p.positionName} (${p.shifts.join(', ')})` : p.positionName))
-                .join(' | ')}
+              יום {DAY_LABELS[d]}: {label(d)}
             </li>
           ))}
         </ul>
-        <p className="text-label-sm mt-1">בימים אלה השעות האקדמיות מחושבות ישירות: דקות ÷ 45.</p>
+        {skipped.length > 0 ? (
+          <>
+            <p className="font-bold mt-2">
+              בימים הבאים לא ינוכו דקות ההפסקה הרגילות (35/40), מכיוון שכבר נוכו בתקן הקיים:
+            </p>
+            <ul className="list-disc pr-5 mt-1 space-y-0.5 text-label-md">
+              {skipped.map((d) => (
+                <li key={d}>
+                  יום {DAY_LABELS[d]}: {label(d, 'deducting')}
+                </li>
+              ))}
+            </ul>
+            <p className="text-label-sm mt-1">בימים אלה השעות האקדמיות מחושבות ישירות: דקות ÷ 45.</p>
+          </>
+        ) : (
+          <p className="text-label-sm mt-2">
+            בתקנים הקיימים לא נוכו 35/40 בימים אלה, ולכן הניכוי נלקח כרגיל גם בתקן הזה.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -691,8 +723,11 @@ function GridSchedule({
   const [weeklyTotalResult, setWeeklyTotalResult] = useState<WeeklyTotalResult | null>(null);
   // תקרת ה-42 נבדקת מול השעות הסופיות של התקן, ולכן די לזכור באילו שעות היא נבדקה.
   const checkedTotalHoursRef = useRef<number | null>(null);
-  // ימים שבהם העובד כבר מועסק במוסד בתקן אחר - בהזנת פרא מוחסרות בהם 40 דקות.
+  // ימים שבהם העובד כבר מועסק במוסד בתקן אחר - בהזנת פרא מדלגים בהם על הניכוי,
+  // אך רק אם באותו תקן באמת נוכו 35/40 (ראו skipsDeduction).
   const [sameDays, setSameDays] = useState<SameInstitutionDays>({});
+  /** שליפת הימים נכשלה. חוסם המשך, כי בלעדיה השעות ייצאו שגויות בשקט. */
+  const [sameDaysError, setSameDaysError] = useState(false);
 
   useEffect(() => {
     fetch(
@@ -744,30 +779,40 @@ function GridSchedule({
   // הרגיל, כי הוא כבר נוכה בחישוב התקן הקיים.
   // הנתון נשלף פעם אחת - הוא תלוי בתקניו הקיימים של העובד ולא במה שמוזן עכשיו.
   useEffect(() => {
-    if (!isPara || !employee.tz) { setSameDays({}); return; }
+    if (!isPara || !employee.tz) { setSameDays({}); setSameDaysError(false); return; }
     let cancelled = false;
+    setSameDaysError(false);
     fetchSameInstitutionDays(token, employee.tz, positionId)
-      .then((days) => { if (!cancelled) setSameDays(days); })
-      .catch(() => { if (!cancelled) setSameDays({}); });
+      .then((days) => { if (!cancelled) { setSameDays(days); setSameDaysError(false); } })
+      // כשל בשליפה אינו "אין תקנים אחרים". עד היום הוא הציב {} בשקט, מה שביטל את
+      // הדילוג לגמרי ושינה שעות בלי שאיש ידע. עכשיו הוא נחשף וחוסם המשך.
+      .catch(() => { if (!cancelled) { setSameDays({}); setSameDaysError(true); } });
     return () => { cancelled = true; };
   }, [token, employee.tz, positionId, isPara]);
 
-  /** true ביום שהעובד כבר מועסק בו באותו מוסד בתקן אחר — מדלגים על ניכוי ה-35/40 באותו יום. */
+  /**
+   * true ביום שבו תקן אחר של העובד באותו מוסד **ניכה בפועל** 35/40 - ורק אז
+   * מדלגים על הניכוי כאן. עצם קיומו של תקן חופף אינו מספיק: תקן בסוג מערכת
+   * "רגיל", או יום פרא מתחת ל-80 דקות, לא הפחית דבר, ודילוג בגללו מנפח שעות.
+   */
   function skipsDeduction(day: Day): boolean {
-    return isPara && (sameDays[day]?.length ?? 0) > 0;
+    return isPara && (sameDays[day] ?? []).some((p) => p.deducted);
   }
 
   // פרא: per-day academic hours using the deduction formula; accumulate errors for days < 80 min.
   let paraHours = 0;
   // סך דקות הניכוי הרגיל (35/40) שדולג עליו בימים שהעובד כבר מועסק בהם במוסד בתקן אחר, לתצוגה בסיכום.
   let skippedDeductionMin = 0;
+  // הימים שדולגו בפועל. נשלחים לשרת עם הטופס כדי שהוא יוודא שהמצב במוסד לא השתנה
+  // בזמן המילוי - אחרת השעות שנשמרות והחותמת שמתעדת אותן היו מתארות מצבים שונים.
+  const skippedDeductionDays: Day[] = [];
   const paraDayErrors: string[] = [];
   for (const d of DAYS) {
     const dayMin = (week[d] ?? []).reduce((s, sh) => s + shiftMinutes(sh), 0);
     const skip = skipsDeduction(d);
     const result = paraDayHours(dayMin, skip);
     if (result === null) continue; // rest day
-    if (skip) skippedDeductionMin += dayMin < 100 ? 35 : 40;
+    if (skip) { skippedDeductionMin += dayMin < 100 ? 35 : 40; skippedDeductionDays.push(d); }
     if (!result.ok) { paraDayErrors.push(`יום ${DAY_LABELS[d]}: ${result.error}`); continue; }
     paraHours += result.hours;
   }
@@ -941,6 +986,7 @@ function GridSchedule({
     setErrors([]);
     setWarnings([]);
     if (isPara && paraDayErrors.length > 0) { setErrors(paraDayErrors); return; }
+    if (sameDaysError) { setErrors([SAME_DAYS_ERROR]); return; }
     const hours = getEnteredHours();
     if (hours === null) { setErrors([INVALID_SCHEDULE_ERROR]); return; }
     setOfek1(null); setHoursAtOfek1(null); setExisting(null); setOfek(null);
@@ -1002,6 +1048,7 @@ function GridSchedule({
           : `מערכת שעות לעובד מוגבלת לפי חוק ל-${weeklyCap} שעות שבועיות`,
       );
     if (isPara) errs.push(...paraDayErrors);
+    if (sameDaysError) errs.push(SAME_DAYS_ERROR);
     // שעות שאינן עגולות אינן נחסמות כאן: המחשבון נשאל עליהן קודם כמות שהן, ורק
     // אם גם הן וגם העיגול נכשלו התשובה מהשרת חוסמת (ראה ofekHourAttempts).
 
@@ -1014,7 +1061,7 @@ function GridSchedule({
       const overlapOk = await runOverlapCheckIfNeeded(week);
       if (!overlapOk) return;
       if (!(await runWeeklyTotalCheckIfNeeded(deputyWeekly))) return;
-      onNext({ ...data, breaks: prunedBreaks, weeklyHours: deputyWeekly, biweeklyDeductionHours });
+      onNext({ ...data, breaks: prunedBreaks, skippedDeductionDays, weeklyHours: deputyWeekly, biweeklyDeductionHours });
       return;
     }
 
@@ -1035,6 +1082,7 @@ function GridSchedule({
       onNext({
         ...data,
         breaks: prunedBreaks,
+        skippedDeductionDays,
         weeklyHours: hours,
         frontalHours: 0,
         individualHours: 0,
@@ -1086,6 +1134,7 @@ function GridSchedule({
     onNext({
       ...data,
       breaks: prunedBreaks,
+      skippedDeductionDays,
       weeklyHours: j.finalHours,
       frontalHours: j.frontalHours,
       individualHours: j.individualHours,
@@ -1275,7 +1324,13 @@ function GridSchedule({
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
         {breakPolicy.twelveHour && <TwelveHourNotice />}
-        {isPara && <SameDayDeductionNotice days={sameDays} />}
+        {isPara && sameDaysError && (
+          <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-md flex items-start gap-2">
+            <Icon name="error" className="text-[20px] mt-0.5 shrink-0" />
+            <p>{SAME_DAYS_ERROR}</p>
+          </div>
+        )}
+        {isPara && !sameDaysError && <SameDayDeductionNotice days={sameDays} />}
         {(type === 'סגן ראשון') && (
           <div className="bg-white p-4 rounded-lg border border-outline-variant max-w-xs">
             <label className="text-label-lg text-on-surface block mb-2">מס׳ שעות שבועיות</label>
@@ -1404,8 +1459,11 @@ function GridSchedule({
                 <p className="mt-2 text-label-sm text-on-surface-variant flex items-start gap-1">
                   <Icon name="event_repeat" className="text-[15px] shrink-0 mt-0.5" />
                   <span>
-                    העובד מועסק ביום זה במוסד בתקן אחר
-                    {sameDays[day]?.length ? ` (${sameDays[day]!.map((p) => p.positionName).join(', ')})` : ''}
+                    הניכוי ביום זה כבר נלקח בתקן אחר של העובד במוסד
+                    {(() => {
+                      const who = (sameDays[day] ?? []).filter((p) => p.deducted).map((p) => p.positionName);
+                      return who.length ? ` (${who.join(', ')})` : '';
+                    })()}
                     {' - '}לא ינוכו דקות ההפסקה הרגילות (35/40); השעות מחושבות ישירות לפי דקות ÷ 45
                   </span>
                 </p>

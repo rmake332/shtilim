@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger';
 import { notifyError } from '@/lib/makeWebhook';
 import { upsertEmployee } from '@/lib/saveEmployee';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
+import { paraDeductionFields } from '@/lib/paraDeductionWrite';
 import { subRoleLinkFor } from '@/lib/subRoleTable';
 import type { EmployeeData, RoleData, ScheduleData } from '@/lib/formTypes';
 
@@ -150,6 +151,17 @@ export async function submitForm(
     [POSITION_FIELDS.worksElsewherePara]: schedule.worksElsewherePara,
     [POSITION_FIELDS.updateStatus]: 'ממתין לעדכון',
     [POSITION_FIELDS.submittedAt]: new Date().toISOString(),
+    // חותמת ניכוי הפרא. מחושבת בשרת ומאמתת את מפת הדילוג שהלקוח חישב לפיה את
+    // השעות; פער זורק ParaDeductionMismatchError ומבטל את השמירה.
+    ...(await paraDeductionFields(
+      {
+        scheduleType: role.scheduleType,
+        schedule,
+        tz: employee.tz,
+        mosadId: institutionMosadId,
+      },
+      requestId,
+    )),
     ...(role.selectedGemulIds.length ? { [POSITION_FIELDS.bonusesLink]: role.selectedGemulIds } : {}),
     ...(role.selectedExtraRoleIds.length ? { [POSITION_FIELDS.rolesLink]: role.selectedExtraRoleIds } : {}),
     ...(schedule.ofekRecordId ? { [POSITION_FIELDS.ofekCalcLink]: [schedule.ofekRecordId] } : {}),
