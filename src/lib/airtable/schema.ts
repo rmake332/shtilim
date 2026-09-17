@@ -175,6 +175,10 @@ export const POSITION_FIELDS = {
   // השדה ההפוך, מתוחזק על ידי איירטייבל. הקוד אינו כותב אליו; תרחיש ה-Make של
   // הסרת תקן קורא אותו לפני המחיקה כדי להתריע על תקנים שיישארו ללא מנכה.
   paraDeductionLeanedOnBy: 'fldeeopsajZZaLKKF', // תקנים שנשענים על הניכוי
+  // תור הטיפול: תקן שוויתר על הניכוי ביום שכבר אין בו מנכה. נסגר מאליו בשמירה
+  // הבאה של אותו תקן, כי אז החותמת שלו מחושבת מחדש ממצב הבסיס.
+  paraDeductionNeedsUpdate: 'fld8b6wzgPgfZXTG9', // ניכוי פרא דורש עדכון (checkbox)
+  paraDeductionNeedsUpdateReason: 'fldWC0lrtTVmGdQBm', // סיבת דרישת עדכון ניכוי (text)
   // Youth-employee document attachment — uploaded post-create.
   docEmployment: 'fldhzxp5c6BM6EREa', // נתוני העסקה — חובה לעובד חדש בפרא/הוראה
   // weekly schedule durations (3 shifts/day) — keyed [day][shift]

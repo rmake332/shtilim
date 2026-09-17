@@ -1,5 +1,5 @@
 import 'server-only';
-import { getRecord, listRecords } from '@/lib/airtable/client';
+import { getRecord, listRecords, updateRecord } from '@/lib/airtable/client';
 import { TABLES, POSITION_FIELDS } from '@/lib/airtable/schema';
 import { DAYS, DAY_LABELS, toMinutes, PARA_MIN_DAY_MINUTES, type Day } from '@/lib/schedule/time';
 import { isParaEntry } from '@/lib/schedule/ofek';
@@ -22,6 +22,43 @@ import type { ScheduleData } from '@/lib/formTypes';
  * הייתה מתעדת מצב אחד והשעות משקפות אחר. במקרה כזה עדיף להיכשל בקול ולבקש
  * חישוב מחדש, מאשר לשמור רשומה שמתעדת שקר.
  */
+
+/** מציין בטבלת הכיסוי שהתקן הנערך עצמו מנכה באותו יום; מוחלף במזהה שלו בשרת. */
+export const SELF = '__self__';
+
+/** יום → מזהה התקן שמנכה בו אחרי השמירה (או SELF). יום שאינו במפה: אין מנכה. */
+export type DeductionCoverage = Map<Day, string>;
+
+/** תקן שנשען על הניכוי של התקן הנערך, כפי שהוא לפני הכתיבה. */
+export interface Dependent {
+  id: string;
+  /** שם העובד + התפקיד + המוסד, לתצוגה בהודעות. */
+  name: string;
+  detail: string;
+}
+
+/** מה צריך להשתנות ברשומה של תקן תלוי בעקבות העריכה. */
+export interface DependentUpdate {
+  id: string;
+  name: string;
+  /** הימים שנשארו בלי מנכה. ריק = התלות עברה לתקן אחר והכל תקין. */
+  orphanDays: Day[];
+  /** הקישור המעודכן: מי מחזיק עכשיו את הניכוי בימים שהתקן ויתר בהם. */
+  leansOn: string[];
+  /** הטקסט שנכתב לשדה "סיבת דרישת עדכון ניכוי", ריק כשאין דרישה. */
+  reason: string;
+  /** ההודעה למי שביצע את העריכה, ריקה כשאין מה לומר. */
+  warning: string;
+}
+
+/**
+ * כל שמירה של תקן מנקה את הסימון שלו עצמו: החותמת שלו מחושבת עכשיו מחדש מול
+ * מצב הבסיס, ולכן היא נכונה בהגדרה ואין יותר מה לתקן בו.
+ */
+const CLEAR_NEEDS_UPDATE = {
+  [POSITION_FIELDS.paraDeductionNeedsUpdate]: false,
+  [POSITION_FIELDS.paraDeductionNeedsUpdateReason]: null,
+} as const;
 
 /** נזרקת כשמפת הדילוג של הלקוח אינה תואמת את זו שהשרת חישב בזמן השמירה. */
 export class ParaDeductionMismatchError extends Error {
@@ -56,7 +93,7 @@ function recordIds(v: unknown): string[] {
 export async function leanedOnByDependents(
   positionId: string,
   requestId?: string,
-): Promise<{ name: string; detail: string }[]> {
+): Promise<Dependent[]> {
   const rec = await getRecord(TABLES.activePositions, positionId, requestId);
   const ids = recordIds(rec?.fields[POSITION_FIELDS.paraDeductionLeanedOnBy]);
   if (ids.length === 0) return [];
@@ -75,6 +112,7 @@ export async function leanedOnByDependents(
     requestId,
   );
   return rows.map((r) => ({
+    id: r.id,
     name:
       [
         text(r.fields[POSITION_FIELDS.employeeNameText]),
@@ -88,39 +126,91 @@ export async function leanedOnByDependents(
 }
 
 /**
- * תקנים שהיו נשענים על הניכוי של התקן הנערך, ביום שאחרי העריכה כבר אין בו מנכה.
+ * מה לעשות עם כל תקן שנשען על הניכוי של התקן הנערך, אחרי שהעריכה שינתה את
+ * מערכת השעות שלו.
  *
- * הניכוי נלקח פעם אחת ליום. כשעריכה מזיזה יום, מקצרת אותו או מבטלת אותו, התקן
- * שוויתר על הניכוי באותו יום נשאר עם שעות גבוהות מדי, ואין שום טריגר שיחשב
- * אותו מחדש. זו אינה סיבה לחסום את העריכה (הזזת ימים היא פעולה לגיטימית), אבל
- * היא חייבת להיאמר בקול במקום להישאר תקלה שקטה.
+ * הניכוי נלקח פעם אחת ליום. עריכה שמזיזה יום, מקצרת אותו או מבטלת אותו יכולה
+ * להשאיר את מי שוויתר על הניכוי באותו יום עם שעות גבוהות מדי, ואין שום טריגר
+ * שיחשב אותו מחדש. שני מצבים אפשריים לכל יום:
  *
- * הקריטריון הוא "אין מנכה ביום הזה" ולא "התקן הנערך אינו מנכה": אם תקן שלישי
- * של אותו עובד מחזיק את הניכוי באותו יום, התלוי עדיין מכוסה ואין מה להתריע.
+ *  - **תקן אחר לקח את הניכוי** (למשל תקן שלישי של אותו עובד): התלוי מכוסה,
+ *    ורק הקישור שלו מופנה למי שמחזיק עכשיו. בלי זה הקישור היה נשאר מצביע על
+ *    מי שכבר אינו מנכה, ומייצר התראת שווא בהסרה.
+ *  - **אף אחד לא לוקח**: התלוי מסומן באיירטייבל כדורש עדכון, ומי שערך מקבל
+ *    הודעה. העריכה עצמה אינה נחסמת, כי הזזת ימים היא פעולה לגיטימית.
+ *
+ * Pure - הכתיבה עצמה ב-applyDependentUpdates.
  */
-export function dependentsLosingDeduction(params: {
-  /** הימים שבהם מישהו מנכה אחרי השמירה (התקן הנערך או תקן אחר של העובד). */
-  coveredDaysAfterEdit: Set<Day>;
-  /**
-   * התקנים שנשענים על הניכוי של התקן הנערך, עם החותמת שלהם. נקראים לפני
-   * הכתיבה, כי הכתיבה עצמה משנה את הקישורים.
-   */
-  dependents: { name: string; detail: string }[];
-}): string[] {
-  const out: string[] = [];
+export function planDependentUpdates(params: {
+  /** מי מנכה בכל יום אחרי השמירה. SELF הוחלף כבר במזהה התקן הנערך. */
+  coverage: DeductionCoverage;
+  /** התקנים שנשענו על הניכוי של התקן הנערך, כפי שהם לפני הכתיבה. */
+  dependents: readonly Dependent[];
+}): DependentUpdate[] {
+  const out: DependentUpdate[] = [];
+
   for (const dep of params.dependents) {
     const parsed = parseParaDeductionDetail(dep.detail);
     if (!parsed) continue;
+
+    /** מי מחזיק עכשיו את הניכוי בכל יום שהתקן התלוי ויתר בו. */
+    const holders = new Set<string>();
+    const orphanDays: Day[] = [];
     for (const [day, minutes] of parsed) {
-      if (minutes !== 0) continue;
-      if (params.coveredDaysAfterEdit.has(day)) continue;
-      out.push(
-        `התקן "${dep.name}" ויתר על ניכוי 35/40 ביום ${DAY_LABELS[day]} משום שהניכוי נלקח בתקן זה. ` +
-          `אחרי העדכון אין יותר מי שמנכה באותו יום, ולכן יש לעדכן את שעותיו של "${dep.name}".`,
-      );
+      if (minutes !== 0) continue; // יום שהתקן ניכה בו בעצמו אינו תלוי באיש
+      const holder = params.coverage.get(day);
+      if (holder) holders.add(holder);
+      else orphanDays.push(day);
     }
+
+    const days = orphanDays.map((d) => DAY_LABELS[d]).join(', ');
+    const reason = orphanDays.length
+      ? `התקן ויתר על ניכוי 35/40 ביום ${days} משום שהניכוי נלקח בתקן אחר של העובד באותו מוסד. ` +
+        `אותו תקן שונה או נמחק, ואיש כבר אינו מנכה באותו יום. השעות כאן גבוהות מדי - ` +
+        `יש לפתוח את התקן לעריכה ולשמור אותו מחדש כדי שהשעות יחושבו נכון.`
+      : '';
+
+    out.push({
+      id: dep.id,
+      name: dep.name,
+      orphanDays,
+      leansOn: [...holders],
+      reason,
+      // ההודעה למי שערך: אותה עובדה, בניסוח של מי שגרם לה זה עתה.
+      warning: orphanDays.length
+        ? `התקן "${dep.name}" ויתר על ניכוי 35/40 ביום ${days} משום שהניכוי נלקח בתקן זה. ` +
+          `אחרי העדכון אין יותר מי שמנכה באותו יום, ולכן יש לעדכן את שעותיו של "${dep.name}". ` +
+          `התקן סומן באיירטייבל כדורש עדכון.`
+        : '',
+    });
   }
+
   return out;
+}
+
+/**
+ * כתיבת התוצאה לרשומות התלויות: קישור מעודכן, וסימון למי שנשאר בלי מנכה.
+ *
+ * **השעות של התקן התלוי אינן משתנות כאן בכוונה.** שינוי שעות משנה ניצול תקציב,
+ * ועלול להפיל את התקן על צירוף שאינו קיים במחשבון או להוציא אותו מהתקציב. עדיף
+ * תור גלוי שאדם מאשר מאשר תיקון שקט שאיש לא ראה.
+ */
+export async function applyDependentUpdates(
+  updates: readonly DependentUpdate[],
+  requestId?: string,
+): Promise<void> {
+  for (const u of updates) {
+    await updateRecord(
+      TABLES.activePositions,
+      u.id,
+      {
+        [POSITION_FIELDS.paraDeductionLeansOn]: u.leansOn,
+        [POSITION_FIELDS.paraDeductionNeedsUpdate]: u.orphanDays.length > 0,
+        [POSITION_FIELDS.paraDeductionNeedsUpdateReason]: u.reason || null,
+      },
+      requestId,
+    );
+  }
 }
 
 /** סך דקות העבודה ביום, ממערכת השעות של הטופס. */
@@ -146,7 +236,7 @@ export async function paraDeductionFields(
     excludePositionId?: string;
   },
   requestId?: string,
-): Promise<{ fields: Record<string, unknown>; coveredDays: Set<Day> }> {
+): Promise<{ fields: Record<string, unknown>; coverage: DeductionCoverage }> {
   const { scheduleType, schedule, tz, mosadId, excludePositionId } = params;
 
   if (!isParaEntry(scheduleType) || !tz) {
@@ -155,8 +245,9 @@ export async function paraDeductionFields(
         [POSITION_FIELDS.paraDeduction]: NOT_APPLICABLE_STAMP.status,
         [POSITION_FIELDS.paraDeductionDetail]: '',
         [POSITION_FIELDS.paraDeductionLeansOn]: [],
+        ...CLEAR_NEEDS_UPDATE,
       },
-      coveredDays: new Set(),
+      coverage: new Map(),
     };
   }
 
@@ -166,13 +257,14 @@ export async function paraDeductionFields(
   const leansOn = new Set<string>();
   const serverSkipped = new Set<Day>();
   /**
-   * הימים שבהם מישהו מנכה אחרי השמירה: התקן הזה עצמו, או תקן אחר של העובד
-   * באותו מוסד. זה ולא "הימים שהתקן הזה מנכה בהם" הוא הקריטריון לאזהרה:
-   * ביום שתקן שלישי מחזיק בו את הניכוי, תקן שדילג עדיין מכוסה כראוי.
+   * מי מנכה בכל יום אחרי השמירה: התקן הזה עצמו (SELF) או תקן אחר של העובד
+   * באותו מוסד. זה ולא "הימים שהתקן הזה מנכה בהם" הוא הקריטריון: ביום שתקן
+   * שלישי מחזיק בו את הניכוי, תקן שדילג עדיין מכוסה כראוי.
    */
-  const coveredDays = new Set<Day>();
+  const coverage: DeductionCoverage = new Map();
   for (const day of DAYS) {
-    if ((sameDays[day] ?? []).some((p) => p.deducted)) coveredDays.add(day);
+    const peer = (sameDays[day] ?? []).find((p) => p.deducted);
+    if (peer) coverage.set(day, peer.positionId);
   }
 
   for (const day of DAYS) {
@@ -188,7 +280,7 @@ export async function paraDeductionFields(
       entries.push({ day, minutes: 0, blockedBy: holder.positionName });
     } else {
       entries.push({ day, minutes: minutes < 100 ? 35 : 40 });
-      coveredDays.add(day);
+      coverage.set(day, SELF);
     }
   }
 
@@ -213,7 +305,8 @@ export async function paraDeductionFields(
       [POSITION_FIELDS.paraDeduction]: stamp.status,
       [POSITION_FIELDS.paraDeductionDetail]: stamp.detail,
       [POSITION_FIELDS.paraDeductionLeansOn]: [...leansOn],
+      ...CLEAR_NEEDS_UPDATE,
     },
-    coveredDays,
+    coverage,
   };
 }

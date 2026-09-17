@@ -20,9 +20,11 @@ import { checkLiveBudget } from '@/lib/schedule/budgetCheck';
 import { computeUtilizedHours } from '@/lib/schedule/ofek';
 import {
   paraDeductionFields,
-  dependentsLosingDeduction,
+  planDependentUpdates,
+  applyDependentUpdates,
   leanedOnByDependents,
   ParaDeductionMismatchError,
+  SELF,
 } from '@/lib/paraDeductionWrite';
 import { subRoleLinkFor } from '@/lib/subRoleTable';
 import { joinFullName, splitFullName, type EmployeeData, type RoleData, type ScheduleData } from '@/lib/formTypes';
@@ -463,12 +465,17 @@ async function updatePosition(
     requestId,
   );
 
-  // תקנים שנשענו על הניכוי של התקן הזה ביום שהוא כבר לא מנכה בו אחרי העדכון.
-  // נקרא לפני הכתיבה, כי השדה ההפוך משתנה ברגע שהקישורים נכתבים.
-  const warnings = dependentsLosingDeduction({
-    coveredDaysAfterEdit: paraDeduction.coveredDays,
+  // תקנים שנשענו על הניכוי של התקן הזה. נקראים לפני הכתיבה, כי השדה ההפוך
+  // משתנה ברגע שהקישורים נכתבים. ב-coverage מוחלף SELF במזהה התקן הנערך, כי
+  // מבחינת התלויים הוא מנכה ככל תקן אחר.
+  const coverage = new Map(
+    [...paraDeduction.coverage].map(([day, holder]) => [day, holder === SELF ? positionId : holder]),
+  );
+  const dependentUpdates = planDependentUpdates({
+    coverage,
     dependents: await leanedOnByDependents(positionId, requestId),
   });
+  const warnings = dependentUpdates.map((u) => u.warning).filter(Boolean);
 
   const fields: Record<string, unknown> = {
     [POSITION_FIELDS.contractStartDate]: employee.contractStartDate || undefined,
@@ -513,6 +520,18 @@ async function updatePosition(
   logger.info({ requestId, positionId, fieldKeys: Object.keys(fields), weeklyHours: fields[POSITION_FIELDS.weeklyHours], roleLink: fields[POSITION_FIELDS.roleLink], week: schedule.week }, 'updating position fields');
   await updateRecord(TABLES.activePositions, positionId, fields, requestId);
   logger.info({ requestId, positionId }, 'position updated');
+
+  // אחרי כתיבת התקן: רענון הקישור של התלויים וסימון מי שנשאר בלי מנכה.
+  // כישלון כאן אינו מבטל את העריכה שכבר נשמרה - הוא נרשם, והאזהרה כבר בדרך
+  // למי שערך. סקריפט הבדיקה התקופתי הוא הרשת האחרונה.
+  try {
+    await applyDependentUpdates(dependentUpdates, requestId);
+  } catch (e) {
+    logger.error(
+      { requestId, positionId, err: String(e) },
+      'failed to refresh para-deduction dependents',
+    );
+  }
 
   return { positionId, employeeId, warnings };
 }

@@ -48,6 +48,8 @@ const F = {
   weeklyHours: fieldId('POSITION_FIELDS', 'weeklyHours'),
   stamp: fieldId('POSITION_FIELDS', 'paraDeduction'),
   detail: fieldId('POSITION_FIELDS', 'paraDeductionDetail'),
+  needsUpdate: fieldId('POSITION_FIELDS', 'paraDeductionNeedsUpdate'),
+  needsUpdateReason: fieldId('POSITION_FIELDS', 'paraDeductionNeedsUpdateReason'),
 };
 const BUDGET_SCHEDULE_TYPE = fieldId('BUDGET_FIELDS', 'scheduleType');
 
@@ -142,6 +144,8 @@ const recs = (await listAll(POSITIONS, posFields)).map((r) => {
     stored: Number(f[F.weeklyHours]) || 0,
     stamp: text(f[F.stamp]),
     detail: text(f[F.detail]),
+    needsUpdate: Boolean(f[F.needsUpdate]),
+    needsUpdateReason: text(f[F.needsUpdateReason]),
     minutes,
   };
 });
@@ -177,6 +181,19 @@ for (const p of recs) {
   const peers = (groups.get(`${p.tz}|${p.mosad}`) ?? []).filter((o) => o.id !== p.id);
   const notes = [];
 
+  // חותמת מיושנת: מערכת השעות ברשומה כבר אינה הימים שהחותמת מתארת. קורה כשמישהו
+  // עורך שעות ישירות באיירטייבל ולא דרך הטופס, ואז שום קוד לא רץ ולא עדכן דבר.
+  const stampDays = new Set(Object.keys(parsed));
+  const recordDays = new Set(PARA_DAYS.filter((d) => p.minutes[d] >= PARA_MIN_DAY_MINUTES));
+  const missing = [...recordDays].filter((d) => !stampDays.has(d));
+  const extra = [...stampDays].filter((d) => !recordDays.has(d));
+  if (missing.length || extra.length)
+    notes.push(
+      `החותמת אינה מתארת את מערכת השעות ברשומה (חותמת: ${[...stampDays].map((d) => DAY_LETTER[d]).join(',') || 'אין'}, ` +
+        `בפועל: ${[...recordDays].map((d) => DAY_LETTER[d]).join(',') || 'אין'}). ` +
+        `סימן לעריכת שעות ישירות באיירטייבל ולא דרך הטופס.`,
+    );
+
   for (const d of PARA_DAYS) {
     const claimed = parsed[d];
     if (claimed === undefined) continue;
@@ -198,12 +215,25 @@ for (const p of recs) {
   if (notes.length) findings.push({ p, notes });
 }
 
+// תקנים שכבר מסומנים בטבלה כדורשים עדכון: הקוד או תרחיש ההסרה ב-Make כבר
+// זיהו אותם, והם ממתינים לטיפול אנושי. מוצגים בנפרד כי הם ידועים, לא ממצא חדש.
+const flagged = recs.filter((p) => p.needsUpdate && !p.prevYear);
+
 console.log(`תקני הזנת פרא עם חותמת שנבדקו: ${checked}`);
-console.log(`תקנים הדורשים טיפול: ${findings.length}`);
+console.log(`ממצאים חדשים: ${findings.length}`);
+console.log(`מסומנים כבר בטבלה כדורשים עדכון: ${flagged.length}`);
 console.log('');
 for (const { p, notes } of findings) {
   console.log(`${p.employee} | ${p.name} | ${p.id}`);
   console.log(`   שעות שמורות: ${p.stored} | חותמת: ${p.stamp} | ${p.detail}`);
   for (const n of notes) console.log(`   ${n}`);
 }
-if (findings.length === 0) console.log('הכל תקין.');
+if (flagged.length) {
+  console.log('');
+  console.log('מסומנים כדורשים עדכון (ממתינים לטיפול):');
+  for (const p of flagged) {
+    console.log(`   ${p.employee} | ${p.name} | ${p.id}`);
+    console.log(`      ${p.needsUpdateReason.replace(/\s+/g, ' ')}`);
+  }
+}
+if (findings.length === 0 && flagged.length === 0) console.log('הכל תקין.');
