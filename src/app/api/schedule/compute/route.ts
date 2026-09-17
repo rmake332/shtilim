@@ -331,7 +331,11 @@ export async function POST(req: NextRequest) {
     // סה"כ שעות לניצול: גנים כולל שהייה, יסודי/חטיבה בלעדיה - כמו computeUtilizedHours
     // בסאבמיט. "הוראה ללא שהייה" לעולם בלעדיה, ללא תלות בשכבה.
     const isGanimLayer = layer === 'גנים';
-    const utilizedHours = frontal + individual + (isGanimLayer && !teachingNoStay ? stayInstitution + stayHome : 0);
+    // "עוז": הניצול הוא הפרונטלי בלבד - ראה computeUtilizedHours, שרץ בסאבמיט/PATCH.
+    const utilizedHours =
+      ofekCategory === 'עוז'
+        ? frontal
+        : frontal + individual + (isGanimLayer && !teachingNoStay ? stayInstitution + stayHome : 0);
 
     // Budget over-limit check against סה"כ שעות לניצול, לא מול השעות שהוזנו במערכת השעות.
     const budgetRemaining = Number(body.budgetRemaining ?? Infinity);

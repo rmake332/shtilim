@@ -298,6 +298,16 @@ describe('computeUtilizedHours', () => {
   it('ignores an absent biweekly deduction', () => {
     expect(computeUtilizedHours('יסודי', { weeklyHours: 25 })).toBe(25);
   });
+  it('עוז: frontal only, in any layer', () => {
+    const hours = { frontalHours: 10, individualHours: 5, stayHoursInstitution: 3, stayHoursHome: 2 };
+    expect(computeUtilizedHours('חטיבה', hours, 'עוז')).toBe(10);
+    expect(computeUtilizedHours('גנים', hours, 'עוז')).toBe(10);
+    // אותם נתונים ב"הוראה" - פרונטלי + פרטני (+ שהייה בגנים).
+    expect(computeUtilizedHours('חטיבה', hours, 'הוראה')).toBe(15);
+  });
+  it('עוז: נופל חזרה ל-weeklyHours כשאין עדיין פלט מהמחשבון', () => {
+    expect(computeUtilizedHours('חטיבה', { weeklyHours: 18 }, 'עוז')).toBe(18);
+  });
   it('excludes stay for הוראה ללא שהייה even in גנים', () => {
     expect(
       computeUtilizedHours(

@@ -281,6 +281,7 @@ export function includeExistingStayInCombinedKey(
  * סה"כ שעות לניצול = frontal + individual + stay.
  * גנים (הוראה ופרא): כולל שהייה. יסודי / חטיבה: ללא שהייה → frontal + individual בלבד.
  * "הוראה ללא שהייה": שהייה לעולם לא נכללת בניצול, ללא תלות בשכבה.
+ * "עוז": הפרונטלי בלבד - בלי פרטני ובלי שהייה, בכל שכבה.
  * נופל חזרה ל-weeklyHours כשהאופק עדיין לא חושב (למשל מערכת שעות "רגיל").
  *
  * `biweeklyDeductionHours` (מערכת דו-שבועית בפנימיות, ראה biweekly.ts) מנוכה
@@ -301,10 +302,12 @@ export function computeUtilizedHours(
   scheduleType?: string | null,
 ): number {
   const { frontalHours = 0, individualHours = 0, stayHoursInstitution = 0, stayHoursHome = 0 } = hours;
-  const excludeStay = ofekCategoryFor(scheduleType) === 'הוראה_ללא_שהייה';
+  const category = ofekCategoryFor(scheduleType);
+  const excludeStay = category === 'הוראה_ללא_שהייה';
   const isGanim = layer === 'גנים' && !excludeStay;
   const stay = isGanim ? stayHoursInstitution + stayHoursHome : 0;
-  const total = frontalHours + individualHours + stay;
+  // "עוז": רק הפרונטלי שחזר מהמחשבון מנוצל מהתקן; פרטני ושהייה אינם מנוצלים בכלל.
+  const total = category === 'עוז' ? frontalHours : frontalHours + individualHours + stay;
   const base = total > 0 ? total : (hours.weeklyHours ?? 0);
   return Math.max(0, base - (hours.biweeklyDeductionHours ?? 0));
 }
