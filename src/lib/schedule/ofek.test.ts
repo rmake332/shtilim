@@ -15,6 +15,7 @@ import {
   computeUtilizedHours,
   includeExistingStayInCombinedKey,
   ofekHourAttempts,
+  ofekHourAttemptsFor,
   snapToleranceFor,
   PARA_SNAP_TOLERANCE,
   TEACHING_SNAP_TOLERANCE,
@@ -369,5 +370,37 @@ describe('ofekHourAttempts', () => {
       rounded: 21,
       candidates: [21],
     });
+  });
+});
+
+// "עוז": מעגלים לחצי הקרוב לפני השליפה, בלי סובלנות. השעות כפי שהוזנו נשארות
+// כנפילה שנייה, כי בטבלה יש גם שורות "עוז" בערכים שאינם שלם/חצי.
+describe('ofekHourAttemptsFor', () => {
+  it('עוז: העיגול לחצי הקרוב נבדק ראשון', () => {
+    const a = ofekHourAttemptsFor('עוז', 12.75);
+    expect(a.rounded).toBe(13);
+    expect(a.candidates).toEqual([13, 12.75]);
+  });
+
+  it('עוז: מעגל גם כשהמרחק גדול מהסובלנות של הוראה', () => {
+    expect(ofekHourAttemptsFor('עוז', 22.4).candidates).toEqual([22.5, 22.4]);
+    expect(ofekHourAttemptsFor('עוז', 17.2).candidates).toEqual([17, 17.2]);
+  });
+
+  it('עוז: שעות שכבר עגולות - מועמד יחיד', () => {
+    expect(ofekHourAttemptsFor('עוז', 18.5).candidates).toEqual([18.5]);
+    expect(ofekHourAttemptsFor('עוז', 21).candidates).toEqual([21]);
+  });
+
+  it('הוראה: הסדר הרגיל נשמר - המדויק קודם והעיגול כנפילה', () => {
+    expect(ofekHourAttemptsFor('הוראה', 12.05).candidates).toEqual([12.05, 12]);
+    // מחוץ לסובלנות של הוראה: אין חלופה מעוגלת
+    expect(ofekHourAttemptsFor('הוראה', 12.75).candidates).toEqual([12.75]);
+    expect(ofekHourAttemptsFor('הוראה', 12.75).rounded).toBeNull();
+  });
+
+  it('פרא: סובלנות צרה, לניקוי רעש נקודה-צפה בלבד', () => {
+    expect(ofekHourAttemptsFor('פרא', 21.005).candidates).toEqual([21.01, 21]);
+    expect(ofekHourAttemptsFor('פרא', 21.2).candidates).toEqual([21.2]);
   });
 });

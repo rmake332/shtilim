@@ -13,8 +13,7 @@ import {
   includeExistingStayInCombinedKey,
   motherPositionFromOfekRow,
   ofekRowHoursSum,
-  ofekHourAttempts,
-  snapToleranceFor,
+  ofekHourAttemptsFor,
   isTeachingOfekCategory,
   type MotherEmployeeInput,
 } from '@/lib/schedule/ofek';
@@ -150,8 +149,8 @@ export async function POST(req: NextRequest) {
 
     // סדר הניסיון בכל שליפה: השעות כפי שהוזנו קודם, והעיגול לשלם/חצי רק כנפילה.
     // ראה ofekHourAttempts - בטבלה יש גם שורות בערכים שאינם שלם/חצי.
-    const tolerance = snapToleranceFor(ofekCategory);
-    const attempts = ofekHourAttempts(enteredHours, tolerance);
+    // "עוז" הפוך: העיגול לחצי הקרוב נבדק קודם - ראה ofekHourAttemptsFor.
+    const attempts = ofekHourAttemptsFor(ofekCategory, enteredHours);
     /** סך השעות שהמפתח נבנה ממנו בפועל; מתעדכן לערך שהצליח בשליפה. */
     let finalHours = attempts.raw;
 
@@ -274,7 +273,7 @@ export async function POST(req: NextRequest) {
           : 0;
         const combinedHours = finalHours + existing.frontalHours + existing.individualHours + existingStayForCombined;
         // גם כאן: הסכום כפי שהוא קודם, והעיגול לשלם/חצי רק אם לא נמצאה לו שורה.
-        const combinedAttempts = ofekHourAttempts(combinedHours, tolerance);
+        const combinedAttempts = ofekHourAttemptsFor(ofekCategory, combinedHours);
         // משרת אם כבר הוכרעה על היקף כל התקנים, ולכן היא נכנסת למפתח כמות שהיא.
         const combinedResult = await lookupByHours(
           { layer, ageHours, motherPosition: mother, category: ofekCategory },

@@ -3,7 +3,7 @@
  * severe-disability bonus, job percent, stay-hours split). Pure & unit-tested.
  */
 
-import { snapToHalf } from './time';
+import { snapToHalf, roundToHalf } from './time';
 
 export interface MotherPositionInput {
   gender: string; // 'נקבה' | 'זכר'
@@ -255,6 +255,23 @@ export function ofekHourAttempts(hours: number, tolerance: number): OfekHourAtte
   if (snapped === null) return { raw, rounded: null, candidates: [raw] };
   if (snapped === raw) return { raw, rounded: raw, candidates: [raw] };
   return { raw, rounded: snapped, candidates: [raw, snapped] };
+}
+
+/**
+ * מועמדי השעות לפי קטגוריית האופק - נקודת הכניסה היחידה, בשרת ובלקוח.
+ *
+ * "עוז" הפוך משאר הקטגוריות: **מעגלים לחצי הקרוב לפני השליפה**, תמיד ובלי
+ * סובלנות, והערך המעוגל הוא זה שנבדק ראשון (וגם זה שנשמר כשנמצאה לו שורה).
+ * השעות כפי שהוזנו נשארות כנפילה שנייה, כי בטבלה יש גם שורות "עוז" בערכים
+ * שאינם שלם/חצי (12.75, 13.75, 22.4) ואין סיבה לוותר על התאמה מדויקת קיימת.
+ *
+ * בכל שאר הקטגוריות הסדר הפוך: המדויק קודם, והעיגול רק כנפילה ובתוך הסובלנות.
+ */
+export function ofekHourAttemptsFor(category: OfekCategory, hours: number): OfekHourAttempts {
+  if (category !== 'עוז') return ofekHourAttempts(hours, snapToleranceFor(category));
+  const raw = Math.round(hours * 100) / 100;
+  const rounded = roundToHalf(raw);
+  return { raw, rounded, candidates: rounded === raw ? [raw] : [rounded, raw] };
 }
 
 /**

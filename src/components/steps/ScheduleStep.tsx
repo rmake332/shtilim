@@ -52,9 +52,7 @@ import {
   isParaEntry,
   isBellScheduleEntry,
   ofekCategoryFor,
-  ofekHourAttempts,
-  PARA_SNAP_TOLERANCE,
-  TEACHING_SNAP_TOLERANCE,
+  ofekHourAttemptsFor,
 } from '@/lib/schedule/ofek';
 import { computeBiweeklyDeductionHours, type BiweeklyTrack } from '@/lib/schedule/biweekly';
 import { POSITION_FIELDS } from '@/lib/airtable/schema';
@@ -785,6 +783,9 @@ function GridSchedule({
   // Hours that actually count against the budget.
   // For סגן ראשון this is the chosen 37.5/40 — NOT the sum of the entered grid.
   const isDeputy1 = type === 'סגן ראשון';
+  // קטגוריית האופק של הגריד הידני - קובעת את סדר מועמדי השעות שיוצגו.
+  const paraOfekCategory = ofekCategoryFor(type);
+
   // הזנה וספירה בסגנון פרא ("פרא" ו"הוראה - לוח פרא"): הקלדה + נוסחת ÷45.
   // הקובע הוא סוג מערכת השעות ולא הקטגוריה: תקן בקטגוריית "פרא רפואי" שסוג מערכת
   // השעות שלו "רגיל" נספר בשעות שעון (ועם ניכוי הפסקות) ולא בשעות אקדמיות.
@@ -1298,10 +1299,10 @@ function GridSchedule({
             </div>
           )}
 
-          {/* השעות שייבדקו באופק — פרא בלבד: המדויקות קודם, ואחריהן העיגול (±0.012) */}
-          {isPara && paraDayErrors.length === 0 && paraHours > 0 && (() => {
-            const attempts = ofekHourAttempts(paraHours, PARA_SNAP_TOLERANCE);
-            const fallback = attempts.rounded !== null && attempts.rounded !== attempts.raw ? attempts.rounded : null;
+          {/* השעות שייבדקו באופק, באותו סדר שהשרת ינסה (ראה ofekHourAttemptsFor) */}
+          {isPara && paraOfekCategory !== null && paraDayErrors.length === 0 && paraHours > 0 && (() => {
+            const attempts = ofekHourAttemptsFor(paraOfekCategory, paraHours);
+            const fallback = attempts.candidates[1] ?? null;
             return (
               <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
                 {skippedDeductionMin > 0 && (
@@ -1312,7 +1313,7 @@ function GridSchedule({
                 )}
                 <div className="flex justify-between text-on-surface-variant">
                   <span>שעות לבדיקה באופק:</span>
-                  <span className="font-bold text-primary">{formatNum(attempts.raw)}</span>
+                  <span className="font-bold text-primary">{formatNum(attempts.candidates[0])}</span>
                 </div>
                 {fallback !== null && (
                   <div className="flex justify-between text-on-surface-variant">
@@ -1763,7 +1764,8 @@ function BellScheduleGrid({
 
   // "הוראה ללא אופק חדש": אותה הזנה בלוח צלצולים, אך בלי שלוש בדיקות המחשבון
   // אחריה. השעות שנבחרו הן השעות הסופיות, ללא פירוט פרונטלי/פרטני/שהייה.
-  const needsOfek = ofekCategoryFor(role.scheduleType) !== null;
+  const ofekCategory = ofekCategoryFor(role.scheduleType);
+  const needsOfek = ofekCategory !== null;
 
   // חוק העסקת נוער: רצועות מחוץ לחלון השעות כלל אינן מוצעות לבחירה.
   const youth = youthLimitsFor(employee.birthDate);
@@ -1947,13 +1949,11 @@ function BellScheduleGrid({
     });
   }
 
-  // מה שייבדק במחשבון: weeklyHours כפי שהוא, ורק אם לא תימצא לו שורה - העיגול
-  // לשלם/חצי בטווח ±0.12 (ראה ofekHourAttempts).
-  const hourAttempts = weeklyHours > 0 ? ofekHourAttempts(weeklyHours, TEACHING_SNAP_TOLERANCE) : null;
-  const roundedFallback =
-    hourAttempts && hourAttempts.rounded !== null && hourAttempts.rounded !== hourAttempts.raw
-      ? hourAttempts.rounded
-      : null;
+  // מה שייבדק במחשבון, באותו סדר שהשרת ינסה (ראה ofekHourAttemptsFor): בהוראה
+  // weeklyHours כפי שהוא והעיגול ±0.12 כנפילה, ב"עוז" העיגול לחצי הקרוב קודם.
+  const hourAttempts =
+    weeklyHours > 0 && ofekCategory !== null ? ofekHourAttemptsFor(ofekCategory, weeklyHours) : null;
+  const roundedFallback = hourAttempts?.candidates[1] ?? null;
 
   // When the bell-selected hours change, invalidate all ofek results.
   useEffect(() => {
@@ -2292,7 +2292,7 @@ function BellScheduleGrid({
             <div className="mt-3 rounded-lg bg-surface-container-low p-3 space-y-1 text-label-sm">
               <div className="flex justify-between text-on-surface-variant">
                 <span>שעות לבדיקה באופק:</span>
-                <span className="font-bold text-primary">{formatNum(hourAttempts.raw)}</span>
+                <span className="font-bold text-primary">{formatNum(hourAttempts.candidates[0])}</span>
               </div>
               {roundedFallback !== null && (
                 <div className="flex justify-between text-on-surface-variant">
