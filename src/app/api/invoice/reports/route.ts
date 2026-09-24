@@ -47,34 +47,41 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/invoice/reports - דיווח/עדכון שעות בפועל לעובד חשבונית אחד בחודש נתון.
- * בודק חי מול המכסה החודשית המשותפת, שעות ההקצאה של העובד, והתעריף המוסכם שלו.
+ * בודק חי מול המכסה החודשית המשותפת. התעריף נעול: תמיד התעריף המוסכם בהקצאה
+ * (כולל מע"מ), גם אם הלקוח שלח ערך אחר. רופא אינו מדווח (כל השדות שלו נעולים).
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const gate = await gateByToken(req, body.token);
   if (gate instanceof NextResponse) return gate;
 
-  const { positionId, month, reportedHours, reportedRate, invoiceNumber } = body as {
+  const { positionId, month, reportedHours, invoiceNumber } = body as {
     positionId?: string;
     month?: string;
     reportedHours?: number;
-    reportedRate?: number;
     invoiceNumber?: string;
   };
 
   if (!positionId || !month || !MONTH_RE.test(month)) {
     return NextResponse.json({ ok: false, message: 'חסרים נתוני דיווח.' }, { status: 400 });
   }
-  if (!Number.isFinite(reportedHours) || !Number.isFinite(reportedRate) || (reportedHours as number) <= 0 || (reportedRate as number) <= 0) {
-    return NextResponse.json({ ok: false, message: 'שעות ותעריף חייבים להיות גדולים מ-0.' }, { status: 400 });
+  if (!Number.isFinite(reportedHours) || (reportedHours as number) <= 0) {
+    return NextResponse.json({ ok: false, message: 'שעות חייבות להיות גדולות מ-0.' }, { status: 400 });
   }
   if (!invoiceNumber?.trim()) {
-    return NextResponse.json({ ok: false, message: "מס' חשבונית הוא שדה חובה." }, { status: 400 });
+    return NextResponse.json({ ok: false, message: "מס' חשבונית / מס' דרישת תשלום הוא שדה חובה." }, { status: 400 });
   }
 
   try {
     const position = await getPosition(positionId, gate.requestId);
     if (!position) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
+    if (position.isDoctor) {
+      return NextResponse.json({ ok: false, message: 'רופא אינו מדווח שעות בדיווח החודשי.' }, { status: 400 });
+    }
+    const reportedRate = position.agreedHourlyRate;
+    if (!(reportedRate > 0)) {
+      return NextResponse.json({ ok: false, message: 'לעובד זה לא נקבע תעריף בהקצאה.' }, { status: 409 });
+    }
     if (position.inactive) {
       return NextResponse.json(
         { ok: false, message: 'עובד זה סומן כלא פעיל בתקן - לא ניתן לדווח עבורו שעות נוספות.' },
@@ -99,7 +106,7 @@ export async function POST(req: NextRequest) {
         positionId,
         month,
         reportedHours: reportedHours as number,
-        reportedRate: reportedRate as number,
+        reportedRate,
       },
       gate.requestId,
     );
@@ -111,7 +118,7 @@ export async function POST(req: NextRequest) {
         positionLabel: position.employeeName || positionId,
         month,
         reportedHours: reportedHours as number,
-        reportedRate: reportedRate as number,
+        reportedRate,
         invoiceNumber: invoiceNumber || '',
       },
       gate.requestId,

@@ -1,16 +1,19 @@
 import 'server-only';
-import { listRecords, escapeFormulaValue, type AirtableRecord } from '@/lib/airtable/client';
+import { listRecords, updateRecord, escapeFormulaValue, type AirtableRecord } from '@/lib/airtable/client';
 import { TABLES, BUDGET_FIELDS, CATEGORY } from '@/lib/airtable/schema';
+import { maxHourlyRateFor } from '@/lib/invoice/rates';
 
 /** שורת תקציב בקטגוריית חשבונית, כפי שמוצגת/נערכת במודול "תקני חשבונית". */
 export interface InvoiceBudgetRow {
   id: string;
   title: string;
-  /** שעות לניצול - מכסה חודשית (reuse של "סך שעות בתקציב", לא שדה נפרד). */
-  monthlyHoursQuota: number;
+  /** שעות לניצול - מכסה **שבועית** (reuse של "סך שעות בתקציב"). לחודש: monthlyHoursFor. */
+  weeklyHoursQuota: number;
   tariffMonthly: number;
-  /** null כשאחד מהערכים חסר/אפס בתקציב (הפורמולה לא מחושבת). */
+  /** null כשאחד מהערכים חסר/אפס. מחושב בקוד (maxHourlyRateFor), לא נקרא מהפורמולה. */
   maxHourlyRate: number | null;
+  /** "סיום הקצאה שנתית" נלחץ - המוסד לא יכול לערוך את ההקצאה עד פתיחה בממשק המנהל. */
+  allocationLocked: boolean;
   totalAllocatedHours: number;
   remainingHoursToAllocate: number;
 }
@@ -35,13 +38,15 @@ function recordLinks(v: unknown): string[] {
 
 function mapBudgetRow(r: AirtableRecord): InvoiceBudgetRow {
   const f = r.fields;
-  const maxRateRaw = f[BUDGET_FIELDS.maxHourlyRate];
+  const weeklyHoursQuota = num(f[BUDGET_FIELDS.totalBudgetHours]);
+  const tariffMonthly = num(f[BUDGET_FIELDS.tariffMonthly]);
   return {
     id: r.id,
     title: str(f[BUDGET_FIELDS.role]),
-    monthlyHoursQuota: num(f[BUDGET_FIELDS.totalBudgetHours]),
-    tariffMonthly: num(f[BUDGET_FIELDS.tariffMonthly]),
-    maxHourlyRate: maxRateRaw == null || maxRateRaw === '' ? null : num(maxRateRaw),
+    weeklyHoursQuota,
+    tariffMonthly,
+    maxHourlyRate: maxHourlyRateFor(tariffMonthly, weeklyHoursQuota),
+    allocationLocked: Boolean(f[BUDGET_FIELDS.invoiceAllocationLocked]),
     totalAllocatedHours: num(f[BUDGET_FIELDS.totalAllocatedHours]),
     remainingHoursToAllocate: num(f[BUDGET_FIELDS.remainingHoursToAllocate]),
   };
@@ -53,8 +58,8 @@ const FIELDS = [
   BUDGET_FIELDS.institutionLink,
   BUDGET_FIELDS.totalBudgetHours,
   BUDGET_FIELDS.tariffMonthly,
-  BUDGET_FIELDS.maxHourlyRate,
   BUDGET_FIELDS.totalAllocatedHours,
+  BUDGET_FIELDS.invoiceAllocationLocked,
   BUDGET_FIELDS.remainingHoursToAllocate,
 ];
 
@@ -84,4 +89,24 @@ export async function fetchInvoiceBudgetRow(
 ): Promise<InvoiceBudgetRow | null> {
   const rows = await fetchInvoiceBudgetRows(mosadId, requestId);
   return rows.find((r) => r.id === budgetRowId) ?? null;
+}
+
+/** שורת תקציב חשבונית עם המוסד שלה - לממשק המנהל, שרואה את כל המוסדות. */
+export interface InvoiceBudgetRowWithMosad extends InvoiceBudgetRow {
+  mosadId: string;
+}
+
+/** כל שורות התקציב בקטגוריית חשבונית, בכל המוסדות (ממשק מנהל בלבד). */
+export async function fetchAllInvoiceBudgetRows(requestId?: string): Promise<InvoiceBudgetRowWithMosad[]> {
+  const formula = `{${BUDGET_FIELDS.category}}="${escapeFormulaValue(CATEGORY.invoice)}"`;
+  const all = await listRecords(TABLES.budget, { filterByFormula: formula, fields: FIELDS }, requestId);
+  return all.map((r) => ({
+    ...mapBudgetRow(r),
+    mosadId: recordLinks(r.fields[BUDGET_FIELDS.institutionLink])[0] ?? '',
+  }));
+}
+
+/** נעילה/פתיחה של עריכת ההקצאה השנתית לשורת תקציב. */
+export async function setAllocationLocked(budgetRowId: string, locked: boolean, requestId?: string): Promise<void> {
+  await updateRecord(TABLES.budget, budgetRowId, { [BUDGET_FIELDS.invoiceAllocationLocked]: locked }, requestId);
 }

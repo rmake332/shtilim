@@ -41,10 +41,16 @@ interface NewEmployeeInput {
   birthDate: string;
 }
 
+const VAT_NUMBER_RE = /^\d{9}$/;
+
 /**
  * POST /api/invoice/positions - הקצאת עובד לשורת תקציב חשבונית (חדש: יצירה שנתית
  * ב"ניהול תקציב"). אם employeeId לא נשלח, מחפש עובד קיים לפי ת.ז. (dedupe),
- * ואם לא נמצא - יוצר עובד חדש. בודק חי מול המכסה החודשית והתעריף המקסימלי לפני כתיבה.
+ * ואם לא נמצא - יוצר עובד חדש. בודק חי מול המכסה השבועית והתעריף המקסימלי לפני כתיבה.
+ *
+ * isDoctor: הקצאת רופא - שם, ת.ז. ומס' רישיון בלבד (מסמך הרישיון מועלה בנפרד), בלי
+ * שעות/תעריף/פרטי בנק, ולא נבדקת מול המכסה כי אינה מנצלת מהתקציב.
+ * חסום כשההקצאה השנתית ננעלה (allocationLocked).
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -63,6 +69,7 @@ export async function POST(req: NextRequest) {
     vatNumber,
     allocatedHours,
     agreedHourlyRate,
+    isDoctor,
   } = body as {
     budgetRowId?: string;
     employeeId?: string;
@@ -75,33 +82,48 @@ export async function POST(req: NextRequest) {
     vatNumber?: string;
     allocatedHours?: number;
     agreedHourlyRate?: number;
+    isDoctor?: boolean;
   };
 
-  if (!budgetRowId || !subRole || !Number.isFinite(allocatedHours) || !Number.isFinite(agreedHourlyRate)) {
+  if (!budgetRowId) {
     return NextResponse.json({ ok: false, message: 'חסרים נתונים להקצאה.' }, { status: 400 });
-  }
-  if ((allocatedHours as number) <= 0 || (agreedHourlyRate as number) <= 0) {
-    return NextResponse.json({ ok: false, message: 'שעות ותעריף חייבים להיות גדולים מ-0.' }, { status: 400 });
   }
   if (!givenEmployeeId && !newEmployee?.tz) {
     return NextResponse.json({ ok: false, message: 'חסר עובד לשיוך.' }, { status: 400 });
   }
-  if (!bankName?.trim() || !bankBranch?.trim() || !bankAccountNumber?.trim() || !vatNumber?.trim()) {
-    return NextResponse.json({ ok: false, message: 'פרטי בנק ומספר עוסק הם שדות חובה.' }, { status: 400 });
-  }
-  if (!/^\d{9}$/.test(vatNumber.trim())) {
-    return NextResponse.json({ ok: false, message: 'מספר עוסק חייב להיות בן 9 ספרות.' }, { status: 400 });
+  if (isDoctor) {
+    if (!licenseNumber?.trim()) {
+      return NextResponse.json({ ok: false, message: "מס' רישיון הוא שדה חובה לרופא." }, { status: 400 });
+    }
+  } else {
+    if (!subRole || !Number.isFinite(allocatedHours) || !Number.isFinite(agreedHourlyRate)) {
+      return NextResponse.json({ ok: false, message: 'חסרים נתונים להקצאה.' }, { status: 400 });
+    }
+    if ((allocatedHours as number) <= 0 || (agreedHourlyRate as number) <= 0) {
+      return NextResponse.json({ ok: false, message: 'שעות ותעריף חייבים להיות גדולים מ-0.' }, { status: 400 });
+    }
+    if (!bankName?.trim() || !bankBranch?.trim() || !bankAccountNumber?.trim() || !vatNumber?.trim()) {
+      return NextResponse.json({ ok: false, message: 'פרטי בנק ומספר עוסק הם שדות חובה.' }, { status: 400 });
+    }
+    if (!VAT_NUMBER_RE.test(vatNumber.trim())) {
+      return NextResponse.json({ ok: false, message: 'מספר עוסק חייב להיות בן 9 ספרות.' }, { status: 400 });
+    }
   }
 
   try {
     const row = await fetchInvoiceBudgetRow(gate.institution.mosadId, budgetRowId, gate.requestId);
     if (!row) return NextResponse.json({ ok: false, message: 'שורת תקציב לא נמצאה.' }, { status: 404 });
+    if (row.allocationLocked) {
+      return NextResponse.json({ ok: false, message: 'ההקצאה השנתית ננעלה - לא ניתן להוסיף עובדים.' }, { status: 409 });
+    }
 
-    const check = await checkLiveAnnualAllocation(
-      { budgetRowId, allocatedHours: allocatedHours as number, agreedHourlyRate: agreedHourlyRate as number },
-      gate.requestId,
-    );
-    if (!check.ok) return NextResponse.json({ ok: false, message: check.message }, { status: 409 });
+    if (!isDoctor) {
+      const check = await checkLiveAnnualAllocation(
+        { budgetRowId, allocatedHours: allocatedHours as number, agreedHourlyRate: agreedHourlyRate as number },
+        gate.requestId,
+      );
+      if (!check.ok) return NextResponse.json({ ok: false, message: check.message }, { status: 409 });
+    }
 
     let employeeId = givenEmployeeId ?? '';
     let employeeName = '';
@@ -117,22 +139,26 @@ export async function POST(req: NextRequest) {
         employeeId = existing.id;
         employeeName = existing.name;
       } else {
-        const created = await createRecord(
-          TABLES.employees,
-          {
-            // שם משפחה ואז שם פרטי - אותו מבנה כמו בטופס הקליטה (ראו joinFullName).
-            [EMPLOYEE_FIELDS.name]: employeeFullName,
-            [EMPLOYEE_FIELDS.tz]: newEmployee!.tz,
-            [EMPLOYEE_FIELDS.address]: newEmployee!.address,
-            [EMPLOYEE_FIELDS.email]: newEmployee!.email,
-            [EMPLOYEE_FIELDS.phone]: newEmployee!.phone,
-            [EMPLOYEE_FIELDS.maritalStatus]: newEmployee!.maritalStatus,
-            [EMPLOYEE_FIELDS.gender]: newEmployee!.gender,
-            [EMPLOYEE_FIELDS.birthDate]: newEmployee!.birthDate,
-            [EMPLOYEE_FIELDS.institution]: [gate.institution.mosadId],
-          },
-          gate.requestId,
-        );
+        // רופא: רק שם ות.ז. - שאר השדות לא נאספים, ולא כותבים ערכים ריקים לשדות בחירה.
+        const employeeFields: Record<string, unknown> = isDoctor
+          ? {
+              [EMPLOYEE_FIELDS.name]: employeeFullName,
+              [EMPLOYEE_FIELDS.tz]: newEmployee!.tz,
+              [EMPLOYEE_FIELDS.institution]: [gate.institution.mosadId],
+            }
+          : {
+              // שם משפחה ואז שם פרטי - אותו מבנה כמו בטופס הקליטה (ראו joinFullName).
+              [EMPLOYEE_FIELDS.name]: employeeFullName,
+              [EMPLOYEE_FIELDS.tz]: newEmployee!.tz,
+              [EMPLOYEE_FIELDS.address]: newEmployee!.address,
+              [EMPLOYEE_FIELDS.email]: newEmployee!.email,
+              [EMPLOYEE_FIELDS.phone]: newEmployee!.phone,
+              [EMPLOYEE_FIELDS.maritalStatus]: newEmployee!.maritalStatus,
+              [EMPLOYEE_FIELDS.gender]: newEmployee!.gender,
+              [EMPLOYEE_FIELDS.birthDate]: newEmployee!.birthDate,
+              [EMPLOYEE_FIELDS.institution]: [gate.institution.mosadId],
+            };
+        const created = await createRecord(TABLES.employees, employeeFields, gate.requestId);
         employeeId = created.id;
         employeeName = employeeFullName;
       }
@@ -147,13 +173,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const bankFields: Record<string, unknown> = {};
-    if (bankName) bankFields[EMPLOYEE_FIELDS.bankName] = bankName;
-    if (bankBranch) bankFields[EMPLOYEE_FIELDS.bankBranch] = bankBranch;
-    if (bankAccountNumber) bankFields[EMPLOYEE_FIELDS.bankAccountNumber] = bankAccountNumber;
-    if (vatNumber) bankFields[EMPLOYEE_FIELDS.vatNumber] = vatNumber;
-    if (Object.keys(bankFields).length > 0) {
-      await updateRecord(TABLES.employees, employeeId, bankFields, gate.requestId);
+    if (!isDoctor) {
+      const bankFields: Record<string, unknown> = {};
+      if (bankName) bankFields[EMPLOYEE_FIELDS.bankName] = bankName;
+      if (bankBranch) bankFields[EMPLOYEE_FIELDS.bankBranch] = bankBranch;
+      if (bankAccountNumber) bankFields[EMPLOYEE_FIELDS.bankAccountNumber] = bankAccountNumber;
+      if (vatNumber) bankFields[EMPLOYEE_FIELDS.vatNumber] = vatNumber;
+      if (Object.keys(bankFields).length > 0) {
+        await updateRecord(TABLES.employees, employeeId, bankFields, gate.requestId);
+      }
     }
 
     const position = await createPosition(
@@ -161,9 +189,10 @@ export async function POST(req: NextRequest) {
         budgetRowId,
         employeeId,
         employeeName,
-        subRole,
-        allocatedHours: allocatedHours as number,
-        agreedHourlyRate: agreedHourlyRate as number,
+        subRole: isDoctor ? '' : (subRole as string),
+        allocatedHours: isDoctor ? 0 : (allocatedHours as number),
+        agreedHourlyRate: isDoctor ? 0 : (agreedHourlyRate as number),
+        isDoctor: Boolean(isDoctor),
       },
       gate.requestId,
     );

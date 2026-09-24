@@ -3,6 +3,7 @@ import { getRecord, listRecords, escapeFormulaValue } from '@/lib/airtable/clien
 import { TABLES, BUDGET_FIELDS, INVOICE_POSITION_FIELDS, INVOICE_REPORT_FIELDS } from '@/lib/airtable/schema';
 import { formatNum } from '@/lib/formatNum';
 import { getCarryIn } from '@/lib/invoice/monthlyBalance';
+import { maxHourlyRateFor, monthlyHoursFor } from '@/lib/invoice/rates';
 
 export interface InvoiceCheckResult {
   ok: boolean;
@@ -42,15 +43,15 @@ export async function checkLiveAnnualAllocation(
   const budget = await getRecord(TABLES.budget, params.budgetRowId, requestId);
   if (!budget) return { ok: true, message: null }; // מוק / שורה נמחקה - לא חוסמים
 
-  const maxRate = Number(budget.fields[BUDGET_FIELDS.maxHourlyRate]);
-  if (Number.isFinite(maxRate) && params.agreedHourlyRate > maxRate) {
+  const quota = Number(budget.fields[BUDGET_FIELDS.totalBudgetHours]);
+  const maxRate = maxHourlyRateFor(Number(budget.fields[BUDGET_FIELDS.tariffMonthly]), quota);
+  if (maxRate != null && params.agreedHourlyRate > maxRate) {
     return {
       ok: false,
-      message: `התעריף השעתי שהוזן (${formatNum(params.agreedHourlyRate)}) חורג מהתעריף השעתי המקסימלי לתקן (${formatNum(maxRate)}).`,
+      message: `התעריף השעתי שהוזן (${formatNum(params.agreedHourlyRate)} ₪ כולל מע"מ) חורג מהתעריף המותר לתקן זה.`,
     };
   }
 
-  const quota = Number(budget.fields[BUDGET_FIELDS.totalBudgetHours]);
   if (!Number.isFinite(quota)) return { ok: true, message: null };
 
   const positions = await positionsForBudgetRow(params.budgetRowId, requestId);
@@ -62,7 +63,7 @@ export async function checkLiveAnnualAllocation(
   if (total > quota) {
     return {
       ok: false,
-      message: `סה"כ השעות המוקצות לכלל העובדים (${formatNum(total)}) חורג מהמכסה החודשית של התקן (${formatNum(quota)}). ייתכן שעובד אחר הוקצה ממש עכשיו - יש לרענן ולנסות שוב.`,
+      message: `סה"כ השעות השבועיות המוקצות לכלל העובדים (${formatNum(total)}) חורג מהמכסה השבועית של התקן (${formatNum(quota)}). ייתכן שעובד אחר הוקצה ממש עכשיו - יש לרענן ולנסות שוב.`,
     };
   }
   return { ok: true, message: null };
@@ -100,7 +101,9 @@ export async function checkLiveMonthlyQuota(
   }
 
   const budget = await getRecord(TABLES.budget, params.budgetRowId, requestId);
-  const quota = budget ? Number(budget.fields[BUDGET_FIELDS.totalBudgetHours]) : NaN;
+  // המכסה בתקציב שבועית; הדיווח חודשי - מכפילים במספר שבועות העבודה בחודש.
+  const weeklyQuota = budget ? Number(budget.fields[BUDGET_FIELDS.totalBudgetHours]) : NaN;
+  const quota = Number.isFinite(weeklyQuota) ? monthlyHoursFor(weeklyQuota, params.month) : NaN;
   const tariffMonthly = budget ? Number(budget.fields[BUDGET_FIELDS.tariffMonthly]) : NaN;
   if (!Number.isFinite(quota) && !Number.isFinite(tariffMonthly)) return { ok: true, message: null };
 

@@ -21,6 +21,8 @@ export interface InvoicePosition {
   allocationTransferDocGenerated: boolean;
   /** עובד לא פעיל בתקן זה - לא ניתן לדווח עבורו שעות נוספות. ראו setPositionActive. */
   inactive: boolean;
+  /** רופא: בלי שעות/תעריף, לא מנצל מהתקציב, ובדיווח החודשי כל השדות נעולים. */
+  isDoctor: boolean;
 }
 
 function num(v: unknown): number {
@@ -53,6 +55,7 @@ function mapPosition(r: AirtableRecord): InvoicePosition {
     agreedHourlyRate: num(f[INVOICE_POSITION_FIELDS.agreedHourlyRate]),
     allocationTransferDocGenerated: Boolean(f[INVOICE_POSITION_FIELDS.allocationTransferDocGenerated]),
     inactive: Boolean(f[INVOICE_POSITION_FIELDS.inactive]),
+    isDoctor: Boolean(f[INVOICE_POSITION_FIELDS.isDoctor]),
   };
 }
 
@@ -72,6 +75,12 @@ export async function listPositionsForBudgetRow(
     .map(mapPosition);
 }
 
+/** כל ההקצאות בכל המוסדות (ממשק מנהל בלבד). */
+export async function listAllPositions(requestId?: string): Promise<InvoicePosition[]> {
+  const records = await listRecords(TABLES.invoicePositions, {}, requestId);
+  return records.map(mapPosition);
+}
+
 export async function getPosition(positionId: string, requestId?: string): Promise<InvoicePosition | null> {
   const r = await getRecord(TABLES.invoicePositions, positionId, requestId);
   return r ? mapPosition(r) : null;
@@ -85,23 +94,24 @@ export async function createPosition(
     subRole: string;
     allocatedHours: number;
     agreedHourlyRate: number;
+    isDoctor?: boolean;
   },
   requestId?: string,
 ): Promise<InvoicePosition> {
+  const isDoctor = Boolean(params.isDoctor);
+  const fields: Record<string, unknown> = {
+    [INVOICE_POSITION_FIELDS.budgetLink]: [params.budgetRowId],
+    [INVOICE_POSITION_FIELDS.employeeLink]: [params.employeeId],
+    [INVOICE_POSITION_FIELDS.employeeName]: params.employeeName,
+    [INVOICE_POSITION_FIELDS.allocatedHours]: params.allocatedHours,
+    [INVOICE_POSITION_FIELDS.agreedHourlyRate]: params.agreedHourlyRate,
+    [INVOICE_POSITION_FIELDS.isDoctor]: isDoctor,
+  };
+  // לרופא אין תת-תפקיד - לא כותבים ערך ריק לשדה הבחירה.
+  if (params.subRole) fields[INVOICE_POSITION_FIELDS.subRole] = params.subRole;
   // Airtable's create response isn't keyed by field ID (only GET/list requests set
   // returnFieldsByFieldId) - build the result from the known params instead of the response.
-  const r = await createRecord(
-    TABLES.invoicePositions,
-    {
-      [INVOICE_POSITION_FIELDS.budgetLink]: [params.budgetRowId],
-      [INVOICE_POSITION_FIELDS.employeeLink]: [params.employeeId],
-      [INVOICE_POSITION_FIELDS.employeeName]: params.employeeName,
-      [INVOICE_POSITION_FIELDS.subRole]: params.subRole,
-      [INVOICE_POSITION_FIELDS.allocatedHours]: params.allocatedHours,
-      [INVOICE_POSITION_FIELDS.agreedHourlyRate]: params.agreedHourlyRate,
-    },
-    requestId,
-  );
+  const r = await createRecord(TABLES.invoicePositions, fields, requestId);
   return {
     id: r.id,
     budgetRowId: params.budgetRowId,
@@ -112,6 +122,7 @@ export async function createPosition(
     agreedHourlyRate: params.agreedHourlyRate,
     allocationTransferDocGenerated: false,
     inactive: false,
+    isDoctor,
   };
 }
 

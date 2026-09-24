@@ -9,11 +9,13 @@ import { formatNum } from '@/lib/formatNum';
 import { DocUpload } from '@/components/steps/DocUpload';
 import type { UploadedDoc } from '@/lib/formTypes';
 import { BudgetStatCard } from '@/components/invoice/BudgetStatCard';
+import { monthlyHoursFor, weeksInMonth } from '@/lib/invoice/rates';
 
 interface InvoiceBudgetRow {
   id: string;
   title: string;
-  monthlyHoursQuota: number;
+  /** מכסה שבועית - המכסה לחודש נגזרת ב-monthlyHoursFor. */
+  weeklyHoursQuota: number;
   tariffMonthly: number;
 }
 
@@ -24,6 +26,7 @@ interface InvoicePosition {
   allocatedHours: number;
   agreedHourlyRate: number;
   inactive: boolean;
+  isDoctor: boolean;
 }
 
 interface InvoiceMonthlyReport {
@@ -42,7 +45,6 @@ interface InvoiceMonthlyReport {
 
 interface RowState {
   hours: string;
-  rate: string;
   invoiceNumber: string;
   doc?: UploadedDoc;
   saving: boolean;
@@ -157,11 +159,11 @@ export function MonthlyReportScreen({
         const existing = byPosition[p.id];
         nextRows[p.id] = {
           hours: existing ? String(existing.reportedHours) : '',
-          rate: existing ? String(existing.reportedRate) : String(p.agreedHourlyRate),
           invoiceNumber: existing?.invoiceNumber ?? '',
           saving: false,
           error: '',
-          editing: !existing,
+          // רופא: אין דיווח, כל השדות נעולים תמיד.
+          editing: !existing && !p.isDoctor,
         };
       }
       setRows(nextRows);
@@ -186,23 +188,23 @@ export function MonthlyReportScreen({
       return;
     }
     const position = positions.find((p) => p.id === positionId);
+    if (position?.isDoctor) return;
     if (position?.inactive) {
       updateRow(positionId, { error: 'עובד לא פעיל - לא ניתן לדווח עבורו שעות נוספות.' });
       return;
     }
     const hours = Number(row.hours);
-    const rate = Number(row.rate);
-    if (!Number.isFinite(hours) || hours <= 0 || !Number.isFinite(rate) || rate <= 0) {
-      updateRow(positionId, { error: 'יש להזין שעות ותעריף תקינים.' });
+    if (!Number.isFinite(hours) || hours <= 0) {
+      updateRow(positionId, { error: 'יש להזין שעות תקינות.' });
       return;
     }
     if (!row.invoiceNumber.trim()) {
-      updateRow(positionId, { error: "יש להזין מס' חשבונית." });
+      updateRow(positionId, { error: "יש להזין מס' חשבונית / מס' דרישת תשלום." });
       return;
     }
     const existing = reports[positionId];
     if (!row.doc && !existing?.hasInvoiceDoc) {
-      updateRow(positionId, { error: 'יש לצרף חשבונית.' });
+      updateRow(positionId, { error: 'יש לצרף חשבונית / דרישת תשלום.' });
       return;
     }
     updateRow(positionId, { saving: true, error: '' });
@@ -215,7 +217,6 @@ export function MonthlyReportScreen({
           positionId,
           month,
           reportedHours: hours,
-          reportedRate: rate,
           invoiceNumber: row.invoiceNumber,
         }),
       });
@@ -248,7 +249,6 @@ export function MonthlyReportScreen({
     if (!report) { updateRow(positionId, { editing: false, error: '' }); return; }
     updateRow(positionId, {
       hours: String(report.reportedHours),
-      rate: String(report.reportedRate),
       invoiceNumber: report.invoiceNumber,
       doc: undefined,
       editing: false,
@@ -296,8 +296,11 @@ export function MonthlyReportScreen({
 
   const totalReported = Object.values(reports).reduce((s, r) => s + r.reportedHours, 0);
   const totalSpent = Object.values(reports).reduce((s, r) => s + r.totalPay, 0);
+  // המכסה בתקציב שבועית: מכסת החודש = שבועית * שבועות העבודה בחודש (ימי א-ה / 5).
+  const monthWeeks = weeksInMonth(month);
+  const monthQuota = monthlyHoursFor(budgetRow?.weeklyHoursQuota ?? 0, month);
   // מכסת השעות/התקציב הזמינים לחודש = המכסה/התעריף הרגילים + יתרה שהועברה מחודשים קודמים.
-  const availableQuota = (budgetRow?.monthlyHoursQuota ?? 0) + carriedInBalance;
+  const availableQuota = monthQuota + carriedInBalance;
   const availableBudget = (budgetRow?.tariffMonthly ?? 0) + carriedInBudget;
   // חודש שכבר "סיום דיווח חודשי" נלחץ עבורו ננעל לצמיתות - אין עריכה חוזרת/שליחה חוזרת (v1).
   const monthLocked = Object.values(reports).some((r) => r.monthlyTransferDocGenerated);
@@ -318,7 +321,7 @@ export function MonthlyReportScreen({
             <div className="text-right">
               <h1 className="text-display-lg text-primary mb-1">דיווח חודשי</h1>
               <p className="text-body-lg text-on-surface-variant">
-                דיווח שעות בפועל ותעריף לכל עובד, בצירוף חשבונית / דרישת תשלום
+                דיווח שעות חודשיות בפועל לכל עובד, בצירוף חשבונית / דרישת תשלום
               </p>
             </div>
             <div>
@@ -332,13 +335,20 @@ export function MonthlyReportScreen({
             </div>
           </div>
 
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-secondary-container/40 text-on-surface border border-secondary/30">
+            <Icon name="info" className="text-secondary text-[20px]" />
+            <span className="font-bold">
+              התעריף לשעה נקבע בהקצאה השנתית, כולל מע&quot;מ, ואינו ניתן לשינוי בדיווח. סה&quot;כ לתשלום כולל מע&quot;מ.
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <BudgetStatCard
               icon="schedule"
               label={
                 carriedInBalance > 0
-                  ? `שעות מדווחות - ${month} (כולל ${formatNum(carriedInBalance)} יתרה מועברת)`
-                  : `שעות מדווחות - ${month}`
+                  ? `שעות מדווחות - ${month} (${formatNum(monthWeeks)} שבועות עבודה, כולל ${formatNum(carriedInBalance)} יתרה מועברת)`
+                  : `שעות מדווחות - ${month} (${formatNum(monthWeeks)} שבועות עבודה)`
               }
               valueLabel={`${formatNum(totalReported)} מתוך ${formatNum(availableQuota)} שעות`}
               current={totalReported}
@@ -366,15 +376,15 @@ export function MonthlyReportScreen({
                   <tr>
                     <th className="px-5 py-3">עובד</th>
                     <th className="px-5 py-3">תת-תפקיד</th>
-                    <th className="px-5 py-3">שעות מוקצות</th>
+                    <th className="px-5 py-3">שעות מוקצות לחודש</th>
                     <th className="px-5 py-3">שעות בפועל</th>
-                    <th className="px-5 py-3">תעריף</th>
-                    <th className="px-5 py-3">סה&quot;כ לתשלום</th>
+                    <th className="px-5 py-3">תעריף (כולל מע&quot;מ)</th>
+                    <th className="px-5 py-3">סה&quot;כ לתשלום (כולל מע&quot;מ)</th>
                     <th className="px-5 py-3">
-                      מס&apos; חשבונית <span className="text-error">*</span>
+                      מס&apos; חשבונית / מס&apos; דרישת תשלום <span className="text-error">*</span>
                     </th>
                     <th className="px-5 py-3">
-                      חשבונית <span className="text-error">*</span>
+                      חשבונית / דרישת תשלום <span className="text-error">*</span>
                     </th>
                     <th className="px-5 py-3" />
                   </tr>
@@ -389,7 +399,8 @@ export function MonthlyReportScreen({
                     if (!row) return null;
                     // לא פעיל, או שהחודש כבר ננעל לצמיתות - תמיד נעול, בלי אפשרות עריכה.
                     // אחרת - נעול כברירת מחדל ברגע שיש דיווח שמור, עד לחיצה על "עריכה".
-                    const locked = p.inactive || monthLocked || !row.editing;
+                    // רופא: כל השדות נעולים תמיד (אין שעות/תעריף ואין דיווח).
+                    const locked = p.isDoctor || p.inactive || monthLocked || !row.editing;
                     return (
                       <tr key={p.id} className={`align-middle ${p.inactive ? 'opacity-60' : ''}`}>
                         <td className="px-5 py-3 font-bold">
@@ -399,16 +410,25 @@ export function MonthlyReportScreen({
                               <Icon name="pause_circle" className="text-[14px]" fill /> לא פעיל
                             </span>
                           )}
+                          {p.isDoctor && (
+                            <span className="mr-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-container/20 text-primary text-label-sm font-bold align-middle">
+                              <Icon name="stethoscope" className="text-[14px]" /> רופא
+                            </span>
+                          )}
                           {!p.inactive && report && locked && (
                             <span className="mr-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tertiary-container/40 text-on-surface text-label-sm font-bold align-middle">
                               <Icon name="check_circle" className="text-tertiary text-[14px]" fill /> דווח
                             </span>
                           )}
                         </td>
-                        <td className="px-5 py-3">{p.subRole}</td>
-                        <td className="px-5 py-3">{formatNum(p.allocatedHours)}</td>
+                        <td className="px-5 py-3">{p.isDoctor ? 'רופא' : p.subRole}</td>
                         <td className="px-5 py-3">
-                          {locked ? (
+                          {p.isDoctor ? ' - ' : formatNum(monthlyHoursFor(p.allocatedHours, month))}
+                        </td>
+                        <td className="px-5 py-3">
+                          {p.isDoctor ? (
+                            ' - '
+                          ) : locked ? (
                             formatNum(Number(row.hours) || 0)
                           ) : (
                             <input
@@ -421,16 +441,8 @@ export function MonthlyReportScreen({
                           )}
                         </td>
                         <td className="px-5 py-3">
-                          {locked ? (
-                            formatNum(Number(row.rate) || 0)
-                          ) : (
-                            <input
-                              type="number"
-                              value={row.rate}
-                              onChange={(e) => updateRow(p.id, { rate: e.target.value })}
-                              className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
-                            />
-                          )}
+                          {/* תעריף נעול: תמיד התעריף המוסכם בהקצאה (או מה שנשמר בדיווח עצמו). */}
+                          {p.isDoctor ? ' - ' : formatNum(report ? report.reportedRate : p.agreedHourlyRate)}
                         </td>
                         <td className="px-5 py-3">{report ? formatNum(report.totalPay) : ' - '}</td>
                         <td className="px-5 py-3">
@@ -468,7 +480,7 @@ export function MonthlyReportScreen({
                           )}
                         </td>
                         <td className="px-5 py-3">
-                          {p.inactive || monthLocked ? null : locked ? (
+                          {p.isDoctor || p.inactive || monthLocked ? null : locked ? (
                             <button
                               onClick={() => startEditRow(p.id)}
                               className="text-on-surface-variant hover:text-primary"

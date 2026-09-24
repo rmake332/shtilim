@@ -11,15 +11,51 @@ import { joinFullName, splitFullName, MARITAL_STATUS_FALLBACK, type UploadedDoc 
 import { EMPLOYEE_FIELDS, TABLES } from '@/lib/airtable/schema';
 import { DocUpload } from '@/components/steps/DocUpload';
 import { BudgetStatCard } from '@/components/invoice/BudgetStatCard';
+import { monthlyToWeekly, WEEKS_PER_MONTH } from '@/lib/invoice/rates';
 
 interface InvoiceBudgetRow {
   id: string;
   title: string;
-  monthlyHoursQuota: number;
+  /** מכסה שבועית. */
+  weeklyHoursQuota: number;
   tariffMonthly: number;
-  maxHourlyRate: number | null;
   totalAllocatedHours: number;
   remainingHoursToAllocate: number;
+  allocationLocked: boolean;
+}
+
+type HoursUnit = 'weekly' | 'monthly';
+
+/** שעות כפי שהוזנו -> שעות שבועיות לשמירה (חודשיות מחולקות ב-4.3). */
+function toWeeklyHours(value: string, unit: HoursUnit): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return NaN;
+  return unit === 'monthly' ? monthlyToWeekly(n) : n;
+}
+
+/** בורר יחידת שעות (שבועיות/חודשיות) לצד שדה השעות. */
+function HoursUnitSelect({ value, onChange }: { value: HoursUnit; onChange: (u: HoursUnit) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as HoursUnit)}
+      className="bg-surface-container-low rounded-lg h-11 px-2 text-body-md"
+      aria-label="יחידת שעות"
+    >
+      <option value="weekly">שבועיות</option>
+      <option value="monthly">חודשיות</option>
+    </select>
+  );
+}
+
+/** הודעה קבועה: כל סכום לשעה במודול מוזן כולל מע"מ. */
+function VatNotice() {
+  return (
+    <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-secondary-container/40 text-on-surface border border-secondary/30">
+      <Icon name="info" className="text-secondary text-[20px]" />
+      <span className="font-bold">שימו לב: התעריף לשעה מוזן תמיד כסכום כולל מע&quot;מ.</span>
+    </div>
+  );
 }
 
 interface InvoicePosition {
@@ -32,6 +68,7 @@ interface InvoicePosition {
   agreedHourlyRate: number;
   allocationTransferDocGenerated: boolean;
   inactive: boolean;
+  isDoctor: boolean;
 }
 
 interface SearchResult {
@@ -118,6 +155,7 @@ export function AllocationScreen({
   // ── row edit state (existing positions table) ───────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editHours, setEditHours] = useState('');
+  const [editHoursUnit, setEditHoursUnit] = useState<HoursUnit>('weekly');
   const [editRate, setEditRate] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
@@ -139,9 +177,16 @@ export function AllocationScreen({
   const [bankAccountNumber, setBankAccountNumber] = useState('');
   const [vatNumber, setVatNumber] = useState('');
   const [allocatedHours, setAllocatedHours] = useState('');
+  const [hoursUnit, setHoursUnit] = useState<HoursUnit>('weekly');
   const [agreedHourlyRate, setAgreedHourlyRate] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // ── add-doctor form state (רופא: בלי שעות/תעריף, לא מנצל מהתקציב) ─────────
+  const [doctor, setDoctor] = useState({ lastName: '', firstName: '', tz: '', licenseNumber: '' });
+  const [doctorDoc, setDoctorDoc] = useState<UploadedDoc | undefined>(undefined);
+  const [doctorSubmitting, setDoctorSubmitting] = useState(false);
+  const [doctorError, setDoctorError] = useState('');
 
   // ── edit-employee-details panel state (existing position, not the add form above) ──
   const [editingEmployeeFor, setEditingEmployeeFor] = useState<string | null>(null); // positionId
@@ -251,8 +296,61 @@ export function AllocationScreen({
     setBankAccountNumber('');
     setVatNumber('');
     setAllocatedHours('');
+    setHoursUnit('weekly');
     setAgreedHourlyRate('');
     setFormError('');
+  }
+
+  async function submitAddDoctor() {
+    setDoctorError('');
+    if (!doctor.lastName.trim()) { setDoctorError('יש להזין שם משפחה.'); return; }
+    if (!doctor.firstName.trim()) { setDoctorError('יש להזין שם פרטי.'); return; }
+    if (!doctor.tz.trim()) { setDoctorError('יש להזין ת.ז.'); return; }
+    if (!doctor.licenseNumber.trim()) { setDoctorError("יש להזין מס' רישיון."); return; }
+    if (!doctorDoc) { setDoctorError('יש לצרף את מסמך הרישיון.'); return; }
+
+    setDoctorSubmitting(true);
+    try {
+      const res = await fetch('/api/invoice/positions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          budgetRowId,
+          isDoctor: true,
+          newEmployee: {
+            ...EMPTY_NEW_EMPLOYEE,
+            lastName: doctor.lastName.trim(),
+            firstName: doctor.firstName.trim(),
+            name: joinFullName(doctor.lastName.trim(), doctor.firstName.trim()),
+            tz: doctor.tz.trim(),
+          },
+          licenseNumber: doctor.licenseNumber.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!json.ok) { setDoctorError(json.message || 'שגיאה בהוספת הרופא.'); return; }
+
+      const up = await fetch('/api/upload-employee-doc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          employeeId: json.position.employeeId,
+          fieldId: EMPLOYEE_FIELDS.docDoctorLicense,
+          file: doctorDoc,
+        }),
+      });
+      const upJson = await up.json().catch(() => ({ ok: false }));
+      setDoctor({ lastName: '', firstName: '', tz: '', licenseNumber: '' });
+      setDoctorDoc(undefined);
+      await loadData();
+      if (!upJson.ok) setDoctorError('הרופא נוסף, אך העלאת מסמך הרישיון נכשלה. יש לצרף אותו שוב דרך איירטייבל או לפנות לתמיכה.');
+    } catch {
+      setDoctorError('שגיאה בהוספת הרופא.');
+    } finally {
+      setDoctorSubmitting(false);
+    }
   }
 
   const wantedDocs = subRoleDocsFor(subRoleOptions, subRole);
@@ -278,7 +376,7 @@ export function AllocationScreen({
       return;
     }
     if (!/^\d{9}$/.test(vatNumber.trim())) { setFormError('מספר עוסק חייב להיות בן 9 ספרות.'); return; }
-    const hoursNum = Number(allocatedHours);
+    const hoursNum = toWeeklyHours(allocatedHours, hoursUnit);
     const rateNum = Number(agreedHourlyRate);
     if (!Number.isFinite(hoursNum) || hoursNum <= 0) { setFormError('יש להזין שעות מוקצות תקינות.'); return; }
     if (!Number.isFinite(rateNum) || rateNum <= 0) { setFormError('יש להזין תעריף שעתי תקין.'); return; }
@@ -330,6 +428,7 @@ export function AllocationScreen({
   function startEditRow(p: InvoicePosition) {
     setEditingId(p.id);
     setEditHours(String(p.allocatedHours));
+    setEditHoursUnit('weekly');
     setEditRate(String(p.agreedHourlyRate));
     setEditError('');
   }
@@ -340,7 +439,7 @@ export function AllocationScreen({
   }
 
   async function saveEditRow(id: string) {
-    const hours = Number(editHours);
+    const hours = toWeeklyHours(editHours, editHoursUnit);
     const rate = Number(editRate);
     if (!Number.isFinite(hours) || hours <= 0 || !Number.isFinite(rate) || rate <= 0) {
       setEditError('יש להזין שעות ותעריף תקינים.');
@@ -512,6 +611,7 @@ export function AllocationScreen({
   }
 
   async function finishAllocation() {
+    if (!confirm('לסיים את ההקצאה השנתית? לאחר הסיום לא ניתן יהיה לערוך את ההקצאה.')) return;
     setFinishing(true);
     setFinishMsg('');
     try {
@@ -521,9 +621,12 @@ export function AllocationScreen({
         body: JSON.stringify({ token }),
       });
       const json = await res.json();
-      setFinishMsg(json.ok
-        ? 'ההקצאה סומנה כהושלמה. הפקת "בקשת העברות" בגוגל דוקס תתווסף בהמשך.'
-        : (json.message || 'שגיאה בסימון סיום ההקצאה.'));
+      if (json.ok) {
+        // ההקצאה ננעלת - טעינה מחדש מסתירה את כל אפשרויות העריכה.
+        await loadData();
+      } else {
+        setFinishMsg(json.message || 'שגיאה בסימון סיום ההקצאה.');
+      }
     } catch {
       setFinishMsg('שגיאה בסימון סיום ההקצאה.');
     } finally {
@@ -539,7 +642,12 @@ export function AllocationScreen({
   }
 
   const totalAllocated = positions.reduce((s, p) => s + p.allocatedHours, 0);
-  const totalPlannedSpend = positions.reduce((s, p) => s + p.allocatedHours * p.agreedHourlyRate, 0);
+  // שעות מוקצות שבועיות -> עלות חודשית משוערת לפי 4.3 שבועות בחודש.
+  const totalPlannedSpend = positions.reduce((s, p) => s + p.allocatedHours * WEEKS_PER_MONTH * p.agreedHourlyRate, 0);
+  // "סיום הקצאה שנתית" נועל את כל העריכה במסך; פתיחה מחדש רק מממשק המנהל.
+  const locked = budgetRow.allocationLocked;
+  const workerCount = positions.filter((p) => !p.isDoctor).length;
+  const doctorCount = positions.length - workerCount;
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-bright" dir="rtl">
@@ -565,28 +673,31 @@ export function AllocationScreen({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {locked && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-tertiary-container/30 text-on-surface">
+              <Icon name="lock" className="text-tertiary text-[20px]" />
+              <span className="font-bold">ההקצאה השנתית הושלמה וננעלה לעריכה. לפתיחה מחדש יש לפנות למנהל המערכת.</span>
+            </div>
+          )}
+
+          {!locked && <VatNotice />}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <BudgetStatCard
               icon="schedule"
-              label={`שעות מוקצות (${positions.length} עובדים)`}
-              valueLabel={`${formatNum(totalAllocated)} מתוך ${formatNum(budgetRow.monthlyHoursQuota)} שעות`}
+              label={`שעות שבועיות מוקצות (${workerCount} עובדים${doctorCount ? `, ${doctorCount} רופאים` : ''})`}
+              valueLabel={`${formatNum(totalAllocated)} מתוך ${formatNum(budgetRow.weeklyHoursQuota)} שעות שבועיות`}
               current={totalAllocated}
-              max={budgetRow.monthlyHoursQuota}
+              max={budgetRow.weeklyHoursQuota}
               color="primary"
             />
             <BudgetStatCard
               icon="payments"
-              label="תקציב חודשי מתוכנן"
+              label={`תקציב חודשי מתוכנן (כולל מע"מ, לפי ${WEEKS_PER_MONTH} שבועות)`}
               valueLabel={`${formatNum(totalPlannedSpend)} מתוך ${formatNum(budgetRow.tariffMonthly)} ₪`}
               current={totalPlannedSpend}
               max={budgetRow.tariffMonthly}
               color="secondary"
-            />
-            <BudgetStatCard
-              icon="speed"
-              label="תעריף שעתי מקסימלי"
-              valueLabel={budgetRow.maxHourlyRate != null ? `${formatNum(budgetRow.maxHourlyRate)} ₪ לשעה` : '-'}
-              color="tertiary"
             />
           </div>
 
@@ -598,8 +709,8 @@ export function AllocationScreen({
                   <tr>
                     <th className="px-5 py-3">עובד</th>
                     <th className="px-5 py-3">תת-תפקיד</th>
-                    <th className="px-5 py-3">שעות מוקצות</th>
-                    <th className="px-5 py-3">תעריף שעתי מוסכם</th>
+                    <th className="px-5 py-3">שעות מוקצות (שבועיות)</th>
+                    <th className="px-5 py-3">תעריף שעתי מוסכם (כולל מע&quot;מ)</th>
                     <th className="px-5 py-3">סטטוס</th>
                     <th className="px-5 py-3" />
                   </tr>
@@ -613,22 +724,37 @@ export function AllocationScreen({
                     return (
                       <tr key={p.id} className={p.inactive ? 'opacity-60' : ''}>
                         <td className="px-5 py-3 font-bold">{p.employeeName}</td>
-                        <td className="px-5 py-3">{p.subRole}</td>
                         <td className="px-5 py-3">
-                          {isEditing ? (
-                            <input
-                              type="number"
-                              value={editHours}
-                              onChange={(e) => setEditHours(e.target.value)}
-                              className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
-                              autoFocus
-                            />
+                          {p.isDoctor ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-container/20 text-primary text-label-sm font-bold">
+                              <Icon name="stethoscope" className="text-[16px]" /> רופא
+                            </span>
+                          ) : (
+                            p.subRole
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          {p.isDoctor ? (
+                            ' - '
+                          ) : isEditing ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editHours}
+                                onChange={(e) => setEditHours(e.target.value)}
+                                className="w-24 bg-surface-container-low rounded-lg py-2 px-2 text-body-md"
+                                autoFocus
+                              />
+                              <HoursUnitSelect value={editHoursUnit} onChange={setEditHoursUnit} />
+                            </div>
                           ) : (
                             formatNum(p.allocatedHours)
                           )}
                         </td>
                         <td className="px-5 py-3">
-                          {isEditing ? (
+                          {p.isDoctor ? (
+                            ' - '
+                          ) : isEditing ? (
                             <input
                               type="number"
                               value={editRate}
@@ -651,7 +777,7 @@ export function AllocationScreen({
                           )}
                         </td>
                         <td className="px-5 py-3">
-                          {isEditing ? (
+                          {locked ? null : isEditing ? (
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-2">
                                 <button
@@ -675,7 +801,7 @@ export function AllocationScreen({
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
-                              {!p.inactive && (
+                              {!p.inactive && !p.isDoctor && (
                                 <button
                                   onClick={() => startEditRow(p)}
                                   className="text-on-surface-variant hover:text-primary"
@@ -684,22 +810,26 @@ export function AllocationScreen({
                                   <Icon name="edit" className="text-[18px]" />
                                 </button>
                               )}
-                              <button
-                                onClick={() => void openEditEmployee(p)}
-                                className="text-on-surface-variant hover:text-primary"
-                                aria-label="עריכת פרטי עובד"
-                                title="עריכת פרטי עובד"
-                              >
-                                <Icon name="manage_accounts" className="text-[20px]" />
-                              </button>
-                              <button
-                                onClick={() => void toggleActive(p)}
-                                className="text-on-surface-variant hover:text-tertiary"
-                                aria-label={p.inactive ? 'הפעלה מחדש' : 'סימון כלא פעיל'}
-                                title={p.inactive ? 'הפעלה מחדש' : 'סימון כלא פעיל'}
-                              >
-                                <Icon name={p.inactive ? 'play_circle' : 'pause_circle'} className="text-[20px]" />
-                              </button>
+                              {!p.isDoctor && (
+                                <button
+                                  onClick={() => void openEditEmployee(p)}
+                                  className="text-on-surface-variant hover:text-primary"
+                                  aria-label="עריכת פרטי עובד"
+                                  title="עריכת פרטי עובד"
+                                >
+                                  <Icon name="manage_accounts" className="text-[20px]" />
+                                </button>
+                              )}
+                              {!p.isDoctor && (
+                                <button
+                                  onClick={() => void toggleActive(p)}
+                                  className="text-on-surface-variant hover:text-tertiary"
+                                  aria-label={p.inactive ? 'הפעלה מחדש' : 'סימון כלא פעיל'}
+                                  title={p.inactive ? 'הפעלה מחדש' : 'סימון כלא פעיל'}
+                                >
+                                  <Icon name={p.inactive ? 'play_circle' : 'pause_circle'} className="text-[20px]" />
+                                </button>
+                              )}
                               <button onClick={() => void removePosition(p.id)} className="text-on-surface-variant hover:text-error" aria-label="הסרה">
                                 <Icon name="delete" className="text-[20px]" />
                               </button>
@@ -715,7 +845,7 @@ export function AllocationScreen({
           </div>
 
           {/* Edit employee details panel (for an existing position) */}
-          {editingEmployeeFor && (() => {
+          {!locked && editingEmployeeFor && (() => {
             const p = positions.find((row) => row.id === editingEmployeeFor);
             if (!p) return null;
             const empWantedDocs = subRoleDocsFor(subRoleOptions, empForm.subRole);
@@ -959,6 +1089,7 @@ export function AllocationScreen({
           })()}
 
           {/* Add employee form */}
+          {!locked && (
           <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-6 shadow-sm space-y-5">
             <h2 className="text-headline-sm font-bold text-on-surface">הוספת עובד לתקן</h2>
 
@@ -1109,11 +1240,22 @@ export function AllocationScreen({
               </div>
               <div>
                 <label className="text-label-lg text-on-surface block mb-2">שעות מוקצות <span className="text-error">*</span></label>
-                <input type="number" value={allocatedHours} onChange={(e) => setAllocatedHours(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
+                <div className="flex items-center gap-2">
+                  <input type="number" value={allocatedHours} onChange={(e) => setAllocatedHours(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
+                  <HoursUnitSelect value={hoursUnit} onChange={setHoursUnit} />
+                </div>
+                {hoursUnit === 'monthly' && Number(allocatedHours) > 0 && (
+                  <p className="text-label-sm text-on-surface-variant mt-1">
+                    = {formatNum(monthlyToWeekly(Number(allocatedHours)))} שעות שבועיות (חלוקה ב-{WEEKS_PER_MONTH})
+                  </p>
+                )}
               </div>
               <div>
-                <label className="text-label-lg text-on-surface block mb-2">תעריף שעתי מוסכם <span className="text-error">*</span></label>
+                <label className="text-label-lg text-on-surface block mb-2">
+                  תעריף שעתי מוסכם - כולל מע&quot;מ <span className="text-error">*</span>
+                </label>
                 <input type="number" value={agreedHourlyRate} onChange={(e) => setAgreedHourlyRate(e.target.value)} className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md" />
+                <p className="text-label-sm text-on-surface-variant mt-1">יש להזין את הסכום לשעה אחרי מע&quot;מ.</p>
               </div>
             </div>
 
@@ -1196,7 +1338,76 @@ export function AllocationScreen({
               {submitting ? 'מוסיף…' : 'הוספת עובד לתקן'}
             </button>
           </div>
+          )}
 
+          {/* Add doctor form */}
+          {!locked && (
+            <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-6 shadow-sm space-y-5">
+              <div>
+                <h2 className="text-headline-sm font-bold text-on-surface">הוספת רופא</h2>
+                <p className="text-body-md text-on-surface-variant mt-1">
+                  לרופא לא מוזנים שעות ותעריף, והוא לא מנצל מהתקציב.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 max-w-4xl">
+                <div>
+                  <label className="text-label-lg text-on-surface block mb-2">
+                    שם משפחה <span className="text-error">*</span>
+                  </label>
+                  <input
+                    value={doctor.lastName}
+                    onChange={(e) => setDoctor((v) => ({ ...v, lastName: e.target.value }))}
+                    className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
+                  />
+                </div>
+                <div>
+                  <label className="text-label-lg text-on-surface block mb-2">
+                    שם פרטי <span className="text-error">*</span>
+                  </label>
+                  <input
+                    value={doctor.firstName}
+                    onChange={(e) => setDoctor((v) => ({ ...v, firstName: e.target.value }))}
+                    className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
+                  />
+                </div>
+                <div>
+                  <label className="text-label-lg text-on-surface block mb-2">
+                    ת.ז. <span className="text-error">*</span>
+                  </label>
+                  <input
+                    value={doctor.tz}
+                    onChange={(e) => setDoctor((v) => ({ ...v, tz: e.target.value }))}
+                    inputMode="numeric"
+                    className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
+                  />
+                </div>
+                <div>
+                  <label className="text-label-lg text-on-surface block mb-2">
+                    מס&apos; רישיון <span className="text-error">*</span>
+                  </label>
+                  <input
+                    value={doctor.licenseNumber}
+                    onChange={(e) => setDoctor((v) => ({ ...v, licenseNumber: e.target.value }))}
+                    className="w-full bg-surface-container-low rounded-lg h-11 px-3 text-body-md"
+                  />
+                </div>
+              </div>
+              <div className="max-w-sm">
+                <DocUpload label="מסמך הרישיון" required value={doctorDoc} onChange={setDoctorDoc} />
+              </div>
+              {doctorError && <p className="text-error text-body-md">{doctorError}</p>}
+              <button
+                onClick={() => void submitAddDoctor()}
+                disabled={doctorSubmitting}
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-xl font-bold text-label-lg hover:opacity-90 disabled:opacity-50 transition-all"
+              >
+                <Icon name="add" className="text-[18px]" />
+                {doctorSubmitting ? 'מוסיף…' : 'הוספת רופא'}
+              </button>
+            </div>
+          )}
+
+          {!locked && (
           <div className="flex items-center gap-4">
             <button
               onClick={() => void finishAllocation()}
@@ -1208,6 +1419,7 @@ export function AllocationScreen({
             </button>
             {finishMsg && <span className="text-body-md text-on-surface-variant">{finishMsg}</span>}
           </div>
+          )}
         </div>
       </main>
 

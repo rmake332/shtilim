@@ -10,8 +10,10 @@ async function verifyOwnership(positionId: string, mosadId: string, requestId?: 
   const position = await getPosition(positionId, requestId);
   if (!position) return null;
   const row = await fetchInvoiceBudgetRow(mosadId, position.budgetRowId, requestId);
-  return row ? position : null;
+  return row ? { position, row } : null;
 }
+
+const LOCKED_MESSAGE = 'ההקצאה השנתית ננעלה - לא ניתן לערוך. לפתיחה יש לפנות למנהל המערכת.';
 
 /**
  * PATCH /api/invoice/positions/[id] - עריכת הקצאה קיימת, במהלך "ניהול תקציב".
@@ -20,6 +22,7 @@ async function verifyOwnership(positionId: string, mosadId: string, requestId?: 
  * חסום כשההקצאה לא פעילה (allocatedHours שלה מאופס - ראו setPositionActive).
  * שינוי תת-תפקיד/שם עובד (מ"עריכת פרטי עובד" ב-AllocationScreen) בלי שינוי
  * שעות/תעריף - מותר גם כשההקצאה לא פעילה, בלי בדיקת מכסה (אין שינוי שעות).
+ * הכל חסום כשההקצאה השנתית ננעלה, ושעות/תעריף חסומים תמיד לרופא.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
@@ -35,8 +38,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   };
 
   try {
-    const position = await verifyOwnership(params.id, gate.institution.mosadId, gate.requestId);
-    if (!position) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
+    const owned = await verifyOwnership(params.id, gate.institution.mosadId, gate.requestId);
+    if (!owned) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
+    const { position, row } = owned;
+    if (row.allocationLocked) return NextResponse.json({ ok: false, message: LOCKED_MESSAGE }, { status: 409 });
 
     if (typeof active === 'boolean') {
       const updated = await setPositionActive(params.id, active, gate.requestId);
@@ -49,6 +54,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ ok: true, position: updated });
     }
 
+    if (position.isDoctor) {
+      return NextResponse.json({ ok: false, message: 'לרופא אין שעות ותעריף.' }, { status: 400 });
+    }
     if (position.inactive) {
       return NextResponse.json(
         { ok: false, message: 'לא ניתן לערוך שעות/תעריף של עובד לא פעיל. יש להפעיל אותו מחדש תחילה.' },
@@ -94,8 +102,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (gate instanceof NextResponse) return gate;
 
   try {
-    const position = await verifyOwnership(params.id, gate.institution.mosadId, gate.requestId);
-    if (!position) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
+    const owned = await verifyOwnership(params.id, gate.institution.mosadId, gate.requestId);
+    if (!owned) return NextResponse.json({ ok: false, message: 'הקצאה לא נמצאה.' }, { status: 404 });
+    if (owned.row.allocationLocked) return NextResponse.json({ ok: false, message: LOCKED_MESSAGE }, { status: 409 });
 
     const reports = await listReportsForPosition(params.id, gate.requestId);
     if (reports.length > 0) {

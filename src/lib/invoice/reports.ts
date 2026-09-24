@@ -97,6 +97,13 @@ export async function listReportsForPositions(
     .map(mapReport);
 }
 
+/** כל הדיווחים בכל המוסדות, אופציונלית לחודש אחד (ממשק מנהל בלבד). */
+export async function listAllReports(month?: string, requestId?: string): Promise<InvoiceMonthlyReport[]> {
+  const formula = month ? `{${INVOICE_REPORT_FIELDS.reportMonth}}="${escapeFormulaValue(month)}"` : undefined;
+  const records = await listRecords(TABLES.invoiceReports, formula ? { filterByFormula: formula } : {}, requestId);
+  return records.map(mapReport);
+}
+
 /** כל הדיווחים ההיסטוריים של הקצאה (עובד) בודדת, לכל החודשים. */
 export async function listReportsForPosition(
   positionId: string,

@@ -10,9 +10,8 @@ import { formatNum } from '@/lib/formatNum';
 interface InvoiceBudgetRowWithStatus {
   id: string;
   title: string;
-  monthlyHoursQuota: number;
+  weeklyHoursQuota: number;
   tariffMonthly: number;
-  maxHourlyRate: number | null;
   totalAllocatedHours: number;
   remainingHoursToAllocate: number;
   employeeCount: number;
@@ -112,9 +111,8 @@ export function InvoiceDashboard({ token, institutionName }: { token: string; in
                   <thead className="bg-surface-container-low text-label-lg font-bold text-on-surface-variant">
                     <tr>
                       <th className="px-5 py-3">תפקיד</th>
-                      <th className="px-5 py-3">שעות לניצול (חודשי)</th>
-                      <th className="px-5 py-3">תעריף חודשי</th>
-                      <th className="px-5 py-3">תעריף שעתי מקסימלי</th>
+                      <th className="px-5 py-3">שעות לניצול (שבועי)</th>
+                      <th className="px-5 py-3">תקציב חודשי</th>
                       <th className="px-5 py-3">עובדים מוקצים</th>
                       <th className="px-5 py-3">יתרת שעות להקצאה</th>
                       <th className="px-5 py-3">סטטוס</th>
@@ -125,11 +123,8 @@ export function InvoiceDashboard({ token, institutionName }: { token: string; in
                     {rows.map((row) => (
                       <tr key={row.id} className="hover:bg-surface-container-low/60 transition-colors">
                         <td className="px-5 py-3.5 font-bold text-on-surface">{row.title || ' - '}</td>
-                        <td className="px-5 py-3.5">{formatNum(row.monthlyHoursQuota)}</td>
-                        <td className="px-5 py-3.5">{formatNum(row.tariffMonthly)}</td>
-                        <td className="px-5 py-3.5">
-                          {row.maxHourlyRate != null ? formatNum(row.maxHourlyRate) : ' - '}
-                        </td>
+                        <td className="px-5 py-3.5">{formatNum(row.weeklyHoursQuota)}</td>
+                        <td className="px-5 py-3.5">{formatNum(row.tariffMonthly)} ₪</td>
                         <td className="px-5 py-3.5">{row.employeeCount}</td>
                         <td className="px-5 py-3.5">
                           <span className={row.remainingHoursToAllocate < 0 ? 'text-error font-bold' : ''}>
@@ -139,7 +134,7 @@ export function InvoiceDashboard({ token, institutionName }: { token: string; in
                         <td className="px-5 py-3.5">
                           {row.allocationFinished ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tertiary-container/40 text-on-surface text-label-sm font-bold">
-                              <Icon name="check_circle" className="text-tertiary text-[16px]" fill /> הקצאה הושלמה
+                              <Icon name="lock" className="text-tertiary text-[16px]" fill /> הקצאה הושלמה
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant text-label-sm font-bold">

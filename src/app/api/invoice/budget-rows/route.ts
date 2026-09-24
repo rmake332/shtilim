@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
         return {
           ...row,
           employeeCount: positions.length,
-          allocationFinished: positions.length > 0 && positions.every((p) => p.allocationTransferDocGenerated),
+          allocationFinished: row.allocationLocked,
         };
       }),
     );

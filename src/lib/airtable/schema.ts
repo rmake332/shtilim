@@ -90,6 +90,7 @@ export const EMPLOYEE_FIELDS = {
   docArtTherapyMasters: 'fldabnKaTq0KGh3E5', // אישור תואר שני בטיפול
   docArtTherapyInternship: 'fldA4idheSGsMDHAm', // אישור 960 שעות סטאז'
   docSocialWorkerReg: 'fld8nuuhTs2er90Rx', // תעודת רישום משרד הרווחה
+  docDoctorLicense: 'fldfcR8KVZrCeMR23', // רישיון רופא - הקצאת רופא בתקני חשבונית
   // Youth/role document attachments (multipleAttachments), filed on the EMPLOYEE (reused
   // across positions/years) — not re-requested if already on file.
   // ⚠️ Fields of the SAME NAME also exist on תקנים פעילים (where they used to live). These
@@ -338,10 +339,14 @@ export const BUDGET_FIELDS = {
   tariff: 'fldXCXha3m4ddSLlB',      // תעריף (text)
   ranking: 'fldGa1xyA97oY2sMh',     // מס כיתות / דירוג (text)
   seniority: 'fld2lspCubFLNIncX',   // שעות לתפקיד / ותק-אופק (text)
-  // חשבונית: שעות לניצול (מכסה חודשית) = reuse של totalBudgetHours למטה, אין שדה נפרד.
+  // חשבונית: שעות לניצול (מכסה **שבועית**) = reuse של totalBudgetHours למטה, אין שדה נפרד.
+  // המכסה לחודש דיווח נגזרת ממנה ב-monthlyHoursFor (src/lib/invoice/rates.ts).
   totalBudgetHours: 'fldaJLQ3OIK24W6yj', // סך שעות בתקציב (number)
   tariffMonthly: 'fldjwX9I0KGP2Il1b', // תעריף חודשי (number), לתקני חשבונית בלבד
-  maxHourlyRate: 'fldQK32tmOhTT64kk', // תעריף שעתי מקסימלי (formula) = תעריף חודשי / סך שעות בתקציב
+  // תעריף שעתי מקסימלי (formula) = MIN(350, תעריף חודשי / (סך שעות בתקציב * 4.3) * 1.2),
+  // זהה ל-maxHourlyRateFor ב-src/lib/invoice/rates.ts.
+  maxHourlyRate: 'fldQK32tmOhTT64kk',
+  invoiceAllocationLocked: 'fldd4AlNOpdSh3Hds', // הקצאה שנתית חשבונית נעולה (checkbox) - נפתח רק מממשק המנהל
   totalAllocatedHours: 'fld7oYRQx6PD8n5SN', // סה"כ שעות מוקצות (rollup, סכום מ-תקני חשבונית)
   remainingHoursToAllocate: 'fld6PN4a2UCGT5NOx', // יתרת שעות להקצאה (formula)
   invoicePositionsLink: 'fldWAO84wCLcMtmsM', // קישור חוזר לתקני חשבונית
@@ -356,10 +361,11 @@ export const INVOICE_POSITION_FIELDS = {
   budgetLink: 'fldvqbXJ3gmbBaz8d', // → תקציב התחלתי
   employeeLink: 'fld3d1znryoB88bl5', // → רשימת עובדים
   subRole: 'fldLRjmIemmuuOwje', // תת-תפקיד (singleSelect, אותם choices כמו POSITION_FIELDS.subRole)
-  allocatedHours: 'flds5gSKUmvMzVIcM', // שעות מוקצות (number)
+  allocatedHours: 'flds5gSKUmvMzVIcM', // שעות מוקצות (number, שבועיות)
   agreedHourlyRate: 'fldThxq6r24dwsq0l', // תעריף שעתי מוסכם (number), לא יכול לעלות על BUDGET_FIELDS.maxHourlyRate
   allocationTransferDocGenerated: 'fldstyCd8iVil4hwa', // בקשת העברות (הקצאה) הופקה (checkbox, stub)
   inactive: 'fld9P3OlrpkfWwpgK', // לא פעיל (checkbox) - ראו setPositionActive ב-src/lib/invoice/positions.ts
+  isDoctor: 'fldxQzJ9NIKuiFqrQ', // רופא (checkbox) - בלי שעות/תעריף, לא מנצל תקציב, לא מדווח חודשית
 } as const;
 
 /**

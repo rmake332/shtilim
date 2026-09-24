@@ -6,6 +6,7 @@ import { markMonthFinished, saveDocUrlForMonth, listReportsForPositions } from '
 import { getEmployeeById } from '@/lib/employees';
 import { generatePaymentRequestDoc, type PaymentRequestRow } from '@/lib/invoice/paymentRequestDoc';
 import { finalizeMonthBalance } from '@/lib/invoice/monthlyBalance';
+import { monthlyHoursFor } from '@/lib/invoice/rates';
 import { notifyPaymentRequestEmail } from '@/lib/makeWebhook';
 import { logger } from '@/lib/logger';
 
@@ -121,7 +122,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         budgetRowId: params.id,
         budgetRowTitle: row.title,
         month,
-        quotaSnapshot: row.monthlyHoursQuota,
+        // מכסת החודש הזה (שבועית * שבועות העבודה בחודש), לא המכסה השבועית הגולמית.
+        quotaSnapshot: monthlyHoursFor(row.weeklyHoursQuota, month),
         reportedHoursTotal,
         budgetSnapshot: row.tariffMonthly,
         paidTotal,

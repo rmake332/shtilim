@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gateByToken } from '@/lib/apiGate';
 import { uploadAttachment } from '@/lib/airtable/client';
-import { DOC_FIELDS } from '@/lib/airtable/schema';
+import { DOC_FIELDS, EMPLOYEE_FIELDS } from '@/lib/airtable/schema';
 import { subRoleDocFieldIds } from '@/lib/subRoleTable';
 import { MAX_DOC_BYTES } from '@/lib/formTypes';
 import { logger } from '@/lib/logger';
@@ -10,10 +10,12 @@ import { logger } from '@/lib/logger';
  * אילו שדות מותר להעלות אליהם: מסמכי הנוער/תפקיד (מוגדרים בקוד) יחד עם מסמכי
  * ההסמכה שטבלת תת-תפקידים מפנה אליהם. החלק השני נשלף בזמן ריצה, כדי שסוג מסמך
  * חדש שיתווסף בטבלה יתקבל בלי שינוי קוד. נתוני העסקה מוחרג: הוא מתויק על התקן.
+ * רישיון רופא: הקצאת רופא בתקני חשבונית, שאין לה תת-תפקיד בטבלה.
  */
 async function allowedFieldIds(): Promise<Set<string>> {
   return new Set<string>([
     ...(await subRoleDocFieldIds()),
+    EMPLOYEE_FIELDS.docDoctorLicense,
     ...DOC_FIELDS.filter((d) => d.key !== 'docEmployment').map((d) => d.fieldId),
   ]);
 }
