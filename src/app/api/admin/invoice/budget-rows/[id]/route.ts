@@ -11,13 +11,13 @@ import { parseBudgetRowInput } from '@/lib/invoice/budgetRowInput';
 /** רק שורות בקטגוריית חשבונית - הממשק לא נוגע בשאר טבלת התקציב. */
 async function findInvoiceRow(id: string, requestId: string) {
   const rows = await fetchAllInvoiceBudgetRows(requestId);
-  return rows.find((r) => r.id === id) ?? null;
+  return { row: rows.find((r) => r.id === id) ?? null, all: rows };
 }
 
 /**
  * PATCH /api/admin/invoice/budget-rows/[id] - עריכת שורת תקציב חשבונית. חסום להעביר
  * למוסד אחר כשיש עובדים מוקצים (הם שייכים למוסד הנוכחי), ולהוריד את המכסה השבועית
- * מתחת לסה"כ השעות שכבר הוקצו.
+ * מתחת לסה"כ השעות שכבר הוקצו, ולהעביר למוסד שכבר יש לו תפקיד חשבונית (אחד למוסד).
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const gate = gateAdmin(req);
@@ -25,11 +25,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await req.json().catch(() => ({}));
   try {
-    const row = await findInvoiceRow(params.id, gate.requestId);
+    const { row, all } = await findInvoiceRow(params.id, gate.requestId);
     if (!row) return NextResponse.json({ ok: false, message: 'שורת תקציב חשבונית לא נמצאה.' }, { status: 404 });
 
     const input = await parseBudgetRowInput(body, gate.requestId);
     if (typeof input === 'string') return NextResponse.json({ ok: false, message: input }, { status: 400 });
+    if (input.mosadId !== row.mosadId && all.some((r) => r.mosadId === input.mosadId)) {
+      return NextResponse.json(
+        { ok: false, message: 'למוסד שנבחר כבר יש תפקיד בקטגוריית חשבונית.' },
+        { status: 409 },
+      );
+    }
 
     const positions = await listPositionsForBudgetRow(row.id, gate.requestId);
     if (positions.length > 0 && input.mosadId !== row.mosadId) {
@@ -68,7 +74,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (gate instanceof NextResponse) return gate;
 
   try {
-    const row = await findInvoiceRow(params.id, gate.requestId);
+    const { row } = await findInvoiceRow(params.id, gate.requestId);
     if (!row) return NextResponse.json({ ok: false, message: 'שורת תקציב חשבונית לא נמצאה.' }, { status: 404 });
 
     const positions = await listPositionsForBudgetRow(row.id, gate.requestId);
