@@ -15,7 +15,7 @@
  * Pure — נבדק ב-breaks.test.ts.
  */
 import { formatNum } from '@/lib/formatNum';
-import { toMinutes, shiftMinutes, type Shift } from './time';
+import { toMinutes, shiftMinutes, shiftEndMinutes, isOvernight, DAY_MINUTES, type Shift } from './time';
 
 /** יום שסכום שעותיו עולה על הסף מחייב הפסקה. */
 export const BREAK_THRESHOLD_HOURS = 8.5;
@@ -111,18 +111,24 @@ export function breakDayError(
   if (required === 0) return null;
 
   const label = formatBreakMinutes(required);
-  const inMin = toMinutes(brk?.in ?? '');
-  const outMin = toMinutes(brk?.out ?? '');
-  if (inMin === null && outMin === null)
+  const rawIn = toMinutes(brk?.in ?? '');
+  const rawOut = toMinutes(brk?.out ?? '');
+  if (rawIn === null && rawOut === null)
     return `יום עם ${formatNum(dayHours)} שעות — נדרשת הזנת הפסקה של ${label}`;
-  if (inMin === null || outMin === null) return 'יש למלא כניסה ויציאה להפסקה';
+  if (rawIn === null || rawOut === null) return 'יש למלא כניסה ויציאה להפסקה';
+
+  const starts = shifts.map((s) => toMinutes(s.in)).filter((m): m is number => m !== null);
+  const ends = shifts.map(shiftEndMinutes).filter((m): m is number => m !== null);
+  const firstIn = starts.length > 0 ? Math.min(...starts) : null;
+  // ביום עם משמרת לילה, שעה שקודמת לתחילת העבודה היא אחרי חצות - כלומר למחרת.
+  const overnight = shifts.some(isOvernight);
+  const onTimeline = (m: number) => (overnight && firstIn !== null && m < firstIn ? m + DAY_MINUTES : m);
+  const inMin = onTimeline(rawIn);
+  const outMin = onTimeline(rawOut);
   if (outMin <= inMin) return 'שעת היציאה מההפסקה מוקדמת משעת הכניסה אליה';
 
   // ההפסקה חייבת לשבת בתוך טווח העבודה של אותו יום.
-  const starts = shifts.map((s) => toMinutes(s.in)).filter((m): m is number => m !== null);
-  const ends = shifts.map((s) => toMinutes(s.out)).filter((m): m is number => m !== null);
-  if (starts.length > 0 && ends.length > 0) {
-    const firstIn = Math.min(...starts);
+  if (firstIn !== null && ends.length > 0) {
     const lastOut = Math.max(...ends);
     if (inMin < firstIn || outMin > lastOut)
       return 'ההפסקה חייבת להיות בתוך שעות העבודה של אותו יום';
@@ -149,12 +155,14 @@ export function dailyPresenceError(shifts: Shift[]): string | null {
  * ימים ריקים אינם מייצרים בדיקה. מחזיר null כשהמנוחה תקינה.
  */
 export function restBetweenDaysError(prev: Shift[], curr: Shift[]): string | null {
-  const prevEnds = prev.map((s) => toMinutes(s.out)).filter((m): m is number => m !== null);
+  // משמרת לילה ביום הקודם מסתיימת כבר בתוך היום הנוכחי (יציאה מעל 24 שעות).
+  const prevEnds = prev.map(shiftEndMinutes).filter((m): m is number => m !== null);
   const currStarts = curr.map((s) => toMinutes(s.in)).filter((m): m is number => m !== null);
   if (prevEnds.length === 0 || currStarts.length === 0) return null;
   const lastOut = Math.max(...prevEnds);
   const firstIn = Math.min(...currStarts);
-  const restMin = 24 * 60 - lastOut + firstIn;
+  const restMin = DAY_MINUTES - lastOut + firstIn;
+  if (restMin < 0) return 'העבודה ביום זה מתחילה לפני שמשמרת הלילה של היום הקודם מסתיימת';
   if (restMin >= MIN_REST_HOURS * 60) return null;
   return `נדרשת מנוחה של ${MIN_REST_HOURS} שעות מסיום היום הקודם (הוזנו ${formatNum(restMin / 60)})`;
 }

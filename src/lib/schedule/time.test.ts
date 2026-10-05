@@ -8,6 +8,8 @@ import {
   snapToHalf,
   paraDayHours,
   durationToHHMM,
+  isOvernight,
+  shiftEndMinutes,
   DAYS,
   type Shift,
   type Day,
@@ -72,6 +74,42 @@ describe('validateDay', () => {
   });
   it('skips fully-empty shifts', () => {
     expect(validateDay([{ in: '', out: '' }]).ok).toBe(true);
+  });
+  it('משמרת לילה מותרת רק עם allowOvernight', () => {
+    expect(validateDay([{ in: '22:00', out: '06:00' }]).ok).toBe(false);
+    expect(validateDay([{ in: '22:00', out: '06:00' }], { allowOvernight: true }).ok).toBe(true);
+  });
+  it('משמרת לילה אחרי משמרת בוקר באותו יום', () => {
+    const shifts: Shift[] = [
+      { in: '08:00', out: '12:00' },
+      { in: '22:00', out: '02:00' },
+    ];
+    expect(validateDay(shifts, { allowOvernight: true }).ok).toBe(true);
+  });
+  it('משמרת לילה חייבת להיות האחרונה ביום', () => {
+    const shifts: Shift[] = [
+      { in: '20:00', out: '02:00' },
+      { in: '23:00', out: '23:30' },
+    ];
+    const v = validateDay(shifts, { allowOvernight: true });
+    expect(v.ok).toBe(false);
+    expect(v.error).toContain('האחרונה');
+  });
+  it('יציאה זהה לכניסה נחסמת גם עם allowOvernight', () => {
+    expect(validateDay([{ in: '08:00', out: '08:00' }], { allowOvernight: true }).ok).toBe(false);
+  });
+});
+
+describe('isOvernight / shiftEndMinutes', () => {
+  it('מזהה יציאה מוקדמת מהכניסה', () => {
+    expect(isOvernight({ in: '22:00', out: '06:00' })).toBe(true);
+    expect(isOvernight({ in: '08:00', out: '16:00' })).toBe(false);
+    expect(isOvernight({ in: '22:00', out: '' })).toBe(false);
+  });
+  it('משך ויציאה של משמרת לילה נמדדים מעבר לחצות', () => {
+    expect(shiftMinutes({ in: '22:00', out: '06:00' })).toBe(480);
+    expect(shiftEndMinutes({ in: '22:00', out: '06:00' })).toBe(30 * 60);
+    expect(shiftEndMinutes({ in: '08:00', out: '16:00' })).toBe(16 * 60);
   });
 });
 

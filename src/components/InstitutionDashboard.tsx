@@ -7,7 +7,7 @@ import { formatNum } from '@/lib/formatNum';
 import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
 import type { PositionSummary } from '@/app/api/positions/route';
-import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
+import { DAYS, MOTZASH, DAY_LABELS, shiftMinutes, isOvernight, type Day, type Shift } from '@/lib/schedule/time';
 
 type WeekData = Record<Day, Shift[]>;
 
@@ -378,11 +378,7 @@ function WeekGrid({ week }: { week: WeekData }) {
     <div className="grid grid-cols-3 gap-3">
       {gridDays.map((day) => {
         const shifts = (week[day] ?? []).filter((s) => s.in && s.out);
-        const totalMin = shifts.reduce((s, sh) => {
-          const [ih, im] = sh.in.split(':').map(Number);
-          const [oh, om] = sh.out.split(':').map(Number);
-          return s + (oh * 60 + om) - (ih * 60 + im);
-        }, 0);
+        const totalMin = shifts.reduce((s, sh) => s + shiftMinutes(sh), 0);
         const dayLabel = totalMin > 0 ? `${formatNum(totalMin / 60)} שע׳` : null;
         return (
           <div
@@ -408,6 +404,7 @@ function WeekGrid({ week }: { week: WeekData }) {
                       <span className="text-[11px] font-bold text-on-surface-variant">יציאה</span>
                       <div className="bg-surface-container-low rounded-lg py-2 px-3 text-body-md w-28 text-center font-bold text-on-surface">{s.out}</div>
                     </div>
+                    {isOvernight(s) && <span className="text-label-sm text-on-surface-variant mt-4">(למחרת)</span>}
                   </div>
                 )) : <span className="text-on-surface-variant text-body-md mt-1">—</span>}
               </div>

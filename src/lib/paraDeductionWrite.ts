@@ -1,7 +1,7 @@
 import 'server-only';
 import { getRecord, listRecords, updateRecord } from '@/lib/airtable/client';
 import { TABLES, POSITION_FIELDS } from '@/lib/airtable/schema';
-import { DAYS, DAY_LABELS, toMinutes, PARA_MIN_DAY_MINUTES, type Day } from '@/lib/schedule/time';
+import { DAYS, DAY_LABELS, shiftMinutes, PARA_MIN_DAY_MINUTES, type Day } from '@/lib/schedule/time';
 import { isParaEntry } from '@/lib/schedule/ofek';
 import {
   buildParaDeductionStamp,
@@ -238,11 +238,7 @@ export async function applyDependentUpdates(
 
 /** סך דקות העבודה ביום, ממערכת השעות של הטופס. */
 function dayMinutes(schedule: ScheduleData, day: Day): number {
-  return (schedule.week?.[day] ?? []).reduce((sum, s) => {
-    const a = toMinutes(s.in);
-    const b = toMinutes(s.out);
-    return a != null && b != null && b > a ? sum + (b - a) : sum;
-  }, 0);
+  return (schedule.week?.[day] ?? []).reduce((sum, s) => sum + shiftMinutes(s), 0);
 }
 
 /**

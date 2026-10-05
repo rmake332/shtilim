@@ -5,7 +5,7 @@ import {
   REGULAR_DAYS,
   DAYS,
   durationToHHMM,
-  toMinutes,
+  shiftMinutes,
   PARA_MIN_DAY_MINUTES,
   type Day,
 } from '@/lib/schedule/time';
@@ -145,9 +145,7 @@ export async function findSameInstitutionDays(
         worksThisDay = true;
         if (inn && out) {
           shifts.push(`${inn}-${out}`);
-          const a = toMinutes(inn);
-          const b = toMinutes(out);
-          if (a != null && b != null && b > a) minutes += b - a;
+          minutes += shiftMinutes({ in: inn, out: out });
         }
       }
       if (!worksThisDay) continue;

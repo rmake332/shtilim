@@ -9,7 +9,7 @@
  *
  * Pure — נבדק ב-biweekly.test.ts.
  */
-import { toMinutes, shiftMinutes, type Shift } from './time';
+import { toMinutes, shiftMinutes, shiftEndMinutes, type Shift } from './time';
 
 export interface BiweeklyTrack {
   /** שעת סיום יום חמישי בשבוע המקוצר, בדקות מחצות. */
@@ -31,7 +31,8 @@ export function computeBiweeklyExcessHours(
   const sunShifts = week.sun ?? [];
   const friShifts = week.fri ?? [];
 
-  const lastThuOut = thuShifts.length ? toMinutes(thuShifts[thuShifts.length - 1].out) : null;
+  // משמרת לילה בחמישי מסתיימת בשישי - היציאה נמדדת מעבר לחצות.
+  const lastThuOut = thuShifts.length ? shiftEndMinutes(thuShifts[thuShifts.length - 1]) : null;
   const firstSunIn = sunShifts.length ? toMinutes(sunShifts[0].in) : null;
 
   const thuExcessMin = lastThuOut != null ? Math.max(0, lastThuOut - track.thuEndMinutes) : 0;

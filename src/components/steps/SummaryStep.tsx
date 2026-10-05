@@ -6,7 +6,7 @@ import { ActionBar } from '@/components/shell/ActionBar';
 import { formatNum } from '@/lib/formatNum';
 import { EmployeeData, RoleData, ScheduleData, YouthDocs } from '@/lib/formTypes';
 import { maskTzClient } from '@/lib/maskClient';
-import { DAYS, MOTZASH, DAY_LABELS, type Day, type Shift } from '@/lib/schedule/time';
+import { DAYS, MOTZASH, DAY_LABELS, isOvernight, type Day, type Shift } from '@/lib/schedule/time';
 import { ofekCategoryFor, computeUtilizedHours } from '@/lib/schedule/ofek';
 import { DOC_FIELDS, UPDATE_REASON_OPTIONS } from '@/lib/airtable/schema';
 import { subRoleDocsFor, type SubRoleOption } from '@/lib/subRole';
@@ -378,6 +378,7 @@ export function SummaryStep({
                             <span className="font-bold">{s.in}</span>
                             <span className="text-on-surface-variant text-label-sm">—</span>
                             <span className="font-bold">{s.out}</span>
+                            {isOvernight(s) && <span className="text-label-sm text-on-surface-variant">(למחרת)</span>}
                           </div>
                         ))}
                         {hasBreak && (

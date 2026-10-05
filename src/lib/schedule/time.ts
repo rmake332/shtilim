@@ -36,12 +36,33 @@ export function toMinutes(hhmm: string): number | null {
   return h * 60 + min;
 }
 
-/** Duration of a shift in minutes (out - in), or 0 if incomplete/invalid. */
+export const DAY_MINUTES = 24 * 60;
+
+/**
+ * משמרת לילה: שעת היציאה מוקדמת משעת הכניסה, ולכן היא חלה ביום שאחרי.
+ * המשמרת כולה שייכת ליום הכניסה. מותרת רק במקומות ש-validateDay מקבל
+ * `allowOvernight` (ראו overnight.ts).
+ */
+export function isOvernight(s: Shift): boolean {
+  const a = toMinutes(s.in);
+  const b = toMinutes(s.out);
+  return a != null && b != null && b < a;
+}
+
+/** Duration of a shift in minutes (out - in), or 0 if incomplete/invalid. משמרת לילה נמשכת עד למחרת. */
 export function shiftMinutes(s: Shift): number {
   const a = toMinutes(s.in);
   const b = toMinutes(s.out);
   if (a == null || b == null) return 0;
-  return Math.max(0, b - a);
+  if (b < a) return b + DAY_MINUTES - a;
+  return b - a;
+}
+
+/** שעת היציאה בדקות מחצות של יום הכניסה (מעל 24 שעות במשמרת לילה), או null. */
+export function shiftEndMinutes(s: Shift): number | null {
+  const b = toMinutes(s.out);
+  if (b == null) return null;
+  return isOvernight(s) ? b + DAY_MINUTES : b;
 }
 
 export interface DayValidation {
@@ -51,19 +72,23 @@ export interface DayValidation {
 
 /**
  * Validate a day's shifts:
- *  - each shift: out > in
+ *  - each shift: out > in, unless `allowOvernight` and it is the day's last shift
  *  - shifts ordered: each next shift starts at/after previous ends (no overlap, not earlier)
  */
-export function validateDay(shifts: Shift[]): DayValidation {
+export function validateDay(shifts: Shift[], opts: { allowOvernight?: boolean } = {}): DayValidation {
   let prevEnd = -1;
-  for (const s of shifts) {
+  for (let i = 0; i < shifts.length; i++) {
+    const s = shifts[i];
     const a = toMinutes(s.in);
     const b = toMinutes(s.out);
     if (a == null && b == null) continue; // empty shift skipped
     if (a == null || b == null) return { ok: false, error: 'יש למלא כניסה ויציאה' };
-    if (b <= a) return { ok: false, error: 'שעת יציאה מוקדמת משעת הכניסה' };
+    if (b === a || (b < a && !opts.allowOvernight))
+      return { ok: false, error: 'שעת יציאה מוקדמת משעת הכניסה' };
+    if (b < a && shifts.slice(i + 1).some((n) => n.in || n.out))
+      return { ok: false, error: 'משמרת שמסתיימת למחרת חייבת להיות המשמרת האחרונה ביום' };
     if (a < prevEnd) return { ok: false, error: 'משמרת חופפת או מוקדמת מהקודמת' };
-    prevEnd = b;
+    prevEnd = b < a ? b + DAY_MINUTES : b;
   }
   return { ok: true };
 }

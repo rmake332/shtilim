@@ -18,9 +18,11 @@ import {
   toMinutes,
   WEEKLY_CAP_HOURS,
   paraDayHours,
+  isOvernight,
   type Shift,
   type Day,
 } from '@/lib/schedule/time';
+import { overnightAllowed, NEXT_DAY_LABEL } from '@/lib/schedule/overnight';
 import {
   youthLimitsFor,
   youthLimitsSummary,
@@ -64,6 +66,7 @@ interface OverlapItem {
   positionName: string;
   day: Day;
   dayLabel: string;
+  existingDayLabel?: string;
   newShift: { in: string; out: string };
   existingShift: { in: string; out: string };
 }
@@ -125,7 +128,7 @@ function OverlapBanner({ overlaps }: { overlaps: OverlapItem[] }) {
           <ul className="list-disc pr-6 space-y-0.5 text-label-sm">
             {items.map((o, i) => (
               <li key={i}>
-                יום {o.dayLabel}: המערכת החדשה {o.newShift.in}–{o.newShift.out} חופפת לתקן הקיים {o.existingShift.in}–{o.existingShift.out}
+                יום {o.dayLabel}: המערכת החדשה {o.newShift.in}–{o.newShift.out} חופפת לתקן הקיים {o.existingDayLabel ? `ביום ${o.existingDayLabel} ` : ''}{o.existingShift.in}–{o.existingShift.out}
               </li>
             ))}
           </ul>
@@ -360,7 +363,67 @@ function AssistanceMinorNotice() {
 }
 
 /** Banner shown above the grid on the boarding-school / 12-hour-employment track. */
-function TwelveHourNotice() {
+/** מזהה משמרת לילה שאושרה: כל שינוי בכניסה או ביציאה מחייב אישור מחדש. */
+function overnightKey(day: Day, s: Shift): string {
+  return `${day}|${s.in}|${s.out}`;
+}
+
+interface PendingOvernight {
+  day: Day;
+  idx: number;
+  field: 'in' | 'out';
+  shift: Shift;
+}
+
+/** חלון אישור שקופץ כשמוזנת יציאה מוקדמת מהכניסה ביום שמותרת בו משמרת לילה. */
+function OvernightConfirmDialog({
+  pending,
+  onConfirm,
+  onReject,
+}: {
+  pending: PendingOvernight;
+  onConfirm: () => void;
+  onReject: () => void;
+}) {
+  const { day, shift } = pending;
+  const nextDay = NEXT_DAY_LABEL[day];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog" aria-modal="true">
+      <div className="bg-surface rounded-2xl shadow-xl max-w-md w-full mx-4 p-8 flex flex-col gap-5 text-right" dir="rtl">
+        <div className="flex items-center gap-2">
+          <Icon name="bedtime" className="text-[24px] text-primary" />
+          <h2 className="text-title-lg font-bold text-on-surface">משמרת שמסתיימת למחרת?</h2>
+        </div>
+        <p className="text-body-md text-on-surface-variant">
+          ביום {DAY_LABELS[day]} הוזנה כניסה ב-<b>{shift.in}</b> ויציאה ב-<b>{shift.out}</b>, כלומר שעת היציאה
+          מוקדמת משעת הכניסה.
+        </p>
+        <p className="text-body-md text-on-surface">
+          האם העבודה מסתיימת למחרת, ביום <b>{nextDay}</b> בשעה <b>{shift.out}</b>? משך המשמרת יהיה{' '}
+          <b>{formatNum(shiftMinutes(shift) / 60)} שעות</b>, והיא תירשם כולה ביום {DAY_LABELS[day]}.
+        </p>
+        <div className="flex flex-wrap gap-3 justify-start">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-5 py-2.5 rounded-lg bg-primary text-on-primary text-label-lg font-semibold"
+          >
+            כן, היציאה ביום {nextDay}
+          </button>
+          <button
+            type="button"
+            onClick={onReject}
+            className="px-5 py-2.5 rounded-lg border border-outline-variant text-on-surface text-label-lg font-semibold hover:border-error hover:text-error"
+          >
+            לא, אתקן את השעה
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TwelveHourNotice({ overnight = false }: { overnight?: boolean }) {
   return (
     <div className="p-4 rounded-xl bg-secondary-container/40 text-on-secondary-container text-body-md flex items-start gap-2">
       <Icon name="hotel" className="text-[20px] mt-0.5 shrink-0" />
@@ -370,6 +433,7 @@ function TwelveHourNotice() {
           <li>ביום שעולה על {BREAK_THRESHOLD_HOURS} שעות יש להזין הפסקה של {formatBreakMinutes(FIXED_BREAK_MINUTES)} בדיוק — לא יותר ולא פחות.</li>
           <li>כל שאר שעות הנוכחות נספרות כשעות עבודה.</li>
           <li>נדרשת מנוחה של {MIN_REST_HOURS} שעות בין סיום יום אחד לתחילת היום שאחריו.</li>
+          {overnight && <li>משמרת לילה (למשל 22:00 עד 06:00) נרשמת ביום הכניסה, ואחרי הזנתה יש לאשר שהיציאה היא למחרת. לא ניתן להזין משמרת כזו ביום שישי.</li>}
           <li>התקרה השבועית היא {TWELVE_HOUR_WEEKLY_CAP} שעות.</li>
         </ul>
       </div>
@@ -760,6 +824,19 @@ function GridSchedule({
   const youth = youthLimitsFor(employee.birthDate);
   // תפקיד סיוע לעובד/ת מתחת לגיל 18: הזנה מותרת ביום שישי בלבד (מוצ"ש בכלל האיסור).
   const assistanceMinor = isAssistanceMinor(role.category, employee.birthDate);
+  // משמרת לילה (יציאה למחרת): בפנימיות בלבד, לא לנוער ולא בשישי - ראו overnight.ts.
+  function allowsOvernight(day: Day): boolean {
+    return overnightAllowed(day, { layer: role.layer, youth: Boolean(youth) });
+  }
+  const overnightEnabled = allowsOvernight('sun');
+  // משמרות לילה שאושרו בחלון האישור. מה שהגיע כבר שמור (עריכת תקן, חזרה לשלב) אושר בעבר.
+  const [confirmedOvernight, setConfirmedOvernight] = useState<Set<string>>(() => {
+    const keys = new Set<string>();
+    for (const d of REGULAR_DAYS)
+      for (const s of week[d] ?? []) if (isOvernight(s)) keys.add(overnightKey(d, s));
+    return keys;
+  });
+  const [pendingOvernight, setPendingOvernight] = useState<PendingOvernight | null>(null);
   // הפסקות: המדיניות נגזרת פעם אחת מסוג המערכת + שכבת התקן + דגל העובד, ומזינה גם את
   // בדיקות היום (חסימה) וגם את שורת ההזנה בכרטיס היום.
   const breakPolicy = breakPolicyFor({
@@ -879,8 +956,16 @@ function GridSchedule({
       const ae = assistanceMinorDayError(d, week[d] ?? []);
       if (ae) { dayErrors[d] = ae; continue; }
     }
-    const v = validateDay(week[d] ?? []);
-    if (!v.ok) { dayErrors[d] = v.error; continue; }
+    const v = validateDay(week[d] ?? [], { allowOvernight: allowsOvernight(d) });
+    if (!v.ok) {
+      const nightOnBlockedDay = overnightEnabled && !allowsOvernight(d) && (week[d] ?? []).some(isOvernight);
+      dayErrors[d] = nightOnBlockedDay ? `ביום ${DAY_LABELS[d]} לא ניתן להזין משמרת שמסתיימת למחרת` : v.error;
+      continue;
+    }
+    if ((week[d] ?? []).some((s) => isOvernight(s) && !confirmedOvernight.has(overnightKey(d, s)))) {
+      dayErrors[d] = 'יש לאשר שהיציאה היא למחרת';
+      continue;
+    }
     // תפקיד צהריים: בכל יום שאינו יום עובדת הבוקר — כניסה חייבת להיות 11:50 ומעלה.
     if (isAfternoonRole && d !== morningDay) {
       const shifts = week[d] ?? [];
@@ -915,6 +1000,11 @@ function GridSchedule({
       if (re) dayErrors[d] = re;
     }
   }
+  // מוצ"ש שמסתיים בראשון בבוקר: המנוחה עד תחילת העבודה בראשון נבדקת כמו בין ימי החול.
+  if (breakPolicy.twelveHour && !dayErrors.sun && !dayErrors[MOTZASH] && (week[MOTZASH] ?? []).some(isOvernight)) {
+    const re = restBetweenDaysError(week[MOTZASH] ?? [], week.sun ?? []);
+    if (re) dayErrors.sun = re;
+  }
   const hasDayError = Object.keys(dayErrors).length > 0;
 
   /** כל שינוי בשעות מבטל את הבדיקות שנעשות מול תקניו האחרים של העובד. */
@@ -935,6 +1025,23 @@ function GridSchedule({
       w[day] = shifts;
       return { ...prev, week: w };
     });
+    // יציאה מוקדמת מהכניסה: שואלים מיד אם היא למחרת, כדי שטעות הקלדה לא תיספר כמשמרת לילה.
+    const next = { ...(week[day]?.[idx] ?? { in: '', out: '' }), [field]: val };
+    if (allowsOvernight(day) && isOvernight(next) && !confirmedOvernight.has(overnightKey(day, next)))
+      setPendingOvernight({ day, idx, field, shift: next });
+  }
+  function confirmOvernight() {
+    if (!pendingOvernight) return;
+    const { day, shift } = pendingOvernight;
+    setConfirmedOvernight((prev) => new Set(prev).add(overnightKey(day, shift)));
+    setPendingOvernight(null);
+  }
+  /** "לא, אתקן": השעה שהוזנה זה עתה נמחקת, כדי שלא תישאר משמרת לילה שלא אושרה. */
+  function rejectOvernight() {
+    if (!pendingOvernight) return;
+    const { day, idx, field } = pendingOvernight;
+    setPendingOvernight(null);
+    updateShift(day, idx, field, '');
   }
   function addShift(day: Day) {
     setOfek(null);
@@ -1345,7 +1452,10 @@ function GridSchedule({
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
         {assistanceMinor && <AssistanceMinorNotice />}
-        {breakPolicy.twelveHour && <TwelveHourNotice />}
+        {breakPolicy.twelveHour && <TwelveHourNotice overnight={overnightEnabled} />}
+        {pendingOvernight && (
+          <OvernightConfirmDialog pending={pendingOvernight} onConfirm={confirmOvernight} onReject={rejectOvernight} />
+        )}
         {isPara && sameDaysError && (
           <div className="p-4 rounded-xl bg-error-container text-on-error-container text-body-md flex items-start gap-2">
             <Icon name="error" className="text-[20px] mt-0.5 shrink-0" />
@@ -1455,6 +1565,11 @@ function GridSchedule({
                         onChange={(v) => updateShift(day, idx, 'out', v)}
                         youth={youth}
                       />
+                      {isOvernight(s) && allowsOvernight(day) && (
+                        <span className="mt-4 text-label-sm font-semibold text-primary flex items-center gap-1">
+                          <Icon name="bedtime" className="text-[16px]" /> למחרת (יום {NEXT_DAY_LABEL[day]})
+                        </span>
+                      )}
                       <button onClick={() => removeShift(day, idx)} aria-label="מחק משמרת">
                         <Icon name="delete" className="text-outline hover:text-error" />
                       </button>

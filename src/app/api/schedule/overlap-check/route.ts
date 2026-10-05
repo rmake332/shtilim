@@ -3,7 +3,7 @@ import { gateByToken } from '@/lib/apiGate';
 import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, POSITION_FIELDS, SCHEDULE_FIELDS } from '@/lib/airtable/schema';
 import type { Day } from '@/lib/schedule/time';
-import { toMinutes } from '@/lib/schedule/time';
+import { weekShiftsOverlap } from '@/lib/schedule/overnight';
 
 /**
  * GET /api/schedule/overlap-check
@@ -30,6 +30,8 @@ interface OverlapItem {
   positionName: string; // role title + institution name
   day: Day;
   dayLabel: string;
+  /** יום המשמרת הקיימת, כשהוא שונה מיום המשמרת החדשה (חפיפה דרך משמרת לילה). */
+  existingDayLabel?: string;
   newShift: TimeRange;
   existingShift: TimeRange;
 }
@@ -58,16 +60,6 @@ function fieldVal(v: unknown): string {
   if (typeof v === 'object' && 'name' in (v as Record<string, unknown>))
     return String((v as Record<string, unknown>).name);
   return String(v);
-}
-
-function rangesOverlap(a: TimeRange, b: TimeRange): boolean {
-  const aIn = toMinutes(a.in);
-  const aOut = toMinutes(a.out);
-  const bIn = toMinutes(b.in);
-  const bOut = toMinutes(b.out);
-  if (aIn === null || aOut === null || bIn === null || bOut === null) return false;
-  if (aIn >= aOut || bIn >= bOut) return false; // incomplete shift
-  return aIn < bOut && bIn < aOut;
 }
 
 export async function GET(req: NextRequest) {
@@ -116,31 +108,31 @@ export async function GET(req: NextRequest) {
       const mosadName = fieldVal(rec.fields[POSITION_FIELDS.mosadNameText]);
       const positionName = [roleTitle, mosadName].filter(Boolean).join(' — ');
 
+      // Read up to 3 existing shifts per day from the position record.
+      const existing: { day: Day; shift: TimeRange }[] = [];
       for (const day of DAYS) {
         const dayFields = SCHEDULE_FIELDS[day];
-        const newShifts = newWeek[day];
-        if (newShifts.length === 0) continue;
-
-        // Read up to 3 existing shifts for this day from the position record.
-        const existingShifts: TimeRange[] = [];
         for (let i = 0; i < dayFields.in.length; i++) {
           const inVal = fieldVal(rec.fields[dayFields.in[i]]);
           const outVal = fieldVal(rec.fields[dayFields.out[i]]);
-          if (inVal && outVal) existingShifts.push({ in: inVal, out: outVal });
+          if (inVal && outVal) existing.push({ day, shift: { in: inVal, out: outVal } });
         }
+      }
 
-        for (const newShift of newShifts) {
-          for (const existingShift of existingShifts) {
-            if (rangesOverlap(newShift, existingShift)) {
-              overlaps.push({
-                positionId: rec.id,
-                positionName,
-                day,
-                dayLabel: DAY_LABELS[day],
-                newShift,
-                existingShift,
-              });
-            }
+      // כל משמרת מול כל משמרת קיימת בשבוע, לא רק באותו יום: משמרת לילה גולשת ליום שאחריה.
+      for (const day of DAYS) {
+        for (const newShift of newWeek[day]) {
+          for (const ex of existing) {
+            if (!weekShiftsOverlap(day, newShift, ex.day, ex.shift)) continue;
+            overlaps.push({
+              positionId: rec.id,
+              positionName,
+              day,
+              dayLabel: DAY_LABELS[day],
+              existingDayLabel: ex.day === day ? undefined : DAY_LABELS[ex.day],
+              newShift,
+              existingShift: ex.shift,
+            });
           }
         }
       }
