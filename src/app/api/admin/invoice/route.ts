@@ -119,10 +119,17 @@ export async function GET(req: NextRequest) {
         tariffMonthly: b.tariffMonthly,
         totalAllocatedHours: b.totalAllocatedHours,
         allocationLocked: b.allocationLocked,
+        employeeCount: positions.filter((p) => p.budgetRowId === b.id).length,
       }))
       .sort((a, b) => a.mosadName.localeCompare(b.mosadName, 'he') || a.title.localeCompare(b.title, 'he'));
 
-    return NextResponse.json({ ok: true, month, rows, budgetRows: budgetRowsOut });
+    // כל המוסדות (לא רק אלה שכבר יש להם תקן חשבונית) - לבחירת מוסד בהוספת שורת תקציב.
+    const institutions = mosadot
+      .map((m) => ({ id: m.id, name: mosadNames.get(m.id) || '' }))
+      .filter((m) => m.name)
+      .sort((a, b) => a.name.localeCompare(b.name, 'he'));
+
+    return NextResponse.json({ ok: true, month, rows, budgetRows: budgetRowsOut, institutions });
   } catch (e) {
     logger.error({ requestId: gate.requestId, month, err: String(e) }, 'admin invoice data failed');
     return NextResponse.json({ ok: false, message: 'שגיאה בטעינת הנתונים.' }, { status: 500 });

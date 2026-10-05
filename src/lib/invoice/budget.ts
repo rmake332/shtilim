@@ -1,5 +1,12 @@
 import 'server-only';
-import { listRecords, updateRecord, escapeFormulaValue, type AirtableRecord } from '@/lib/airtable/client';
+import {
+  listRecords,
+  createRecord,
+  updateRecord,
+  deleteRecord,
+  escapeFormulaValue,
+  type AirtableRecord,
+} from '@/lib/airtable/client';
 import { TABLES, BUDGET_FIELDS, CATEGORY } from '@/lib/airtable/schema';
 import { maxHourlyRateFor } from '@/lib/invoice/rates';
 
@@ -104,6 +111,52 @@ export async function fetchAllInvoiceBudgetRows(requestId?: string): Promise<Inv
     ...mapBudgetRow(r),
     mosadId: recordLinks(r.fields[BUDGET_FIELDS.institutionLink])[0] ?? '',
   }));
+}
+
+/** שדות שורת תקציב חשבונית שניתנים לעריכה מממשק המנהל. */
+export interface InvoiceBudgetRowInput {
+  mosadId: string;
+  title: string;
+  weeklyHoursQuota: number;
+  tariffMonthly: number;
+}
+
+function budgetRowFields(input: InvoiceBudgetRowInput): Record<string, unknown> {
+  return {
+    [BUDGET_FIELDS.institutionLink]: [input.mosadId],
+    [BUDGET_FIELDS.role]: input.title,
+    [BUDGET_FIELDS.totalBudgetHours]: input.weeklyHoursQuota,
+    [BUDGET_FIELDS.tariffMonthly]: input.tariffMonthly,
+  };
+}
+
+/**
+ * יצירת שורת תקציב חשבונית (ממשק מנהל). הקטגוריה וסוג השכר נקבעים תמיד ל"חשבונית" -
+ * הממשק מנהל רק את הקטגוריה הזו, ושאר הטבלה לא נוגעת כאן.
+ */
+export async function createInvoiceBudgetRow(input: InvoiceBudgetRowInput, requestId?: string): Promise<string> {
+  const r = await createRecord(
+    TABLES.budget,
+    {
+      ...budgetRowFields(input),
+      [BUDGET_FIELDS.category]: CATEGORY.invoice,
+      [BUDGET_FIELDS.salaryType]: CATEGORY.invoice,
+    },
+    requestId,
+  );
+  return r.id;
+}
+
+export async function updateInvoiceBudgetRow(
+  budgetRowId: string,
+  input: InvoiceBudgetRowInput,
+  requestId?: string,
+): Promise<void> {
+  await updateRecord(TABLES.budget, budgetRowId, budgetRowFields(input), requestId);
+}
+
+export async function deleteInvoiceBudgetRow(budgetRowId: string, requestId?: string): Promise<void> {
+  await deleteRecord(TABLES.budget, budgetRowId, requestId);
 }
 
 /** נעילה/פתיחה של עריכת ההקצאה השנתית לשורת תקציב. */

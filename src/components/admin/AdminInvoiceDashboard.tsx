@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Footer } from '@/components/shell/Footer';
 import { formatNum } from '@/lib/formatNum';
 import { toCsv } from '@/lib/csv';
+import { AdminBudgetRowsManager, type AdminInstitution } from '@/components/admin/AdminBudgetRowsManager';
 
 interface AdminInvoiceRow {
   key: string;
@@ -38,6 +39,7 @@ interface AdminBudgetRow {
   tariffMonthly: number;
   totalAllocatedHours: number;
   allocationLocked: boolean;
+  employeeCount: number;
 }
 
 /** ברירת מחדל: החודש הקודם, כמו במסך הדיווח החודשי של המוסד. */
@@ -61,6 +63,7 @@ export function AdminInvoiceDashboard() {
   const [mosadFilter, setMosadFilter] = useState('');
   const [rows, setRows] = useState<AdminInvoiceRow[]>([]);
   const [budgetRows, setBudgetRows] = useState<AdminBudgetRow[]>([]);
+  const [institutions, setInstitutions] = useState<AdminInstitution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lockBusy, setLockBusy] = useState('');
@@ -77,6 +80,7 @@ export function AdminInvoiceDashboard() {
       if (json.ok) {
         setRows(json.rows);
         setBudgetRows(json.budgetRows);
+        setInstitutions(json.institutions ?? []);
       } else {
         setError(json.message || 'שגיאה בטעינת הנתונים.');
       }
@@ -282,6 +286,13 @@ export function AdminInvoiceDashboard() {
               </table>
             </div>
           </div>
+
+          <AdminBudgetRowsManager
+            rows={visibleBudgetRows}
+            institutions={institutions}
+            defaultMosadId={mosadFilter}
+            onChanged={loadData}
+          />
 
           <div className="space-y-3">
             <h2 className="text-headline-sm font-bold text-on-surface">עריכת הקצאה שנתית לפי מוסד</h2>
