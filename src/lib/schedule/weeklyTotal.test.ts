@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   COMBINED_WEEKLY_CAP_HOURS,
   combinedCapError,
+  combinedCapFor,
   isCombinedCapExempt,
   isOverCombinedCap,
   positionsInAssociation,
@@ -128,5 +129,18 @@ describe('combinedCapError', () => {
   it('הודעה בלי קו מפריד ארוך', () => {
     const msg = combinedCapError({ newHours: 25, positions: [pos(20)], exempt: false })!;
     expect(msg).not.toContain('—');
+  });
+});
+
+describe('מעון - תקרה משולבת 58', () => {
+  it('58 כשהתקן הנוכחי או תקן קיים במעון, אחרת 42', () => {
+    expect(combinedCapFor({ layer: 'מעון', positions: [] })).toBe(58);
+    expect(combinedCapFor({ layer: 'יסודי', positions: [pos(20, 'מעון')] })).toBe(58);
+    expect(combinedCapFor({ layer: 'יסודי', positions: [pos(20)] })).toBe(42);
+  });
+  it('50 שעות במעון אינן חריגה, 60 כן', () => {
+    expect(combinedCapError({ newHours: 30, positions: [pos(20, 'מעון')], exempt: false, cap: 58 })).toBeNull();
+    const msg = combinedCapError({ newHours: 40, positions: [pos(20, 'מעון')], exempt: false, cap: 58 });
+    expect(msg).toContain('58');
   });
 });

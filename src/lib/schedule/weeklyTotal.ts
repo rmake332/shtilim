@@ -13,14 +13,23 @@
  *  - עובד פנימייה - שכבת התקן הנוכחי, או של אחד מתקניו שבהיקף הבדיקה, היא "פנימיה".
  * שני אלה הם בדיוק המסלול שמקבל תקרה של 52 ש"ש ב-breaks.ts.
  *
+ * מעון: כשהתקן הנוכחי, או אחד מתקניו שבהיקף הבדיקה, בשכבת "מעון" - התקרה היא 58
+ * במקום 42 (כמו `DAYCARE_WEEKLY_CAP` ב-breaks.ts).
+ *
  * Pure - נבדק ב-weeklyTotal.test.ts.
  */
 import { formatNum } from '@/lib/formatNum';
 import { WEEKLY_CAP_HOURS } from './time';
-import { BOARDING_LAYER } from './breaks';
+import { BOARDING_LAYER, DAYCARE_LAYER, DAYCARE_WEEKLY_CAP } from './breaks';
 
 /** התקרה המשולבת לכל התקנים של אותה ת.ז. באותה עמותה. */
 export const COMBINED_WEEKLY_CAP_HOURS = WEEKLY_CAP_HOURS;
+
+/** התקרה המשולבת בפועל: 58 כשהתקן הנוכחי או אחד מתקניו שבהיקף הבדיקה במעון, אחרת 42. */
+export function combinedCapFor(args: { layer: string; positions: readonly PositionHours[] }): number {
+  const daycare = args.layer === DAYCARE_LAYER || args.positions.some((p) => p.layer === DAYCARE_LAYER);
+  return daycare ? DAYCARE_WEEKLY_CAP : COMBINED_WEEKLY_CAP_HOURS;
+}
 
 /** סובלנות לשגיאות עיגול (שעות אקדמיות נגזרות מחילוק ב-45). */
 const EPSILON = 1e-9;
@@ -71,8 +80,12 @@ export function sumPositionHours(positions: readonly PositionHours[]): number {
 }
 
 /** האם השעות המצטברות חורגות מהתקרה. */
-export function isOverCombinedCap(newHours: number, existingHours: number): boolean {
-  return newHours + existingHours > COMBINED_WEEKLY_CAP_HOURS + EPSILON;
+export function isOverCombinedCap(
+  newHours: number,
+  existingHours: number,
+  cap: number = COMBINED_WEEKLY_CAP_HOURS,
+): boolean {
+  return newHours + existingHours > cap + EPSILON;
 }
 
 /**
@@ -83,13 +96,16 @@ export function combinedCapError(args: {
   newHours: number;
   positions: readonly PositionHours[];
   exempt: boolean;
+  /** ברירת מחדל 42; במעון 58 (ראו `combinedCapFor`). */
+  cap?: number;
 }): string | null {
   if (args.exempt) return null;
+  const cap = args.cap ?? COMBINED_WEEKLY_CAP_HOURS;
   const existingHours = sumPositionHours(args.positions);
-  if (!isOverCombinedCap(args.newHours, existingHours)) return null;
+  if (!isOverCombinedCap(args.newHours, existingHours, cap)) return null;
   const total = args.newHours + existingHours;
   return (
-    `לא ניתן להעסיק עובד ביותר מ-${COMBINED_WEEKLY_CAP_HOURS} שעות שבועיות בכל תקניו בעמותה ` +
+    `לא ניתן להעסיק עובד ביותר מ-${cap} שעות שבועיות בכל תקניו בעמותה ` +
     `(${formatNum(existingHours)} בתקנים קיימים + ${formatNum(args.newHours)} בתקן זה = ${formatNum(total)})`
   );
 }

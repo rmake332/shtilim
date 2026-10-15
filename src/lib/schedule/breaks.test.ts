@@ -10,6 +10,8 @@ import {
   formatBreakMinutes,
   FIXED_BREAK_MINUTES,
   TWELVE_HOUR_WEEKLY_CAP,
+  DAYCARE_WEEKLY_CAP,
+  weeklyCapFor,
 } from './breaks';
 
 const REGULAR = breakPolicyFor({ scheduleType: 'רגיל', layer: 'יסודי', twelveHourEmployment: false });
@@ -18,14 +20,14 @@ const BOARDING = breakPolicyFor({ scheduleType: 'רגיל', layer: 'פנימיה
 
 describe('breakPolicyFor', () => {
   it('רגיל — שעון, השלמה ל-8.5', () => {
-    expect(REGULAR).toEqual({ twelveHour: false, metric: 'clock', fixedHalfHour: false });
+    expect(REGULAR).toEqual({ twelveHour: false, daycare: false, metric: 'clock', fixedHalfHour: false });
   });
   it('סגן ראשון — כמו רגיל', () => {
     expect(breakPolicyFor({ scheduleType: 'סגן ראשון', layer: 'יסודי', twelveHourEmployment: false }).metric)
       .toBe('clock');
   });
   it('פרא — אקדמי, חצי שעה', () => {
-    expect(PARA).toEqual({ twelveHour: false, metric: 'academic', fixedHalfHour: true });
+    expect(PARA).toEqual({ twelveHour: false, daycare: false, metric: 'academic', fixedHalfHour: true });
   });
   it('הוראה ו"הוראה - לוח פרא" — אקדמי', () => {
     expect(breakPolicyFor({ scheduleType: 'הוראה', layer: 'יסודי', twelveHourEmployment: false }).metric)
@@ -42,7 +44,7 @@ describe('breakPolicyFor', () => {
       .toBe('academic');
   });
   it('שכבת פנימיה מפעילה את מסלול 12 השעות', () => {
-    expect(BOARDING).toEqual({ twelveHour: true, metric: 'clock', fixedHalfHour: true });
+    expect(BOARDING).toEqual({ twelveHour: true, daycare: false, metric: 'clock', fixedHalfHour: true });
   });
   it('דגל "העסקה 12 שעות" על העובד מפעיל את המסלול גם בשכבה רגילה', () => {
     const p = breakPolicyFor({ scheduleType: 'רגיל', layer: 'יסודי', twelveHourEmployment: true });
@@ -172,5 +174,38 @@ describe('עזרי חישוב', () => {
     expect(formatBreakMinutes(45)).toBe('45 דק׳');
     expect(formatBreakMinutes(60)).toBe('שעה');
     expect(formatBreakMinutes(90)).toBe('1.5 שעות');
+  });
+});
+
+describe('מעון', () => {
+  const DAYCARE = breakPolicyFor({ scheduleType: 'רגיל', layer: 'מעון', twelveHourEmployment: false });
+  const DAYCARE_PARA = breakPolicyFor({ scheduleType: 'פרא', layer: 'מעון', twelveHourEmployment: false });
+
+  it('שעון, חצי שעה קבועה, לא מסלול 12 שעות', () => {
+    expect(DAYCARE).toEqual({ twelveHour: false, daycare: true, metric: 'clock', fixedHalfHour: true });
+  });
+  it('8.5 שעות בדיוק כבר מחייב חצי שעה (סף כולל)', () => {
+    expect(requiredBreakMinutes(8.5, DAYCARE)).toBe(FIXED_BREAK_MINUTES);
+    expect(requiredBreakMinutes(8.5, DAYCARE_PARA)).toBe(FIXED_BREAK_MINUTES);
+    expect(requiredBreakMinutes(8.5, REGULAR)).toBe(0);
+  });
+  it('מתחת ל-8.5 אין הפסקה; מעל - חצי שעה ולא השלמה', () => {
+    expect(requiredBreakMinutes(8.49, DAYCARE)).toBe(0);
+    expect(requiredBreakMinutes(11, DAYCARE)).toBe(FIXED_BREAK_MINUTES);
+  });
+  it('הפסקה של 30 דק׳ ביום של 8.5 שעות תקינה, ושעה נדחית', () => {
+    const shifts = [{ in: '07:00', out: '15:30' }];
+    expect(breakDayError(shifts, { in: '12:00', out: '12:30' }, 8.5, DAYCARE)).toBeNull();
+    expect(breakDayError(shifts, { in: '12:00', out: '13:00' }, 8.5, DAYCARE)).not.toBeNull();
+    expect(breakDayError(shifts, undefined, 8.5, DAYCARE)).not.toBeNull();
+  });
+  it('תקרה שבועית 58; נוער גובר', () => {
+    expect(DAYCARE_WEEKLY_CAP).toBe(58);
+    expect(weeklyCapFor(DAYCARE, null)).toBe(58);
+    expect(weeklyCapFor(DAYCARE, 40)).toBe(40);
+    expect(weeklyCapFor(REGULAR, null)).toBe(42);
+    expect(weeklyCapFor(BOARDING, null)).toBe(TWELVE_HOUR_WEEKLY_CAP);
+    const daycare12 = breakPolicyFor({ scheduleType: 'רגיל', layer: 'מעון', twelveHourEmployment: true });
+    expect(weeklyCapFor(daycare12, null)).toBe(58);
   });
 });

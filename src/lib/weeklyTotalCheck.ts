@@ -3,7 +3,7 @@ import { listRecords, escapeFormulaValue } from '@/lib/airtable/client';
 import { TABLES, POSITION_FIELDS, EMPLOYEE_FIELDS } from '@/lib/airtable/schema';
 import { buildTzExactMatchFormula } from '@/lib/airtable/tzMatch';
 import {
-  COMBINED_WEEKLY_CAP_HOURS,
+  combinedCapFor,
   combinedCapError,
   isCombinedCapExempt,
   positionsInAssociation,
@@ -116,12 +116,13 @@ export async function checkWeeklyTotal(
 
   const exempt = isCombinedCapExempt({ layer: params.layer, twelveHourEmployment, positions });
   const existingHours = sumPositionHours(positions);
-  const message = combinedCapError({ newHours, positions, exempt });
+  const cap = combinedCapFor({ layer: params.layer, positions });
+  const message = combinedCapError({ newHours, positions, exempt, cap });
 
   return {
     ok: message === null,
     exempt,
-    cap: COMBINED_WEEKLY_CAP_HOURS,
+    cap,
     newHours,
     existingHours,
     total: existingHours + newHours,

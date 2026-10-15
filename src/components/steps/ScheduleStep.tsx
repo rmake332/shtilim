@@ -16,7 +16,6 @@ import {
   weeklyMinutes,
   shiftMinutes,
   toMinutes,
-  WEEKLY_CAP_HOURS,
   paraDayHours,
   isOvernight,
   type Shift,
@@ -37,6 +36,7 @@ import {
 } from '@/lib/schedule/youth';
 import {
   breakPolicyFor,
+  weeklyCapFor,
   requiredBreakMinutes,
   breakDayError,
   breakMinutes,
@@ -46,7 +46,7 @@ import {
   BREAK_THRESHOLD_HOURS,
   MAX_DAILY_PRESENCE_HOURS,
   MIN_REST_HOURS,
-  TWELVE_HOUR_WEEKLY_CAP,
+  DAYCARE_WEEKLY_CAP,
   FIXED_BREAK_MINUTES,
   type BreakPolicy,
 } from '@/lib/schedule/breaks';
@@ -423,7 +423,7 @@ function OvernightConfirmDialog({
   );
 }
 
-function TwelveHourNotice({ overnight = false }: { overnight?: boolean }) {
+function TwelveHourNotice({ overnight = false, weeklyCap }: { overnight?: boolean; weeklyCap: number }) {
   return (
     <div className="p-4 rounded-xl bg-secondary-container/40 text-on-secondary-container text-body-md flex items-start gap-2">
       <Icon name="hotel" className="text-[20px] mt-0.5 shrink-0" />
@@ -434,7 +434,22 @@ function TwelveHourNotice({ overnight = false }: { overnight?: boolean }) {
           <li>כל שאר שעות הנוכחות נספרות כשעות עבודה.</li>
           <li>נדרשת מנוחה של {MIN_REST_HOURS} שעות בין סיום יום אחד לתחילת היום שאחריו.</li>
           {overnight && <li>משמרת לילה (למשל 22:00 עד 06:00) נרשמת ביום הכניסה, ואחרי הזנתה יש לאשר שהיציאה היא למחרת. לא ניתן להזין משמרת כזו ביום שישי.</li>}
-          <li>התקרה השבועית היא {TWELVE_HOUR_WEEKLY_CAP} שעות.</li>
+          <li>התקרה השבועית היא {weeklyCap} שעות.</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function DaycareNotice() {
+  return (
+    <div className="p-4 rounded-xl bg-secondary-container/40 text-on-secondary-container text-body-md flex items-start gap-2">
+      <Icon name="child_care" className="text-[20px] mt-0.5 shrink-0" />
+      <div>
+        <p className="font-bold">מעון - כללי מערכת השעות:</p>
+        <ul className="list-disc pr-5 mt-1 space-y-0.5 text-label-md">
+          <li>ביום של {BREAK_THRESHOLD_HOURS} שעות ומעלה יש להזין הפסקה של {formatBreakMinutes(FIXED_BREAK_MINUTES)} בדיוק - לא יותר ולא פחות.</li>
+          <li>התקרה השבועית היא {DAYCARE_WEEKLY_CAP} שעות.</li>
         </ul>
       </div>
     </div>
@@ -442,7 +457,7 @@ function TwelveHourNotice({ overnight = false }: { overnight?: boolean }) {
 }
 
 /**
- * שורת ההפסקה בכרטיס היום. מוצגת רק כאשר היום מחייב הפסקה (מעל 8.5 שעות),
+ * שורת ההפסקה בכרטיס היום. מוצגת רק כאשר היום מחייב הפסקה (מעל 8.5 שעות, במעון 8.5 ומעלה),
  * ומציגה את המשך הנדרש לצד סימון תקין/שגוי למה שהוזן.
  */
 function BreakRow({
@@ -845,12 +860,8 @@ function GridSchedule({
     twelveHourEmployment: employee.twelveHourEmployment,
   });
   const breaks = (data.breaks ?? {}) as Record<Day, Shift | undefined>;
-  // תקרה שבועית: נוער (40) גובר על מסלול 12 השעות (52), שגובר על ברירת המחדל (42).
-  const weeklyCap = youth
-    ? youth.maxWeeklyHours
-    : breakPolicy.twelveHour
-      ? TWELVE_HOUR_WEEKLY_CAP
-      : WEEKLY_CAP_HOURS;
+  // תקרה שבועית: נוער (40) גובר על מעון (58), מסלול 12 השעות (52) וברירת המחדל (42).
+  const weeklyCap = weeklyCapFor(breakPolicy, youth?.maxWeeklyHours ?? null);
   const overCap = totalHours > weeklyCap;
 
   // תפקיד צהריים: כניסה לפני 11:50 אסורה פרט ליום עובדת בוקר שנבחר מראש.
@@ -1452,7 +1463,8 @@ function GridSchedule({
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
         {assistanceMinor && <AssistanceMinorNotice />}
-        {breakPolicy.twelveHour && <TwelveHourNotice overnight={overnightEnabled} />}
+        {breakPolicy.twelveHour && <TwelveHourNotice overnight={overnightEnabled} weeklyCap={weeklyCap} />}
+        {breakPolicy.daycare && !breakPolicy.twelveHour && <DaycareNotice />}
         {pendingOvernight && (
           <OvernightConfirmDialog pending={pendingOvernight} onConfirm={confirmOvernight} onReject={rejectOvernight} />
         )}
@@ -1893,11 +1905,7 @@ function BellScheduleGrid({
     twelveHourEmployment: employee.twelveHourEmployment,
   });
   const breaks = (data.breaks ?? {}) as Record<Day, Shift | undefined>;
-  const weeklyCap = youth
-    ? youth.maxWeeklyHours
-    : breakPolicy.twelveHour
-      ? TWELVE_HOUR_WEEKLY_CAP
-      : WEEKLY_CAP_HOURS;
+  const weeklyCap = weeklyCapFor(breakPolicy, youth?.maxWeeklyHours ?? null);
   const allowedSlots = youth ? slots.filter((s) => youthSlotAllowed(s, youth)) : slots;
 
   // Friday ("ו") slots differ from Sun–Thu ("א-ה"); offer the right group per day.
@@ -2436,7 +2444,8 @@ function BellScheduleGrid({
       <div className="lg:col-span-8 lg:order-1 order-2 space-y-4">
         {youth && <YouthNotice limits={youth} />}
         {assistanceMinor && <AssistanceMinorNotice />}
-        {breakPolicy.twelveHour && <TwelveHourNotice />}
+        {breakPolicy.twelveHour && <TwelveHourNotice weeklyCap={weeklyCap} />}
+        {breakPolicy.daycare && !breakPolicy.twelveHour && <DaycareNotice />}
         {slotsLoading && (
           <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant flex items-center gap-3 text-on-surface-variant text-body-md">
             <svg className="animate-spin h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
