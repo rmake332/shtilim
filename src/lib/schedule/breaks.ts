@@ -7,7 +7,7 @@
  *  רגיל / סגן ראשון          : ההפסקה משלימה ל-8.5 שעות עבודה (נוכחות − 8.5).
  *  פרא / הוראה / לוח פרא     : חצי שעה בדיוק; השעות האקדמיות נגזרות מהנוסחה שלהן בלבד.
  *  פנימיה / "העסקה 12 שעות"  : חצי שעה בדיוק; בנוסף מנוחת 8 שעות בין ימים ותקרה של 52 ש"ש.
- *  שכבת "מעון" (כל סוגי המערכת): חצי שעה בדיוק כבר מ-8.5 שעות ומעלה (כולל), ותקרה של 58 ש"ש.
+ *  שכבת "מעון" (כל סוגי המערכת): חצי שעה בדיוק, ותקרה של 58 ש"ש.
  *
  * המדד שנבדק מול הסף של 8.5 הוא שעות שעון במסלול ה"שעון" ושעות אקדמיות במסלול
  * ה"אקדמי" — לכן הקורא מעביר את שעות היום כבר במדד הנכון (ראה `BreakPolicy.metric`).
@@ -30,7 +30,7 @@ export const MIN_REST_HOURS = 8;
 export const FIXED_BREAK_MINUTES = 30;
 /** שכבת המוסד שמפעילה את מסלול 12 השעות. */
 export const BOARDING_LAYER = 'פנימיה';
-/** שכבת מעון: חצי שעת הפסקה ביום של 8.5 שעות ומעלה, ותקרה שבועית של 58. */
+/** שכבת מעון: חצי שעת הפסקה ביום שעולה על 8.5 שעות, ותקרה שבועית של 58. */
 export const DAYCARE_LAYER = 'מעון';
 /** תקרה שבועית בשכבת מעון (במקום WEEKLY_CAP_HOURS / TWELVE_HOUR_WEEKLY_CAP). */
 export const DAYCARE_WEEKLY_CAP = 58;
@@ -48,7 +48,7 @@ const ACADEMIC_SCHEDULE_TYPES = new Set([
 export interface BreakPolicy {
   /** פנימיה או "העסקה 12 שעות" על העובד. */
   twelveHour: boolean;
-  /** שכבת מעון - תקרה של 58 ש"ש, והסף של 8.5 כולל (8.5 בדיוק כבר מחייב הפסקה). */
+  /** שכבת מעון - חצי שעה קבועה ותקרה של 58 ש"ש. */
   daycare: boolean;
   /** לפי מה נמדדות שעות היום מול הסף של 8.5. */
   metric: 'clock' | 'academic';
@@ -92,8 +92,7 @@ export function weeklyCapFor(p: BreakPolicy, youthMaxWeeklyHours: number | null)
  */
 export function requiredBreakMinutes(dayHours: number, p: BreakPolicy): number {
   // סובלנות זעירה לשגיאות עיגול בשעות אקדמיות (חילוק ב-45).
-  // במעון הסף כולל: יום של 8.5 שעות בדיוק כבר מחייב הפסקה.
-  if (p.daycare ? dayHours < BREAK_THRESHOLD_HOURS - 1e-9 : dayHours <= BREAK_THRESHOLD_HOURS + 1e-9) return 0;
+  if (dayHours <= BREAK_THRESHOLD_HOURS + 1e-9) return 0;
   if (p.fixedHalfHour) return FIXED_BREAK_MINUTES;
   return Math.round((dayHours - BREAK_THRESHOLD_HOURS) * 60);
 }

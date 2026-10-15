@@ -184,20 +184,20 @@ describe('מעון', () => {
   it('שעון, חצי שעה קבועה, לא מסלול 12 שעות', () => {
     expect(DAYCARE).toEqual({ twelveHour: false, daycare: true, metric: 'clock', fixedHalfHour: true });
   });
-  it('8.5 שעות בדיוק כבר מחייב חצי שעה (סף כולל)', () => {
-    expect(requiredBreakMinutes(8.5, DAYCARE)).toBe(FIXED_BREAK_MINUTES);
-    expect(requiredBreakMinutes(8.5, DAYCARE_PARA)).toBe(FIXED_BREAK_MINUTES);
-    expect(requiredBreakMinutes(8.5, REGULAR)).toBe(0);
+  it('8.5 שעות בדיוק לא מחייב הפסקה, כמו בשאר המערכת', () => {
+    expect(requiredBreakMinutes(8.5, DAYCARE)).toBe(0);
+    expect(requiredBreakMinutes(8.5, DAYCARE_PARA)).toBe(0);
   });
-  it('מתחת ל-8.5 אין הפסקה; מעל - חצי שעה ולא השלמה', () => {
-    expect(requiredBreakMinutes(8.49, DAYCARE)).toBe(0);
+  it('מעל 8.5 - חצי שעה ולא השלמה', () => {
+    expect(requiredBreakMinutes(8.75, DAYCARE)).toBe(FIXED_BREAK_MINUTES);
     expect(requiredBreakMinutes(11, DAYCARE)).toBe(FIXED_BREAK_MINUTES);
+    expect(requiredBreakMinutes(11, REGULAR)).toBe(150);
   });
-  it('הפסקה של 30 דק׳ ביום של 8.5 שעות תקינה, ושעה נדחית', () => {
-    const shifts = [{ in: '07:00', out: '15:30' }];
-    expect(breakDayError(shifts, { in: '12:00', out: '12:30' }, 8.5, DAYCARE)).toBeNull();
-    expect(breakDayError(shifts, { in: '12:00', out: '13:00' }, 8.5, DAYCARE)).not.toBeNull();
-    expect(breakDayError(shifts, undefined, 8.5, DAYCARE)).not.toBeNull();
+  it('הפסקה של 30 דק׳ ביום של 9 שעות תקינה, ושעה נדחית', () => {
+    const shifts = [{ in: '07:00', out: '16:00' }];
+    expect(breakDayError(shifts, { in: '12:00', out: '12:30' }, 9, DAYCARE)).toBeNull();
+    expect(breakDayError(shifts, { in: '12:00', out: '13:00' }, 9, DAYCARE)).not.toBeNull();
+    expect(breakDayError(shifts, undefined, 9, DAYCARE)).not.toBeNull();
   });
   it('תקרה שבועית 58; נוער גובר', () => {
     expect(DAYCARE_WEEKLY_CAP).toBe(58);

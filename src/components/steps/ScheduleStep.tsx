@@ -448,7 +448,7 @@ function DaycareNotice() {
       <div>
         <p className="font-bold">מעון - כללי מערכת השעות:</p>
         <ul className="list-disc pr-5 mt-1 space-y-0.5 text-label-md">
-          <li>ביום של {BREAK_THRESHOLD_HOURS} שעות ומעלה יש להזין הפסקה של {formatBreakMinutes(FIXED_BREAK_MINUTES)} בדיוק - לא יותר ולא פחות.</li>
+          <li>ביום שעולה על {BREAK_THRESHOLD_HOURS} שעות יש להזין הפסקה של {formatBreakMinutes(FIXED_BREAK_MINUTES)} בדיוק - לא יותר ולא פחות.</li>
           <li>התקרה השבועית היא {DAYCARE_WEEKLY_CAP} שעות.</li>
         </ul>
       </div>
@@ -457,7 +457,7 @@ function DaycareNotice() {
 }
 
 /**
- * שורת ההפסקה בכרטיס היום. מוצגת רק כאשר היום מחייב הפסקה (מעל 8.5 שעות, במעון 8.5 ומעלה),
+ * שורת ההפסקה בכרטיס היום. מוצגת רק כאשר היום מחייב הפסקה (מעל 8.5 שעות),
  * ומציגה את המשך הנדרש לצד סימון תקין/שגוי למה שהוזן.
  */
 function BreakRow({
